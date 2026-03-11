@@ -24,9 +24,10 @@ class BaseStrategyParams(BaseModel):
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""
 
-    adjustment_threshold_pct: float = 30.0  # Adjust when premium moves X% against
+    adjustment_threshold_pct: float = 50.0  # Adjust when premium moves X% against
     stop_loss_pct: float = 50.0             # Exit at X% of total premium collected
-    trail_stop_pct: float = 0.0             # Trail stop by X% of peak premium (0=disabled)
+    trail_stop_pct: float = 15.0            # Trail stop by X% of peak premium (0=disabled)
+    profit_target_pct: float = 0.0           # Disabled — ATM premium too volatile for target
     add_hedge: bool = True                   # Add far OTM protection
     hedge_offset_strikes: int = 10           # How far OTM for hedge legs
 
@@ -38,7 +39,8 @@ class ShortStrangleParams(BaseStrategyParams):
     put_delta: float = -0.20                 # Sell PE at this delta
     adjustment_delta_threshold: float = 0.28 # Adjust when delta exceeds this
     stop_loss_pct: float = 50.0
-    trail_stop_pct: float = 20.0            # Trail stop by X% of peak premium
+    trail_stop_pct: float = 22.0            # Trail stop by X% of peak premium
+    profit_target_pct: float = 50.0         # Exit when premium decays X% (0=disabled)
     add_hedge: bool = True
     hedge_offset_strikes: int = 8
 
@@ -46,21 +48,24 @@ class ShortStrangleParams(BaseStrategyParams):
 class IronCondorParams(BaseStrategyParams):
     """Parameters for Iron Condor strategy."""
 
-    short_call_delta: float = 0.20
-    short_put_delta: float = -0.20
-    wing_width_strikes: int = 10             # Distance between short and long strikes
-    adjustment_threshold_pct: float = 40.0
+    short_call_delta: float = 0.15
+    short_put_delta: float = -0.15
+    wing_width_strikes: int = 5              # Distance between short and long strikes
+    adjustment_threshold_pct: float = 70.0
     stop_loss_pct: float = 100.0             # % of max credit
+    profit_target_pct: float = 50.0         # Exit when net credit decays X% (0=disabled)
 
 
 class DeltaNeutralParams(BaseStrategyParams):
     """Parameters for Delta Neutral strategy."""
 
     initial_strategy: str = "straddle"       # 'straddle' or 'strangle'
-    delta_threshold: float = 50.0            # Hedge when abs(delta) exceeds this
+    delta_threshold: float = 200.0           # Hedge when abs(delta) exceeds this
     hedge_with: str = "futures"              # 'futures' or 'options'
-    rebalance_interval_minutes: int = 5      # Check delta every N minutes
+    rebalance_interval_minutes: int = 30     # Check delta every N minutes
     strangle_delta: float = 0.25             # If using strangle as base
+    stop_loss_pct: float = 60.0             # Exit when option premium up X% (0=disabled)
+    max_hedge_lots: int = 3                 # Cap futures hedge to avoid runaway
 
 
 class MomentumParams(BaseStrategyParams):

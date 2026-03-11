@@ -41,6 +41,10 @@ class ShortStraddleStrategy(BaseStrategy):
         self._pe_token: int = 0
         self._ce_symbol: str = ""
         self._pe_symbol: str = ""
+        self._hedge_ce_token: int = 0
+        self._hedge_pe_token: int = 0
+        self._hedge_ce_symbol: str = ""
+        self._hedge_pe_symbol: str = ""
         self._entry_premium: Decimal = Decimal("0")
         self._peak_premium: Decimal = Decimal("0")  # For trailing stop
         self._atm_strike: float = 0
@@ -68,8 +72,9 @@ class ShortStraddleStrategy(BaseStrategy):
         if new_expiry:
             self._expiry = new_expiry
 
-        # Check exit time
+        # Check exit time — stop for day to prevent re-entry loop
         if now.time() >= self.params.exit_time and self._entered:
+            self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
         # Check entry time (don't re-enter after stop loss)
@@ -147,8 +152,13 @@ class ShortStraddleStrategy(BaseStrategy):
         self._entered = True
         self._peak_premium = self._entry_premium  # Initialize trailing stop tracker
         logger.info(
-            f"[{self.strategy_id}] ENTRY: Straddle @ {self._atm_strike} "
-            f"premium={self._entry_premium} qty={self._quantity}"
+            f"[ENTRY] strategy={self.strategy_id} type=short_straddle "
+            f"underlying={self.params.underlying} spot={spot} "
+            f"atm_strike={self._atm_strike} expiry={self._expiry} "
+            f"ce_symbol={self._ce_symbol} ce_premium={ce_ltp} "
+            f"pe_symbol={self._pe_symbol} pe_premium={pe_ltp} "
+            f"total_premium={self._entry_premium} qty={self._quantity} "
+            f"lots={adjusted_lots}"
         )
 
         return entry_signal(self.strategy_id, legs, f"Straddle @ {self._atm_strike}")
@@ -168,27 +178,38 @@ class ShortStraddleStrategy(BaseStrategy):
 
         premium_change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
 
+        # Profit target — exit when premium has decayed enough
+        if self.params.profit_target_pct > 0:
+            decay_pct = float((self._entry_premium - current_premium) / self._entry_premium * 100)
+            if decay_pct >= self.params.profit_target_pct:
+                logger.info(
+                    f"[{self.strategy_id}] PROFIT TARGET: premium decayed {decay_pct:.1f}% "
+                    f"(target: {self.params.profit_target_pct}%)"
+                )
+                self._stopped_for_day = True
+                return self._create_exit_signal(f"Profit target: premium decayed {decay_pct:.1f}%")
+
         # Stop loss check
         if premium_change_pct > self.params.stop_loss_pct:
             logger.info(
                 f"[{self.strategy_id}] STOP LOSS: premium up {premium_change_pct:.1f}% "
                 f"(threshold: {self.params.stop_loss_pct}%)"
             )
-            signal = self._create_exit_signal(f"Stop loss: premium +{premium_change_pct:.1f}%")
-            self._entered = False
             self._stopped_for_day = True
-            return signal
+            return self._create_exit_signal(f"Stop loss: premium +{premium_change_pct:.1f}%")
 
         # Trailing stop — lock in profits as premium decays
-        if self.params.trail_stop_pct > 0 and current_premium < self._peak_premium:
+        trail_pct = self.params.trail_stop_pct
+
+        if trail_pct > 0 and current_premium < self._peak_premium:
             # Premium is decaying (good for us) — track the low
             self._peak_premium = min(self._peak_premium, current_premium)
-        elif self.params.trail_stop_pct > 0 and current_premium > self._peak_premium:
+        elif trail_pct > 0 and current_premium > self._peak_premium:
             # Premium bouncing back — check if we should trail-exit
             bounce_pct = float(
                 (current_premium - self._peak_premium) / self._entry_premium * 100
             )
-            if bounce_pct > self.params.trail_stop_pct:
+            if bounce_pct > trail_pct:
                 profit_locked = float(
                     (self._entry_premium - self._peak_premium) / self._entry_premium * 100
                 )
@@ -196,12 +217,10 @@ class ShortStraddleStrategy(BaseStrategy):
                     f"[{self.strategy_id}] TRAIL STOP: premium bounced {bounce_pct:.1f}% "
                     f"from low, locking {profit_locked:.1f}% profit"
                 )
-                signal = self._create_exit_signal(
+                self._stopped_for_day = True
+                return self._create_exit_signal(
                     f"Trailing stop: bounced {bounce_pct:.1f}% from {self._peak_premium}"
                 )
-                self._entered = False
-                self._stopped_for_day = True
-                return signal
 
         # Adjustment: shift the losing leg to the new ATM strike
         if premium_change_pct > self.params.adjustment_threshold_pct:
@@ -229,31 +248,39 @@ class ShortStraddleStrategy(BaseStrategy):
         is_ce_losing = ce_ltp > pe_ltp
         legs: list[SignalLeg] = []
 
+        # Find new strike BEFORE mutating state
+        new_token = 0
+        new_symbol = ""
         if is_ce_losing:
-            # Close existing CE, open new CE at new ATM
             legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity))
             for entry in chain.strikes:
                 if float(entry.strike) == new_atm and entry.ce:
-                    self._ce_token = entry.ce.instrument_token
-                    self._ce_symbol = entry.ce.tradingsymbol
-                    legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity))
+                    new_token = entry.ce.instrument_token
+                    new_symbol = entry.ce.tradingsymbol
+                    legs.append(make_leg(new_symbol, new_token, OrderSide.SELL, self._quantity))
                     break
         else:
-            # Close existing PE, open new PE at new ATM
             legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity))
             for entry in chain.strikes:
                 if float(entry.strike) == new_atm and entry.pe:
-                    self._pe_token = entry.pe.instrument_token
-                    self._pe_symbol = entry.pe.tradingsymbol
-                    legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity))
+                    new_token = entry.pe.instrument_token
+                    new_symbol = entry.pe.tradingsymbol
+                    legs.append(make_leg(new_symbol, new_token, OrderSide.SELL, self._quantity))
                     break
 
         if len(legs) != 2:
             logger.warning(f"[{self.strategy_id}] Could not find new ATM option at {new_atm}")
             return None
 
+        # Now safe to mutate state — new strike confirmed
         old_atm = self._atm_strike
         self._atm_strike = new_atm
+        if is_ce_losing:
+            self._ce_token = new_token
+            self._ce_symbol = new_symbol
+        else:
+            self._pe_token = new_token
+            self._pe_symbol = new_symbol
         # Re-record entry premium after adjustment
         self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
 
@@ -268,11 +295,26 @@ class ShortStraddleStrategy(BaseStrategy):
         )
 
     def _create_exit_signal(self, reason: str) -> Signal:
-        """Create signal to close all positions."""
+        """Create signal to close all positions including hedges."""
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        exit_premium = ce_ltp + pe_ltp
+        pnl_estimate = self._entry_premium - exit_premium
+        logger.info(
+            f"[EXIT] strategy={self.strategy_id} reason={reason} "
+            f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
+            f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        self._entered = False
         legs = [
             make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
             make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
         ]
+        # Close hedge legs if they exist
+        if self._hedge_ce_token:
+            legs.append(make_leg(self._hedge_ce_symbol, self._hedge_ce_token, OrderSide.SELL, self._quantity))
+        if self._hedge_pe_token:
+            legs.append(make_leg(self._hedge_pe_symbol, self._hedge_pe_token, OrderSide.SELL, self._quantity))
         return exit_signal(self.strategy_id, legs, reason)
 
     def _create_hedge_legs(self, chain) -> list[SignalLeg]:
@@ -287,11 +329,15 @@ class ShortStraddleStrategy(BaseStrategy):
         for entry in chain.strikes:
             strike = float(entry.strike)
             if strike == hedge_ce_strike and entry.ce:
+                self._hedge_ce_token = entry.ce.instrument_token
+                self._hedge_ce_symbol = entry.ce.tradingsymbol
                 legs.append(make_leg(
                     entry.ce.tradingsymbol, entry.ce.instrument_token,
                     OrderSide.BUY, self._quantity
                 ))
             elif strike == hedge_pe_strike and entry.pe:
+                self._hedge_pe_token = entry.pe.instrument_token
+                self._hedge_pe_symbol = entry.pe.tradingsymbol
                 legs.append(make_leg(
                     entry.pe.tradingsymbol, entry.pe.instrument_token,
                     OrderSide.BUY, self._quantity
@@ -311,6 +357,10 @@ class ShortStraddleStrategy(BaseStrategy):
             "pe_token": self._pe_token,
             "ce_symbol": self._ce_symbol,
             "pe_symbol": self._pe_symbol,
+            "hedge_ce_token": self._hedge_ce_token,
+            "hedge_pe_token": self._hedge_pe_token,
+            "hedge_ce_symbol": self._hedge_ce_symbol,
+            "hedge_pe_symbol": self._hedge_pe_symbol,
             "entry_premium": str(self._entry_premium),
             "peak_premium": str(self._peak_premium),
             "atm_strike": self._atm_strike,
@@ -323,6 +373,10 @@ class ShortStraddleStrategy(BaseStrategy):
         self._pe_token = data.get("pe_token", 0)
         self._ce_symbol = data.get("ce_symbol", "")
         self._pe_symbol = data.get("pe_symbol", "")
+        self._hedge_ce_token = data.get("hedge_ce_token", 0)
+        self._hedge_pe_token = data.get("hedge_pe_token", 0)
+        self._hedge_ce_symbol = data.get("hedge_ce_symbol", "")
+        self._hedge_pe_symbol = data.get("hedge_pe_symbol", "")
         self._entry_premium = Decimal(data.get("entry_premium", "0"))
         self._peak_premium = Decimal(data.get("peak_premium", "0"))
         self._atm_strike = data.get("atm_strike", 0)

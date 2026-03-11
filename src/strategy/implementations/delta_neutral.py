@@ -37,6 +37,7 @@ class DeltaNeutralStrategy(BaseStrategy):
     def __init__(self, strategy_id: str, params: DeltaNeutralParams):
         super().__init__(strategy_id, params)
         self._entered = False
+        self._stopped_for_day = False
         # Option legs
         self._ce_token: int = 0
         self._pe_token: int = 0
@@ -77,12 +78,27 @@ class DeltaNeutralStrategy(BaseStrategy):
             self._expiry = new_expiry
 
         if now.time() >= self.params.exit_time and self._entered:
+            self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
-        if not self._entered and now.time() >= self.params.entry_time:
+        if not self._entered and not self._stopped_for_day and now.time() >= self.params.entry_time:
             return await self._try_entry()
 
         if self._entered:
+            # Stop loss check on option premium
+            if self.params.stop_loss_pct > 0 and self._entry_premium > 0:
+                ce_ltp = self.ctx.get_ltp(self._ce_token)
+                pe_ltp = self.ctx.get_ltp(self._pe_token)
+                current_premium = ce_ltp + pe_ltp
+                change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
+                if change_pct > self.params.stop_loss_pct:
+                    logger.info(
+                        f"[{self.strategy_id}] STOP LOSS: premium up {change_pct:.1f}% "
+                        f"(threshold: {self.params.stop_loss_pct}%)"
+                    )
+                    self._stopped_for_day = True
+                    return self._create_exit_signal(f"Stop loss: premium +{change_pct:.1f}%")
+
             return self._check_delta_hedge(now)
 
         return None
@@ -189,8 +205,12 @@ class DeltaNeutralStrategy(BaseStrategy):
         self._last_rebalance = self.ctx.clock.now()
 
         logger.info(
-            f"[{self.strategy_id}] ENTRY: {description} "
-            f"premium={self._entry_premium} qty={self._quantity}"
+            f"[ENTRY] strategy={self.strategy_id} type=delta_neutral "
+            f"base={description} "
+            f"ce_strike={self._ce_strike} ce_premium={ce_ltp} "
+            f"pe_strike={self._pe_strike} pe_premium={pe_ltp} "
+            f"total_premium={self._entry_premium} qty={self._quantity} "
+            f"futures={self._fut_symbol or 'none'}"
         )
 
         return entry_signal(self.strategy_id, legs, description)
@@ -209,7 +229,7 @@ class DeltaNeutralStrategy(BaseStrategy):
 
         # Use the monthly expiry for futures (last Thursday of month)
         clock = self.ctx.clock
-        monthly_expiry = clock.next_monthly_expiry(underlying)
+        monthly_expiry = clock.next_monthly_expiry()
 
         # Construct symbol: NIFTY26MARFUT format
         month_map = {
@@ -306,7 +326,18 @@ class DeltaNeutralStrategy(BaseStrategy):
         if hedge_lots == 0:
             return None
 
-        hedge_qty = abs(hedge_lots) * self._lot_size
+        # Cap hedge to max_hedge_lots to prevent runaway
+        max_lots = self.params.max_hedge_lots
+        current_hedge_lots = abs(self._hedge_qty) // self._lot_size
+        remaining_capacity = max(0, max_lots - current_hedge_lots)
+        capped_lots = min(abs(hedge_lots), remaining_capacity)
+        if capped_lots == 0:
+            logger.debug(
+                f"[{self.strategy_id}] Hedge capped: already at {current_hedge_lots}/{max_lots} lots"
+            )
+            return None
+
+        hedge_qty = capped_lots * self._lot_size
         hedge_side = OrderSide.BUY if hedge_lots > 0 else OrderSide.SELL
 
         # We need a valid futures instrument to hedge
@@ -342,6 +373,15 @@ class DeltaNeutralStrategy(BaseStrategy):
 
     def _create_exit_signal(self, reason: str) -> Signal:
         """Create signal to close all positions: options + any futures hedge."""
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        exit_premium = ce_ltp + pe_ltp
+        pnl_estimate = self._entry_premium - exit_premium
+        logger.info(
+            f"[EXIT] strategy={self.strategy_id} reason={reason} "
+            f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
+            f"estimated_pnl={pnl_estimate} hedge_qty={self._hedge_qty}"
+        )
         legs = [
             make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
             make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
@@ -388,6 +428,7 @@ class DeltaNeutralStrategy(BaseStrategy):
     def get_state_data(self) -> dict:
         return {
             "entered": self._entered,
+            "stopped_for_day": self._stopped_for_day,
             "ce_token": self._ce_token,
             "pe_token": self._pe_token,
             "ce_symbol": self._ce_symbol,
@@ -403,6 +444,7 @@ class DeltaNeutralStrategy(BaseStrategy):
 
     def load_state_data(self, data: dict) -> None:
         self._entered = data.get("entered", False)
+        self._stopped_for_day = data.get("stopped_for_day", False)
         self._ce_token = data.get("ce_token", 0)
         self._pe_token = data.get("pe_token", 0)
         self._ce_symbol = data.get("ce_symbol", "")

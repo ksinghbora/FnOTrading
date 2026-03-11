@@ -2,7 +2,7 @@
 
 import logging
 import time as _time
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
@@ -140,9 +140,17 @@ class ShortStrangleStrategy(BaseStrategy):
         ]
 
         self._entered = True
+        ce_delta = best_ce.ce.greeks.delta if best_ce.ce else 0
+        pe_delta = best_pe.pe.greeks.delta if best_pe.pe else 0
+        ce_iv = best_ce.ce.greeks.iv if best_ce.ce else 0
+        pe_iv = best_pe.pe.greeks.iv if best_pe.pe else 0
         logger.info(
-            f"[{self.strategy_id}] ENTRY: Strangle CE@{self._ce_strike} PE@{self._pe_strike} "
-            f"premium={self._entry_premium} qty={self._quantity}"
+            f"[ENTRY] strategy={self.strategy_id} type=short_strangle "
+            f"ce_strike={self._ce_strike} ce_premium={ce_ltp} "
+            f"ce_delta={ce_delta:.3f} ce_iv={ce_iv:.1f} "
+            f"pe_strike={self._pe_strike} pe_premium={pe_ltp} "
+            f"pe_delta={pe_delta:.3f} pe_iv={pe_iv:.1f} "
+            f"total_premium={self._entry_premium} qty={self._quantity}"
         )
 
         return entry_signal(
@@ -161,25 +169,42 @@ class ShortStrangleStrategy(BaseStrategy):
 
         change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
 
+        # Profit target — exit when premium has decayed enough
+        if self.params.profit_target_pct > 0:
+            decay_pct = float((self._entry_premium - current_premium) / self._entry_premium * 100)
+            if decay_pct >= self.params.profit_target_pct:
+                logger.info(
+                    f"[{self.strategy_id}] PROFIT TARGET: premium decayed {decay_pct:.1f}% "
+                    f"(target: {self.params.profit_target_pct}%)"
+                )
+                self._stopped_for_day = True
+                return self._create_exit_signal(f"Profit target: premium decayed {decay_pct:.1f}%")
+
         # Stop loss check
         if change_pct > self.params.stop_loss_pct:
             logger.info(
                 f"[{self.strategy_id}] STOP LOSS: premium up {change_pct:.1f}% "
                 f"(threshold: {self.params.stop_loss_pct}%)"
             )
-            signal = self._create_exit_signal(f"Stop loss: +{change_pct:.1f}%")
             self._stopped_for_day = True
-            return signal
+            return self._create_exit_signal(f"Stop loss: +{change_pct:.1f}%")
 
         # Trailing stop — lock in profits as premium decays
-        if self.params.trail_stop_pct > 0:
+        # Tighten trail stop after 2pm (gamma risk increases near close)
+        trail_pct = self.params.trail_stop_pct
+        if trail_pct > 0:
+            now_time = self.ctx.clock.now().time()
+            if now_time >= time(14, 0):
+                trail_pct = trail_pct * 0.6  # 40% tighter after 2pm
+
+        if trail_pct > 0:
             if current_premium < self._peak_premium:
                 self._peak_premium = min(self._peak_premium, current_premium)
             elif current_premium > self._peak_premium:
                 bounce_pct = float(
                     (current_premium - self._peak_premium) / self._entry_premium * 100
                 )
-                if bounce_pct > self.params.trail_stop_pct:
+                if bounce_pct > trail_pct:
                     profit_locked = float(
                         (self._entry_premium - self._peak_premium) / self._entry_premium * 100
                     )
@@ -187,11 +212,10 @@ class ShortStrangleStrategy(BaseStrategy):
                         f"[{self.strategy_id}] TRAIL STOP: bounced {bounce_pct:.1f}%, "
                         f"locking {profit_locked:.1f}% profit"
                     )
-                    signal = self._create_exit_signal(
+                    self._stopped_for_day = True
+                    return self._create_exit_signal(
                         f"Trailing stop: bounced {bounce_pct:.1f}%"
                     )
-                    self._stopped_for_day = True
-                    return signal
 
         # Reset adjustment counter on new day
         today = self.ctx.clock.now().date()
@@ -313,6 +337,15 @@ class ShortStrangleStrategy(BaseStrategy):
         )
 
     def _create_exit_signal(self, reason: str) -> Signal:
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        exit_premium = ce_ltp + pe_ltp
+        pnl_estimate = self._entry_premium - exit_premium
+        logger.info(
+            f"[EXIT] strategy={self.strategy_id} reason={reason} "
+            f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
+            f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
         legs = [
             make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
             make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),

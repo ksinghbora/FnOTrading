@@ -6,7 +6,8 @@ Defined max loss = wing width - net credit received.
 """
 
 import logging
-from datetime import date
+import time as _time
+from datetime import date, time
 from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
@@ -57,6 +58,7 @@ class IronCondorStrategy(BaseStrategy):
         self._expiry: date | None = None
         self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
         self._quantity: int = params.quantity_lots * self._lot_size
+        self._last_adjustment_time: float = 0.0
 
     def get_subscriptions(self) -> Subscription:
         return Subscription(instrument_tokens=[], timeframes=[])
@@ -78,7 +80,9 @@ class IronCondorStrategy(BaseStrategy):
         if new_expiry:
             self._expiry = new_expiry
 
+        # Stop for day to prevent re-entry loop after exit_time
         if now.time() >= self.params.exit_time and self._entered:
+            self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
         if not self._entered and not self._stopped_for_day and now.time() >= self.params.entry_time:
@@ -189,10 +193,12 @@ class IronCondorStrategy(BaseStrategy):
 
         self._entered = True
         logger.info(
-            f"[{self.strategy_id}] ENTRY: Iron Condor "
-            f"short_CE@{self._short_ce_strike} short_PE@{self._short_pe_strike} "
-            f"long_CE@{self._long_ce_strike} long_PE@{self._long_pe_strike} "
-            f"credit={self._entry_credit} qty={self._quantity}"
+            f"[ENTRY] strategy={self.strategy_id} type=iron_condor "
+            f"short_ce={self._short_ce_strike}@{short_ce_ltp} "
+            f"short_pe={self._short_pe_strike}@{short_pe_ltp} "
+            f"long_ce={self._long_ce_strike}@{long_ce_ltp} "
+            f"long_pe={self._long_pe_strike}@{long_pe_ltp} "
+            f"net_credit={self._entry_credit} qty={self._quantity}"
         )
 
         return entry_signal(
@@ -213,6 +219,18 @@ class IronCondorStrategy(BaseStrategy):
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
 
         current_debit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
+
+        # Profit target — exit when spread value has decayed enough
+        if self.params.profit_target_pct > 0:
+            decay_pct = float((self._entry_credit - current_debit) / self._entry_credit * 100)
+            if decay_pct >= self.params.profit_target_pct:
+                logger.info(
+                    f"[{self.strategy_id}] PROFIT TARGET: spread decayed {decay_pct:.1f}% "
+                    f"(target: {self.params.profit_target_pct}%)"
+                )
+                self._stopped_for_day = True
+                return self._create_exit_signal(f"Profit target: spread decayed {decay_pct:.1f}%")
+
         loss_pct = float((current_debit - self._entry_credit) / self._entry_credit * 100)
 
         # Stop loss check on entire position
@@ -221,10 +239,17 @@ class IronCondorStrategy(BaseStrategy):
                 f"[{self.strategy_id}] STOP LOSS: position loss {loss_pct:.1f}% "
                 f"(threshold: {self.params.stop_loss_pct}%)"
             )
-            signal = self._create_exit_signal(f"Stop loss: position loss +{loss_pct:.1f}%")
-            self._entered = False
             self._stopped_for_day = True
-            return signal
+            return self._create_exit_signal(f"Stop loss: position loss +{loss_pct:.1f}%")
+
+        # Cooldown: don't adjust more than once per 30s
+        if _time.time() - self._last_adjustment_time < 30:
+            return None
+
+        # Skip adjustment if less than 1 hour to close — cost > remaining theta
+        now_time = self.ctx.clock.now().time()
+        if now_time >= time(14, 15):
+            return None
 
         # Check if one side is threatened
         # Cost to close a spread = buy back short - sell long
@@ -393,6 +418,7 @@ class IronCondorStrategy(BaseStrategy):
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
         self._entry_credit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
 
+        self._last_adjustment_time = _time.time()
         logger.info(
             f"[{self.strategy_id}] ADJUSTED {side} side: "
             f"new short_CE@{self._short_ce_strike} short_PE@{self._short_pe_strike} "
@@ -406,6 +432,18 @@ class IronCondorStrategy(BaseStrategy):
 
     def _create_exit_signal(self, reason: str) -> Signal:
         """Create signal to close all 4 legs."""
+        short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)
+        short_pe_ltp = self.ctx.get_ltp(self._short_pe_token)
+        long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
+        long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
+        exit_debit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
+        pnl_estimate = self._entry_credit - exit_debit
+        logger.info(
+            f"[EXIT] strategy={self.strategy_id} reason={reason} "
+            f"entry_credit={self._entry_credit} exit_debit={exit_debit} "
+            f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        self._entered = False
         legs = [
             # Buy back short legs
             make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity),
@@ -436,10 +474,12 @@ class IronCondorStrategy(BaseStrategy):
             "long_ce_strike": self._long_ce_strike,
             "long_pe_strike": self._long_pe_strike,
             "entry_credit": str(self._entry_credit),
+            "stopped_for_day": self._stopped_for_day,
         }
 
     def load_state_data(self, data: dict) -> None:
         self._entered = data.get("entered", False)
+        self._stopped_for_day = data.get("stopped_for_day", False)
         self._short_ce_token = data.get("short_ce_token", 0)
         self._short_pe_token = data.get("short_pe_token", 0)
         self._short_ce_symbol = data.get("short_ce_symbol", "")
