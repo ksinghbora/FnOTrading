@@ -26,8 +26,8 @@ class ShortStraddleParams(BaseStrategyParams):
 
     adjustment_threshold_pct: float = 50.0  # Adjust when premium moves X% against
     stop_loss_pct: float = 50.0             # Exit at X% of total premium collected
-    trail_stop_pct: float = 15.0            # Trail stop by X% of peak premium (0=disabled)
-    profit_target_pct: float = 0.0           # Disabled — ATM premium too volatile for target
+    trail_stop_pct: float = 20.0            # Trail stop by X% of peak premium (0=disabled)
+    profit_target_pct: float = 10.0          # Exit when 10% premium decayed — captures early theta
     add_hedge: bool = True                   # Add far OTM protection
     hedge_offset_strikes: int = 10           # How far OTM for hedge legs
 
@@ -35,12 +35,12 @@ class ShortStraddleParams(BaseStrategyParams):
 class ShortStrangleParams(BaseStrategyParams):
     """Parameters for Short Strangle strategy."""
 
-    call_delta: float = 0.20                 # Sell CE at this delta
-    put_delta: float = -0.20                 # Sell PE at this delta
-    adjustment_delta_threshold: float = 0.28 # Adjust when delta exceeds this
+    call_delta: float = 0.15                 # Sell CE at this delta (wider OTM = less gamma)
+    put_delta: float = -0.15                 # Sell PE at this delta
+    adjustment_delta_threshold: float = 0.25 # Adjust when delta exceeds this
     stop_loss_pct: float = 50.0
     trail_stop_pct: float = 22.0            # Trail stop by X% of peak premium
-    profit_target_pct: float = 50.0         # Exit when premium decays X% (0=disabled)
+    profit_target_pct: float = 15.0          # Exit when 15% premium decayed — lock early theta
     add_hedge: bool = True
     hedge_offset_strikes: int = 8
 
@@ -52,8 +52,8 @@ class IronCondorParams(BaseStrategyParams):
     short_put_delta: float = -0.15
     wing_width_strikes: int = 5              # Distance between short and long strikes
     adjustment_threshold_pct: float = 70.0
-    stop_loss_pct: float = 100.0             # % of max credit
-    profit_target_pct: float = 50.0         # Exit when net credit decays X% (0=disabled)
+    stop_loss_pct: float = 60.0              # % of max credit — cut losses fast
+    profit_target_pct: float = 30.0          # Exit when net credit decays 30% — lock profits early
 
 
 class DeltaNeutralParams(BaseStrategyParams):

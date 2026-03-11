@@ -17,6 +17,7 @@ from decimal import Decimal
 
 import numpy as np
 import pytz
+from scipy.stats import norm as sp_norm
 
 from src.backtest.metrics import calculate_metrics
 from src.backtest.simulator import FillSimulator
@@ -30,7 +31,6 @@ from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
 from src.market_data.simulator import BANKNIFTY_SPOT_TOKEN, NIFTY_SPOT_TOKEN
-from src.options.greeks import compute_greeks
 from src.portfolio.charges import calculate_charges
 from src.portfolio.manager import PortfolioManager
 from src.strategy.context import StrategyContext
@@ -408,7 +408,7 @@ def _update_market(
     spot_token, step, num_strikes, T, iv_base,
     option_tokens, alloc_token,
 ):
-    """Update all market data for one simulated minute.
+    """Vectorized market update — batch BS + Greeks via numpy.
 
     Directly populates feed cache, broker LTP, option chain entries,
     and portfolio position LTPs. No EventBus involved.
@@ -439,7 +439,7 @@ def _update_market(
     yy = now.year % 100
     mmm = month_map[now.month]
     fut_symbol = f"{underlying}{yy}{mmm}FUT"
-    fut_price = round(spot * (1 + RISK_FREE_RATE * T), 2)  # cost-of-carry
+    fut_price = round(spot * (1 + RISK_FREE_RATE * T), 2)
     fut_dec = Decimal(str(fut_price))
     feed._latest_ticks[_FUT_TOKEN] = Tick.model_construct(
         instrument_token=_FUT_TOKEN,
@@ -468,7 +468,7 @@ def _update_market(
         open=Decimal("0"), close=Decimal("0"),
     )
 
-    # ─── Option chain ─────────────────────────────────────────
+    # ─── Option chain (vectorized) ────────────────────────────
     chain = chain_builder.get_chain(underlying, expiry)
     if not chain:
         return
@@ -477,19 +477,65 @@ def _update_market(
     atm = round(spot / step) * step
     chain.atm_strike = Decimal(str(atm))
 
-    for i in range(-num_strikes, num_strikes + 1):
-        strike = atm + i * step
-        strike_dec = Decimal(str(strike))
+    # Build strike array
+    n = 2 * num_strikes + 1
+    strikes_arr = np.empty(n)
+    for idx in range(n):
+        strikes_arr[idx] = atm + (idx - num_strikes) * step
+
+    # Vectorized BS pricing for all strikes at once
+    S_arr = np.full(n, spot)
+    T_safe = max(T, 1e-10)
+    sigma_safe = max(iv_base, 1e-10)
+    sqrt_T = math.sqrt(T_safe)
+    exp_rT = math.exp(-r * T_safe)
+
+    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * sigma_safe**2) * T_safe) / (sigma_safe * sqrt_T)
+    d2_arr = d1_arr - sigma_safe * sqrt_T
+    N_d1 = sp_norm.cdf(d1_arr)
+    N_d2 = sp_norm.cdf(d2_arr)
+    N_neg_d1 = 1.0 - N_d1
+    N_neg_d2 = 1.0 - N_d2
+    n_d1_pdf = sp_norm.pdf(d1_arr)
+
+    ce_prices_arr = np.maximum(0.05, S_arr * N_d1 - strikes_arr * exp_rT * N_d2)
+    pe_prices_arr = np.maximum(0.05, strikes_arr * exp_rT * N_neg_d2 - S_arr * N_neg_d1)
+
+    # Vectorized Greeks
+    gamma_arr = np.minimum(n_d1_pdf / (S_arr * sigma_safe * sqrt_T), 1.0)
+    common_theta = -(S_arr * n_d1_pdf * sigma_safe) / (2 * sqrt_T)
+    ce_theta_arr = (common_theta - r * strikes_arr * exp_rT * N_d2) / 365
+    pe_theta_arr = (common_theta + r * strikes_arr * exp_rT * N_neg_d2) / 365
+    vega_arr = S_arr * n_d1_pdf * sqrt_T / 100
+    ce_rho_arr = strikes_arr * T_safe * exp_rT * N_d2 / 100
+    pe_rho_arr = -strikes_arr * T_safe * exp_rT * N_neg_d2 / 100
+
+    # Synthetic OI (vectorized)
+    distance_arr = np.abs(strikes_arr - spot) / spot if spot > 0 else np.zeros(n)
+    oi_arr = np.maximum(1000, 50000 * np.exp(-distance_arr * 30)).astype(int)
+
+    # Expiry string (computed once)
+    exp_str = expiry.strftime("%y%b").upper()
+    _ZERO = Decimal("0")
+    _SPREAD_MIN = Decimal("0.05")
+    _SPREAD_FACTOR = Decimal("0.01")
+
+    # Populate chain entries from vectorized results
+    for idx in range(n):
+        strike = float(strikes_arr[idx])
+        strike_dec = Decimal(str(int(strike))) if strike == int(strike) else Decimal(str(strike))
 
         entry = chain_builder._find_or_create_entry(chain, strike_dec)
+        oi_val = int(oi_arr[idx])
 
-        for opt_str in ("CE", "PE"):
+        for opt_str, price_val, delta_val, theta_val, rho_val in (
+            ("CE", float(ce_prices_arr[idx]), float(N_d1[idx]), float(ce_theta_arr[idx]), float(ce_rho_arr[idx])),
+            ("PE", float(pe_prices_arr[idx]), float(N_d1[idx] - 1), float(pe_theta_arr[idx]), float(pe_rho_arr[idx])),
+        ):
             key = (underlying, strike, opt_str)
             if key not in option_tokens:
-                # Dynamically register if ATM shifted
                 token = alloc_token(underlying, strike, opt_str)
                 opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
-                exp_str = expiry.strftime("%y%b").upper()
                 sym = f"{underlying}{exp_str}{int(strike)}{opt_str}"
                 chain_builder.register_option(
                     token, underlying, expiry, strike_dec, opt_type_enum, sym,
@@ -497,23 +543,21 @@ def _update_market(
             else:
                 token = option_tokens[key]
 
-            exp_str = expiry.strftime("%y%b").upper()
             symbol = f"{underlying}{exp_str}{int(strike)}{opt_str}"
-
-            # BS price
-            price = _bs_price(spot, strike, T, r, iv_base, opt_str)
-            price = max(0.05, price)
-            price_dec = Decimal(str(round(price, 2)))
-
-            # Greeks (direct computation — no IV solver needed)
-            greeks = compute_greeks(spot, strike, T, r, iv_base, opt_str)
-
-            # Synthetic OI (higher near ATM)
-            distance = abs(strike - spot) / spot if spot > 0 else 0
-            oi = int(max(1000, 50000 * math.exp(-distance * 30)))
-
-            spread = max(Decimal("0.05"), price_dec * Decimal("0.01"))
+            price_dec = Decimal(str(round(price_val, 2)))
+            spread = max(_SPREAD_MIN, price_dec * _SPREAD_FACTOR)
+            bid = max(_SPREAD_MIN, price_dec - spread)
+            ask = price_dec + spread
             opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
+
+            greeks = Greeks(
+                delta=round(delta_val, 4),
+                gamma=round(float(gamma_arr[idx]), 6),
+                theta=round(theta_val, 4),
+                vega=round(float(vega_arr[idx]), 4),
+                rho=round(rho_val, 4),
+                iv=round(sigma_safe, 4),
+            )
 
             opt_data = OptionData.model_construct(
                 tradingsymbol=symbol,
@@ -522,10 +566,10 @@ def _update_market(
                 option_type=opt_type_enum,
                 expiry=expiry,
                 ltp=price_dec,
-                bid_price=max(Decimal("0.05"), price_dec - spread),
-                ask_price=price_dec + spread,
-                volume=oi // 3,
-                oi=oi,
+                bid_price=bid,
+                ask_price=ask,
+                volume=oi_val // 3,
+                oi=oi_val,
                 greeks=greeks,
             )
 
@@ -534,21 +578,20 @@ def _update_market(
             else:
                 entry.pe = opt_data
 
-            # Feed cache
             feed._latest_ticks[token] = Tick.model_construct(
                 instrument_token=token,
                 tradingsymbol=symbol,
                 timestamp=now,
                 ltp=price_dec,
-                bid_price=max(Decimal("0.05"), price_dec - spread),
-                ask_price=price_dec + spread,
-                volume=oi // 3,
-                oi=oi,
+                bid_price=bid,
+                ask_price=ask,
+                volume=oi_val // 3,
+                oi=oi_val,
                 bid_qty=100, ask_qty=100,
                 high=price_dec, low=price_dec,
                 open=price_dec, close=price_dec,
             )
-            broker.set_ltp(symbol, round(price, 2))
+            broker.set_ltp(symbol, round(price_val, 2))
 
     # Chain aggregates
     chain.total_ce_oi = sum(e.ce.oi for e in chain.strikes if e.ce)
@@ -562,19 +605,3 @@ def _update_market(
         cached = feed._latest_ticks.get(pos.instrument_token)
         if cached:
             pos.ltp = cached.ltp
-
-
-def _bs_price(S: float, K: float, T: float, r: float, sigma: float, opt_type: str) -> float:
-    """Black-Scholes option price."""
-    if sigma <= 0 or T <= 0:
-        return max(0.0, S - K) if opt_type == "CE" else max(0.0, K - S)
-    d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    if opt_type == "CE":
-        return max(0.0, S * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2))
-    return max(0.0, K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1))
-
-
-def _norm_cdf(x: float) -> float:
-    """Standard normal CDF (Abramowitz & Stegun)."""
-    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
