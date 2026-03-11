@@ -34,6 +34,9 @@ class PaperBrokerClient(BrokerClient):
     - No real API calls are made
     """
 
+    MAX_ORDER_HISTORY = 5000
+    MAX_TRADE_HISTORY = 5000
+
     def __init__(self, initial_capital: float = 1_000_000):
         self._connected = False
         self._capital = initial_capital
@@ -102,6 +105,8 @@ class PaperBrokerClient(BrokerClient):
         }
 
         self._orders.append(order)
+        if len(self._orders) > self.MAX_ORDER_HISTORY:
+            self._orders = self._orders[-self.MAX_ORDER_HISTORY:]
         self._trades.append({
             "trade_id": str(uuid.uuid4())[:8],
             "order_id": order_id,
@@ -112,6 +117,8 @@ class PaperBrokerClient(BrokerClient):
             "average_price": fill_price,
             "fill_timestamp": datetime.now().isoformat(),
         })
+        if len(self._trades) > self.MAX_TRADE_HISTORY:
+            self._trades = self._trades[-self.MAX_TRADE_HISTORY:]
 
         # Update position
         self._update_position(tradingsymbol, exchange, side, quantity, fill_price)

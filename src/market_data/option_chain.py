@@ -43,6 +43,10 @@ class OptionChainBuilder:
         self._spot_prices: dict[str, Decimal] = {}
         self._spot_tokens: dict[int, str] = {}  # spot token -> underlying name
 
+        # Logging throttling
+        self._tick_count = 0
+        self._last_spot_log: dict[str, float] = {}  # underlying -> last logged spot
+
     def register_option(
         self,
         instrument_token: int,
@@ -78,6 +82,8 @@ class OptionChainBuilder:
         tick = Tick(**tick_data)
         token = tick.instrument_token
 
+        self._tick_count += 1
+
         # Check if it's a spot tick
         if token in self._spot_tokens:
             underlying = self._spot_tokens[token]
@@ -86,6 +92,14 @@ class OptionChainBuilder:
             for chain in self._chains.get(underlying, {}).values():
                 chain.spot_price = tick.ltp
                 chain.atm_strike = find_atm_strike(float(tick.ltp), chain.strikes)
+            # Throttled spot logging — log on >0.1% move or first tick
+            last_logged = self._last_spot_log.get(underlying, 0)
+            if last_logged == 0 or abs(float(tick.ltp) - last_logged) / last_logged > 0.001:
+                logger.info(
+                    f"[SPOT] underlying={underlying} price={tick.ltp} "
+                    f"atm_strike={chain.atm_strike}"
+                )
+                self._last_spot_log[underlying] = float(tick.ltp)
             return
 
         # Check if it's an option tick
@@ -143,6 +157,16 @@ class OptionChainBuilder:
         chain.max_pain = compute_max_pain(chain)
         chain.total_ce_oi = sum(e.ce.oi for e in chain.strikes if e.ce)
         chain.total_pe_oi = sum(e.pe.oi for e in chain.strikes if e.pe)
+
+        # Periodic chain summary (every 1000 option ticks)
+        if self._tick_count % 1000 == 0:
+            complete = sum(1 for e in chain.strikes if e.ce and e.pe)
+            logger.info(
+                f"[CHAIN] underlying={underlying} expiry={expiry} "
+                f"strikes={len(chain.strikes)} complete={complete} "
+                f"pcr_oi={chain.pcr_oi:.2f} max_pain={chain.max_pain} "
+                f"total_ce_oi={chain.total_ce_oi} total_pe_oi={chain.total_pe_oi}"
+            )
 
         # Cache in Redis (throttled, not every tick)
         if self._redis:

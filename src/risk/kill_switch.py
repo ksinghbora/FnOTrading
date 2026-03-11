@@ -6,6 +6,7 @@ import logging
 from src.broker.base import BrokerClient
 from src.core.events import Event, EventBus, EventType
 from src.core.types import OrderSide, OrderType, ProductType
+from src.utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class KillSwitch:
         self._event_bus = event_bus
         self._activated = False
         self._strategy_runner = None  # Injected after creation
+        self._rate_limiter = RateLimiter(rate=3, burst=5)
 
     def set_strategy_runner(self, runner) -> None:
         """Inject strategy runner for halting strategies on kill switch."""
@@ -50,11 +52,13 @@ class KillSwitch:
 
         # Step 1: Cancel all open orders
         try:
+            await self._rate_limiter.acquire()
             orders = await self._broker.get_orders()
             for order in orders:
                 status = order.get("status", "")
                 if status in ("OPEN", "TRIGGER PENDING", "OPEN PENDING"):
                     try:
+                        await self._rate_limiter.acquire()
                         await self._broker.cancel_order(str(order["order_id"]))
                         results["orders_cancelled"] += 1
                     except Exception as e:
@@ -66,6 +70,7 @@ class KillSwitch:
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
+                await self._rate_limiter.acquire()
                 positions = await self._broker.get_positions()
                 remaining = []
                 for pos in positions.get("net", []):
@@ -76,6 +81,7 @@ class KillSwitch:
 
                     side = OrderSide.SELL if qty > 0 else OrderSide.BUY
                     try:
+                        await self._rate_limiter.acquire()
                         await self._broker.place_order(
                             tradingsymbol=pos["tradingsymbol"],
                             exchange=pos.get("exchange", "NFO"),

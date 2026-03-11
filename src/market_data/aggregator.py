@@ -138,9 +138,16 @@ class OHLCAggregator:
                 candle_end = builder.start_time + timedelta(seconds=seconds)
                 if tick.timestamp >= candle_end:
                     # Close current candle
+                    tick_count = builder._tick_count
                     ohlc = builder.to_ohlc()
                     if ohlc:
                         self._completed_candles.append(ohlc)
+                        logger.debug(
+                            f"[CANDLE] symbol={ohlc.tradingsymbol} "
+                            f"tf={tf.value} O={ohlc.open} H={ohlc.high} "
+                            f"L={ohlc.low} C={ohlc.close} vol={ohlc.volume} "
+                            f"ticks={tick_count}"
+                        )
                         # Trim oldest candles to prevent unbounded memory growth
                         if len(self._completed_candles) > self.MAX_COMPLETED_CANDLES:
                             self._completed_candles = self._completed_candles[-self.MAX_COMPLETED_CANDLES:]

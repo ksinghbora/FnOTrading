@@ -100,14 +100,14 @@ async def create_app(settings: Settings):
         ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
 
     # ─── Portfolio ───────────────────────────────────────────────
-    portfolio = PortfolioManager(event_bus, broker)
+    portfolio = PortfolioManager(event_bus, broker, chain_builder)
 
     # ─── OMS ─────────────────────────────────────────────────────
     dedup = OrderDeduplicator()
-    validator = OrderValidator(clock, dedup, feed)
+    validator = OrderValidator(clock, dedup, feed, paper_trading=settings.paper_trading)
     executor = OrderExecutor(broker)
     tracker = OrderTracker(broker, event_bus)
-    order_manager = OrderManager(validator, executor, tracker, event_bus)
+    order_manager = OrderManager(validator, executor, tracker, event_bus, paper_trading=settings.paper_trading)
 
     # ─── Risk Management ─────────────────────────────────────────
     limits = RiskLimits(
@@ -236,11 +236,64 @@ async def run():
             ):
                 app["portfolio"].reset_daily()
                 app["risk_manager"]._circuit_breaker.reset()
+                app["strategy_runner"].reset_strategies_daily()
                 last_reset_date = now.date()
                 logger.info(f"Daily reset completed for {now.date()}")
             await asyncio.sleep(30)
 
     asyncio.create_task(daily_reset_task())
+
+    # Periodic operational summary
+    async def operational_summary_task():
+        """Log system health summary every 60 seconds."""
+        tick_counter = 0
+
+        async def _count_tick(event):
+            nonlocal tick_counter
+            tick_counter += 1
+
+        app["event_bus"].subscribe(EventType.TICK, _count_tick)
+        last_tick_count = 0
+
+        while True:
+            await asyncio.sleep(60)
+            try:
+                portfolio = app["portfolio"]
+                runner = app["strategy_runner"]
+                risk_mgr = app["risk_manager"]
+
+                open_positions = portfolio.get_open_positions()
+                pnl = portfolio.get_pnl()
+                ticks_since_last = tick_counter - last_tick_count
+                last_tick_count = tick_counter
+
+                strategies = runner.get_all_strategies()
+                strategy_states = {
+                    sid: s.state.value for sid, s in strategies.items()
+                }
+
+                cb_state = risk_mgr.circuit_breaker.state.value
+                pending_orders = app["tracker"].pending_count
+                queue_depth = app["event_bus"]._queue.qsize()
+
+                logger.info(
+                    f"[SUMMARY] positions={len(open_positions)} "
+                    f"realized={pnl.realized} unrealized={pnl.unrealized} "
+                    f"day_pnl={pnl.net} charges={pnl.charges} "
+                    f"ticks_60s={ticks_since_last} "
+                    f"strategies={strategy_states} "
+                    f"circuit_breaker={cb_state} "
+                    f"pending_orders={pending_orders} "
+                    f"queue_depth={queue_depth}"
+                )
+
+                # Take P&L snapshot for intraday curve
+                portfolio.snapshot_pnl()
+
+            except Exception:
+                logger.exception("Error in operational summary")
+
+    asyncio.create_task(operational_summary_task())
 
     if app["ticker"]:
         await app["ticker"].start()
@@ -257,6 +310,27 @@ async def run():
         import src.strategy.adaptive  # noqa: F401
     except ImportError:
         pass
+
+    # Auto-load strategies from config
+    import json
+    from src.strategy.registry import create_strategy, list_strategies
+
+    strategy_configs = json.loads(settings.strategies)
+    if strategy_configs:
+        logger.info(f"Loading {len(strategy_configs)} strategies from config")
+        for cfg in strategy_configs:
+            try:
+                strategy = create_strategy(
+                    name=cfg["name"],
+                    strategy_id=cfg.get("id", f"{cfg['name']}_1"),
+                    params=cfg.get("params", {}),
+                )
+                await app["strategy_runner"].add_strategy(strategy)
+                logger.info(f"Strategy loaded: {strategy.strategy_id} ({cfg['name']})")
+            except Exception as e:
+                logger.exception(f"Failed to load strategy {cfg}: {e}")
+    else:
+        logger.info(f"No strategies configured. Available: {list_strategies()}")
 
     # Start API server
     try:

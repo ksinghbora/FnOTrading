@@ -5,9 +5,10 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.api.deps import get_container
+from src.config import Settings
 from src.core.events import Event, EventBus, EventType
 
 logger = logging.getLogger(__name__)
@@ -77,13 +78,28 @@ def register_ws_handlers(event_bus: EventBus) -> None:
     logger.info("WebSocket live feed handlers registered")
 
 
+def _verify_ws_api_key(api_key: str | None) -> bool:
+    """Verify API key for WebSocket connections."""
+    settings = Settings()
+    if not settings.is_production:
+        return True
+    return api_key == settings.api_secret_key
+
+
 @router.websocket("/ws/live")
-async def websocket_live_feed(websocket: WebSocket) -> None:
+async def websocket_live_feed(
+    websocket: WebSocket,
+    api_key: str | None = Query(None, alias="api_key"),
+) -> None:
     """WebSocket endpoint that streams P&L, position, and tick updates.
 
-    Clients connect and receive JSON messages. Optionally, clients can
-    send a 'ping' message and will receive 'pong'.
+    Clients connect with ?api_key=<key> query param (required in production).
+    Optionally, clients can send a 'ping' message and will receive 'pong'.
     """
+    if not _verify_ws_api_key(api_key):
+        await websocket.close(code=4001, reason="Invalid or missing API key")
+        return
+
     await websocket.accept()
     _clients.add(websocket)
     logger.info(f"WebSocket client connected (total: {len(_clients)})")

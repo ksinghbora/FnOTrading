@@ -1,11 +1,14 @@
 """Base strategy abstract class — the contract all strategies implement."""
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 from src.core.models import OHLC, Order, Signal, Subscription, Tick
 from src.core.types import StrategyState
 from src.strategy.params import BaseStrategyParams
+
+logger = logging.getLogger(__name__)
 
 
 class BaseStrategy(ABC):
@@ -74,10 +77,7 @@ class BaseStrategy(ABC):
 
     async def on_error(self, error: Exception) -> None:
         """Called on unhandled error. Default: log."""
-        import logging
-        logging.getLogger(__name__).exception(
-            f"Strategy {self.strategy_id} error: {error}"
-        )
+        logger.exception(f"Strategy {self.strategy_id} error: {error}")
 
     def _check_vix_filter(self) -> str | None:
         """Check if VIX is too high for entry.
@@ -87,6 +87,11 @@ class BaseStrategy(ABC):
         vix = self.ctx.get_vix()
         if vix <= 0:
             return None  # VIX data unavailable, allow entry
+        result = "block" if vix > self.params.vix_entry_max else "pass"
+        logger.debug(
+            f"[FILTER] strategy={self.strategy_id} filter=vix "
+            f"value={vix:.1f} threshold={self.params.vix_entry_max} result={result}"
+        )
         if vix > self.params.vix_entry_max:
             return f"VIX {vix:.1f} exceeds max {self.params.vix_entry_max}"
         return None
@@ -100,8 +105,7 @@ class BaseStrategy(ABC):
         lots = self.params.quantity_lots
         if vix > 0 and vix > self.params.vix_reduce_above:
             lots = max(1, lots // 2)
-            import logging
-            logging.getLogger(__name__).info(
+            logger.info(
                 f"[{self.strategy_id}] VIX={vix:.1f} > {self.params.vix_reduce_above}, "
                 f"reducing lots to {lots}"
             )
@@ -141,6 +145,12 @@ class BaseStrategy(ABC):
             return None
 
         move_pct = abs(float(spot) - session_open) / session_open * 100
+        logger.debug(
+            f"[FILTER] strategy={self.strategy_id} filter=trend "
+            f"session_open={session_open:.0f} spot={float(spot):.0f} "
+            f"move_pct={move_pct:.2f} threshold=0.7 "
+            f"result={'block' if move_pct > 0.7 else 'pass'}"
+        )
         if move_pct > 0.7:
             direction = "up" if float(spot) > session_open else "down"
             return (
@@ -159,12 +169,21 @@ class BaseStrategy(ABC):
         today = self.ctx.clock.now().date()
         if today > current_expiry:
             new_expiry = self.ctx.next_expiry(underlying)
-            import logging
-            logging.getLogger(__name__).info(
+            logger.info(
                 f"[{self.strategy_id}] Expiry rollover: {current_expiry} -> {new_expiry}"
             )
             return new_expiry
         return None
+
+    def reset_day_state(self) -> None:
+        """Reset intraday flags at start of a new trading day.
+
+        Override in subclasses that use _entered / _stopped_for_day flags.
+        """
+        if hasattr(self, "_entered"):
+            self._entered = False
+        if hasattr(self, "_stopped_for_day"):
+            self._stopped_for_day = False
 
     def get_state_data(self) -> dict:
         """Serialize strategy-specific state for persistence.

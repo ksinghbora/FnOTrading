@@ -142,10 +142,28 @@ class OrderTracker:
                     order.fill_quantity = int(fill_qty)
                     order.filled_at = datetime.now()
 
+                    slippage = float(order.fill_price - order.price) if order.price > 0 else 0.0
+                    slippage_pct = (slippage / float(order.price) * 100) if order.price > 0 else 0.0
+                    ttf_ms = (
+                        (order.filled_at - order.placed_at).total_seconds() * 1000
+                        if order.placed_at else 0
+                    )
+                    logger.info(
+                        f"[FILL] order_id={broker_id} symbol={order.tradingsymbol} "
+                        f"side={order.order_side.value} qty={order.fill_quantity} "
+                        f"fill_price={order.fill_price} slippage={slippage:.2f} "
+                        f"slippage_pct={slippage_pct:.2f}% ttf_ms={ttf_ms:.0f}"
+                    )
+
                     event_type = EventType.ORDER_FILLED
                 elif new_status == OrderStatus.REJECTED:
+                    logger.warning(
+                        f"[REJECTED] order_id={broker_id} symbol={order.tradingsymbol} "
+                        f"reason={broker_data.get('status_message', 'unknown')}"
+                    )
                     event_type = EventType.ORDER_REJECTED
                 else:
+                    logger.info(f"[CANCELLED] order_id={broker_id} symbol={order.tradingsymbol}")
                     event_type = EventType.ORDER_CANCELLED
 
                 await self._event_bus.publish(

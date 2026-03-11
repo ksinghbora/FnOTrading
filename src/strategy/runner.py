@@ -76,6 +76,16 @@ class StrategyRunner:
         tokens = list(subs.instrument_tokens)
         if INDIA_VIX_TOKEN not in tokens:
             tokens.append(INDIA_VIX_TOKEN)
+
+        # Auto-subscribe to the underlying's spot token so strategies
+        # receive regular ticks even if get_subscriptions() returns empty.
+        underlying = getattr(strategy.params, "underlying", None)
+        if underlying:
+            for spot_token, name in self._chain_builder._spot_tokens.items():
+                if name == underlying and spot_token not in tokens:
+                    tokens.append(spot_token)
+                    logger.info(f"Auto-subscribed {sid} to {name} spot token {spot_token}")
+
         new_tokens = self._feed.subscribe(tokens, sid)
         self._strategy_tokens[sid] = set(tokens)
 
@@ -120,6 +130,12 @@ class StrategyRunner:
         """Stop all running strategies."""
         for sid in list(self._strategies.keys()):
             await self.remove_strategy(sid)
+
+    def reset_strategies_daily(self) -> None:
+        """Reset day-level flags on all strategies at start of new trading day."""
+        for sid, strategy in self._strategies.items():
+            strategy.reset_day_state()
+            logger.info(f"Strategy {sid} day state reset")
 
     def get_strategy(self, strategy_id: str) -> BaseStrategy | None:
         return self._strategies.get(strategy_id)

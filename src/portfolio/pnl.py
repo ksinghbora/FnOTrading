@@ -28,6 +28,10 @@ class PnLCalculator:
         """Record charges from a trade."""
         current = self._total_charges.get(strategy_id, Decimal("0"))
         self._total_charges[strategy_id] = current + charges
+        logger.debug(
+            f"[CHARGES] strategy={strategy_id} charges={charges} "
+            f"cumulative={self._total_charges[strategy_id]}"
+        )
 
     def get_pnl(self, strategy_id: str | None = None) -> PnL:
         """Get current P&L summary."""
@@ -83,5 +87,11 @@ class PnLCalculator:
 
     def reset_daily(self) -> None:
         """Reset daily P&L tracking (call at start of each trading day)."""
+        total_charges = sum(self._total_charges.values(), Decimal("0"))
+        logger.info(
+            f"[RESET] daily_pnl_reset charges_cleared={total_charges} "
+            f"curve_points_cleared={len(self._pnl_curve)}"
+        )
         self._pnl_curve.clear()
         self._total_charges.clear()
+        self._positions.reset_daily()

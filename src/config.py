@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # ─── Paper Trading ───────────────────────────────────────────────
     paper_trading: bool = True  # Default to paper trading for safety
 
+    # ─── Strategies ────────────────────────────────────────────────
+    # JSON array of strategies to auto-start, e.g.:
+    # [{"name": "short_strangle", "id": "nifty_strangle_1", "params": {"underlying": "NIFTY"}}]
+    strategies: str = "[]"
+
     @property
     def is_production(self) -> bool:
         return self.environment == "production"

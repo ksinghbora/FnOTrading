@@ -32,6 +32,12 @@ class OrderExecutor:
         """
         await self._rate_limiter.acquire()
 
+        logger.info(
+            f"[SUBMIT] strategy={order.strategy_id} symbol={order.tradingsymbol} "
+            f"side={order.order_side.value} qty={order.quantity} "
+            f"type={order.order_type.value} price={order.price}"
+        )
+
         try:
             broker_order_id = await self._broker.place_order(
                 tradingsymbol=order.tradingsymbol,
@@ -46,8 +52,9 @@ class OrderExecutor:
             )
 
             logger.info(
-                f"Order executed: {broker_order_id} | "
-                f"{order.order_side.value} {order.quantity} {order.tradingsymbol}"
+                f"[SUBMIT_OK] broker_order_id={broker_order_id} "
+                f"symbol={order.tradingsymbol} side={order.order_side.value} "
+                f"qty={order.quantity}"
             )
 
             return {
@@ -57,14 +64,17 @@ class OrderExecutor:
             }
 
         except BrokerRateLimitError:
-            logger.warning("Rate limit hit, order will be retried")
+            logger.warning(f"[SUBMIT_FAIL] symbol={order.tradingsymbol} reason=rate_limit")
             return {
                 "broker_order_id": "",
                 "status": OrderStatus.FAILED,
                 "message": "Rate limit exceeded",
             }
         except BrokerOrderError as e:
-            logger.error(f"Order execution failed: {e}")
+            logger.error(
+                f"[SUBMIT_FAIL] symbol={order.tradingsymbol} "
+                f"side={order.order_side.value} reason={e}"
+            )
             return {
                 "broker_order_id": "",
                 "status": OrderStatus.REJECTED,

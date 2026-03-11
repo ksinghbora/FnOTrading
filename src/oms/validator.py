@@ -30,10 +30,12 @@ class OrderValidator:
         clock: MarketClock,
         dedup: OrderDeduplicator,
         feed: TickFeedManager,
+        paper_trading: bool = False,
     ):
         self._clock = clock
         self._dedup = dedup
         self._feed = feed
+        self._paper_trading = paper_trading
 
     def validate(self, order: OrderRequest) -> None:
         """Run all validation checks. Raises OrderValidationError on failure."""
@@ -45,7 +47,9 @@ class OrderValidator:
         self._dedup.check(order)
 
     def _check_market_hours(self, order: OrderRequest) -> None:
-        """Ensure market is open."""
+        """Ensure market is open (skipped in paper trading mode)."""
+        if self._paper_trading:
+            return
         if not self._clock.is_market_open():
             raise OrderValidationError(
                 f"Market is closed. Cannot place order for {order.tradingsymbol}"

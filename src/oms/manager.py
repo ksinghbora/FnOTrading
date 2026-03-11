@@ -32,12 +32,14 @@ class OrderManager:
         tracker: OrderTracker,
         event_bus: EventBus,
         risk_manager=None,  # Injected later to avoid circular imports
+        paper_trading: bool = False,
     ):
         self._validator = validator
         self._executor = executor
         self._tracker = tracker
         self._event_bus = event_bus
         self._risk_manager = risk_manager
+        self._paper_trading = paper_trading
         self._orders: dict[UUID, Order] = {}
         self._order_history: list[Order] = []
         self._max_history = 5000
@@ -77,15 +79,16 @@ class OrderManager:
             self._order_history.append(order)
             return order
 
-        # Step 2: Margin check
-        try:
-            await self._check_margin(request)
-        except OrderValidationError as e:
-            order.status = OrderStatus.REJECTED
-            logger.warning(f"Margin check failed: {e}")
-            await self._publish_order_event(order, EventType.ORDER_REJECTED, str(e))
-            self._order_history.append(order)
-            return order
+        # Step 2: Margin check (skipped in paper mode — paper broker has no real margins)
+        if not self._paper_trading:
+            try:
+                await self._check_margin(request)
+            except OrderValidationError as e:
+                order.status = OrderStatus.REJECTED
+                logger.warning(f"Margin check failed: {e}")
+                await self._publish_order_event(order, EventType.ORDER_REJECTED, str(e))
+                self._order_history.append(order)
+                return order
 
         # Step 3: Risk check
         if self._risk_manager:

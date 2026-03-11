@@ -62,6 +62,11 @@ class PositionTracker:
             else:
                 realized = close_qty * (pos.average_price - fill_price)
             pos.pnl += realized
+            logger.info(
+                f"[REALIZED_PNL] symbol={pos.tradingsymbol} strategy={pos.strategy_id} "
+                f"close_qty={close_qty} avg_price={pos.average_price} "
+                f"fill_price={fill_price} realized={realized:.2f} cumulative={pos.pnl:.2f}"
+            )
 
             if new_qty == 0:
                 pos.average_price = Decimal("0")
@@ -75,14 +80,19 @@ class PositionTracker:
         if pos.quantity == 0:
             self._closed[key] = pos
             del self._positions[key]
+            logger.info(
+                f"[POSITION_CLOSED] symbol={pos.tradingsymbol} strategy={pos.strategy_id} "
+                f"total_realized_pnl={pos.pnl:.2f}"
+            )
             # Trim closed archive if too large (keep most recent)
             if len(self._closed) > self.MAX_CLOSED_POSITIONS:
                 oldest_key = next(iter(self._closed))
                 del self._closed[oldest_key]
 
         logger.info(
-            f"Position updated: {pos.tradingsymbol} [{pos.strategy_id}] "
-            f"qty={pos.quantity} avg={pos.average_price}"
+            f"[POSITION] symbol={pos.tradingsymbol} strategy={pos.strategy_id} "
+            f"old_qty={old_qty} new_qty={pos.quantity} avg={pos.average_price} "
+            f"side={order.order_side.value}"
         )
         return pos
 
@@ -103,6 +113,10 @@ class PositionTracker:
 
     def get_open_positions(self, strategy_id: str | None = None) -> list[Position]:
         return [p for p in self.get_positions(strategy_id) if p.quantity != 0]
+
+    def reset_daily(self) -> None:
+        """Clear closed positions archive at start of each trading day."""
+        self._closed.clear()
 
     def get_net_quantity(self, strategy_id: str, instrument_token: int) -> int:
         pos = self.get_position(strategy_id, instrument_token)

@@ -68,7 +68,7 @@ class MarketDataStore:
                 )
                 params = [
                     {
-                        "time": t.timestamp.isoformat(),
+                        "time": t.timestamp,
                         "token": t.instrument_token,
                         "symbol": t.tradingsymbol,
                         "ltp": float(t.ltp),

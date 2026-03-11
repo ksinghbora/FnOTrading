@@ -110,8 +110,8 @@ class SimulationEngine:
         self._chain_builder.register_spot(BANKNIFTY_SPOT_TOKEN, "BANKNIFTY")
 
         # Register option instruments around current ATM
-        self._register_options("NIFTY", self._nifty_spot, 50, 10, self._nifty_expiry)
-        self._register_options("BANKNIFTY", self._banknifty_spot, 100, 10, self._banknifty_expiry)
+        self._register_options("NIFTY", self._nifty_spot, 50, 20, self._nifty_expiry)
+        self._register_options("BANKNIFTY", self._banknifty_spot, 100, 20, self._banknifty_expiry)
 
         self._task = asyncio.create_task(self._run_loop())
         logger.info(
@@ -236,7 +236,7 @@ class SimulationEngine:
         step = 50 if underlying == "NIFTY" else 100
         atm = round(spot / step) * step
 
-        for i in range(-10, 11):
+        for i in range(-20, 21):
             strike = atm + i * step
             for opt_type in ("CE", "PE"):
                 token = self._option_tokens.get((underlying, strike, opt_type))
