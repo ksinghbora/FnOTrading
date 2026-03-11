@@ -1,0 +1,356 @@
+"""Short Strangle strategy — sells OTM CE + OTM PE based on delta."""
+
+import logging
+import time as _time
+from datetime import date
+from decimal import Decimal
+
+from src.core.constants import LOT_SIZES
+from src.core.models import Signal, SignalLeg, Subscription, Tick
+from src.core.types import OrderSide, SignalType
+from src.strategy.base import BaseStrategy
+from src.strategy.params import ShortStrangleParams
+from src.strategy.registry import register_strategy
+from src.strategy.signals import adjust_signal, entry_signal, exit_signal, make_leg
+
+logger = logging.getLogger(__name__)
+
+
+@register_strategy("short_strangle", ShortStrangleParams)
+class ShortStrangleStrategy(BaseStrategy):
+    """Sells OTM Call + OTM Put selected by delta.
+
+    Unlike fixed-strike strangle, this selects strikes based on
+    option delta for consistent risk profile across market conditions.
+    """
+
+    params: ShortStrangleParams
+
+    MAX_ADJUSTMENTS_PER_DAY = 2
+
+    def __init__(self, strategy_id: str, params: ShortStrangleParams):
+        super().__init__(strategy_id, params)
+        self._entered = False
+        self._stopped_for_day = False
+        self._ce_token: int = 0
+        self._pe_token: int = 0
+        self._ce_symbol: str = ""
+        self._pe_symbol: str = ""
+        self._ce_strike: float = 0
+        self._pe_strike: float = 0
+        self._entry_premium: Decimal = Decimal("0")
+        self._peak_premium: Decimal = Decimal("0")  # For trailing stop
+        self._expiry: date | None = None
+        self._lot_size = LOT_SIZES.get(params.underlying, 75)
+        self._quantity = params.quantity_lots * self._lot_size
+        self._adjustments_today: int = 0
+        self._last_adjustment_date: date | None = None
+        self._last_adjustment_time: float = 0.0  # Unix timestamp cooldown
+
+    def get_subscriptions(self) -> Subscription:
+        return Subscription(instrument_tokens=[], timeframes=[])
+
+    async def on_start(self) -> None:
+        self._expiry = self.ctx.next_expiry(self.params.underlying)
+        logger.info(
+            f"[{self.strategy_id}] Started: {self.params.underlying} "
+            f"expiry={self._expiry} call_delta={self.params.call_delta} "
+            f"put_delta={self.params.put_delta}"
+        )
+
+    async def on_tick(self, tick: Tick) -> Signal | None:
+        now = self.ctx.clock.now()
+
+        # Expiry rollover
+        new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
+        if new_expiry:
+            self._expiry = new_expiry
+
+        if now.time() >= self.params.exit_time and self._entered:
+            return self._create_exit_signal("Exit time reached")
+
+        if not self._entered and not self._stopped_for_day and now.time() >= self.params.entry_time:
+            return await self._try_entry()
+
+        if self._entered:
+            return self._check_adjustments()
+
+        return None
+
+    async def _try_entry(self) -> Signal | None:
+        """Select strikes by delta and enter."""
+        # VIX filter — skip entry in high-volatility environments
+        vix_block = self._check_vix_filter()
+        if vix_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+            return None
+
+        # Trend filter — skip if market is trending >0.7% from open
+        trend_block = self._check_trend_filter(self.params.underlying)
+        if trend_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
+            return None
+
+        chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+        if not chain or not chain.strikes:
+            return None
+
+        # VIX-adjusted position sizing
+        adjusted_lots = self._get_vix_adjusted_lots()
+        self._quantity = adjusted_lots * self._lot_size
+
+        # Find CE strike closest to target delta
+        best_ce = None
+        best_ce_diff = float("inf")
+        best_pe = None
+        best_pe_diff = float("inf")
+
+        for entry in chain.strikes:
+            if entry.ce and entry.ce.greeks.delta > 0:
+                diff = abs(entry.ce.greeks.delta - self.params.call_delta)
+                if diff < best_ce_diff:
+                    best_ce_diff = diff
+                    best_ce = entry
+
+            if entry.pe and entry.pe.greeks.delta < 0:
+                diff = abs(entry.pe.greeks.delta - self.params.put_delta)
+                if diff < best_pe_diff:
+                    best_pe_diff = diff
+                    best_pe = entry
+
+        if not best_ce or not best_ce.ce or not best_pe or not best_pe.pe:
+            logger.warning(f"[{self.strategy_id}] Could not find suitable strikes")
+            return None
+
+        self._ce_token = best_ce.ce.instrument_token
+        self._ce_symbol = best_ce.ce.tradingsymbol
+        self._ce_strike = float(best_ce.strike)
+        self._pe_token = best_pe.pe.instrument_token
+        self._pe_symbol = best_pe.pe.tradingsymbol
+        self._pe_strike = float(best_pe.strike)
+
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        self._entry_premium = ce_ltp + pe_ltp
+        self._peak_premium = self._entry_premium
+
+        legs = [
+            make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity),
+            make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity),
+        ]
+
+        self._entered = True
+        logger.info(
+            f"[{self.strategy_id}] ENTRY: Strangle CE@{self._ce_strike} PE@{self._pe_strike} "
+            f"premium={self._entry_premium} qty={self._quantity}"
+        )
+
+        return entry_signal(
+            self.strategy_id, legs,
+            f"Strangle CE@{self._ce_strike} PE@{self._pe_strike}"
+        )
+
+    def _check_adjustments(self) -> Signal | None:
+        """Check if position needs adjustment based on delta movement."""
+        if self._entry_premium <= 0:
+            return None
+
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        current_premium = ce_ltp + pe_ltp
+
+        change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
+
+        # Stop loss check
+        if change_pct > self.params.stop_loss_pct:
+            logger.info(
+                f"[{self.strategy_id}] STOP LOSS: premium up {change_pct:.1f}% "
+                f"(threshold: {self.params.stop_loss_pct}%)"
+            )
+            signal = self._create_exit_signal(f"Stop loss: +{change_pct:.1f}%")
+            self._stopped_for_day = True
+            return signal
+
+        # Trailing stop — lock in profits as premium decays
+        if self.params.trail_stop_pct > 0:
+            if current_premium < self._peak_premium:
+                self._peak_premium = min(self._peak_premium, current_premium)
+            elif current_premium > self._peak_premium:
+                bounce_pct = float(
+                    (current_premium - self._peak_premium) / self._entry_premium * 100
+                )
+                if bounce_pct > self.params.trail_stop_pct:
+                    profit_locked = float(
+                        (self._entry_premium - self._peak_premium) / self._entry_premium * 100
+                    )
+                    logger.info(
+                        f"[{self.strategy_id}] TRAIL STOP: bounced {bounce_pct:.1f}%, "
+                        f"locking {profit_locked:.1f}% profit"
+                    )
+                    signal = self._create_exit_signal(
+                        f"Trailing stop: bounced {bounce_pct:.1f}%"
+                    )
+                    self._stopped_for_day = True
+                    return signal
+
+        # Reset adjustment counter on new day
+        today = self.ctx.clock.now().date()
+        if self._last_adjustment_date != today:
+            self._adjustments_today = 0
+            self._last_adjustment_date = today
+
+        # Cap adjustments per day to avoid charge bleed
+        if self._adjustments_today >= self.MAX_ADJUSTMENTS_PER_DAY:
+            return None
+
+        # Cooldown: don't generate adjustment signals more than once per 30s
+        if _time.time() - self._last_adjustment_time < 30:
+            return None
+
+        # Delta-based adjustment — roll the losing leg to new delta target
+        chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+        if not chain:
+            return None
+
+        for entry in chain.strikes:
+            if entry.ce and entry.ce.instrument_token == self._ce_token:
+                if abs(entry.ce.greeks.delta) > self.params.adjustment_delta_threshold:
+                    return self._roll_leg("CE", chain, ce_ltp)
+                break
+
+        for entry in chain.strikes:
+            if entry.pe and entry.pe.instrument_token == self._pe_token:
+                if abs(entry.pe.greeks.delta) > self.params.adjustment_delta_threshold:
+                    return self._roll_leg("PE", chain, pe_ltp)
+                break
+
+        return None
+
+    def _roll_leg(self, leg_type: str, chain, current_ltp: Decimal) -> Signal | None:
+        """Roll a leg back to target delta strike."""
+        legs: list[SignalLeg] = []
+
+        if leg_type == "CE":
+            # Find new CE at target delta
+            best = None
+            best_diff = float("inf")
+            for entry in chain.strikes:
+                if entry.ce and entry.ce.greeks.delta > 0:
+                    diff = abs(entry.ce.greeks.delta - self.params.call_delta)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best = entry
+
+            if not best or not best.ce:
+                logger.warning(f"[{self.strategy_id}] Could not find new CE for roll")
+                return None
+
+            # Skip if rolling to same strike (no-op)
+            if best.ce.instrument_token == self._ce_token:
+                logger.debug(f"[{self.strategy_id}] CE roll skipped: same strike")
+                return None
+
+            # Close existing CE
+            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity))
+
+            old_strike = self._ce_strike
+            self._ce_token = best.ce.instrument_token
+            self._ce_symbol = best.ce.tradingsymbol
+            self._ce_strike = float(best.strike)
+            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity))
+
+            logger.info(
+                f"[{self.strategy_id}] ROLL CE: {old_strike} -> {self._ce_strike} "
+                f"(delta was {self.params.adjustment_delta_threshold}+)"
+            )
+        else:
+            # Find new PE at target delta
+            best = None
+            best_diff = float("inf")
+            for entry in chain.strikes:
+                if entry.pe and entry.pe.greeks.delta < 0:
+                    diff = abs(entry.pe.greeks.delta - self.params.put_delta)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best = entry
+
+            if not best or not best.pe:
+                logger.warning(f"[{self.strategy_id}] Could not find new PE for roll")
+                return None
+
+            # Skip if rolling to same strike (no-op)
+            if best.pe.instrument_token == self._pe_token:
+                logger.debug(f"[{self.strategy_id}] PE roll skipped: same strike")
+                return None
+
+            # Close existing PE
+            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity))
+
+            old_strike = self._pe_strike
+            self._pe_token = best.pe.instrument_token
+            self._pe_symbol = best.pe.tradingsymbol
+            self._pe_strike = float(best.strike)
+            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity))
+
+            logger.info(
+                f"[{self.strategy_id}] ROLL PE: {old_strike} -> {self._pe_strike} "
+                f"(delta was {self.params.adjustment_delta_threshold}+)"
+            )
+
+        # Re-record entry premium after roll
+        self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
+        self._peak_premium = self._entry_premium
+        self._adjustments_today += 1
+        self._last_adjustment_time = _time.time()
+
+        logger.info(
+            f"[{self.strategy_id}] Adjustment {self._adjustments_today}/{self.MAX_ADJUSTMENTS_PER_DAY} today"
+        )
+
+        return adjust_signal(
+            self.strategy_id, legs,
+            f"Rolled {leg_type} to delta target"
+        )
+
+    def _create_exit_signal(self, reason: str) -> Signal:
+        legs = [
+            make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
+            make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
+        ]
+        self._entered = False
+        return exit_signal(self.strategy_id, legs, reason)
+
+    async def on_stop(self) -> None:
+        if self._entered:
+            logger.info(f"[{self.strategy_id}] Stopping with open position")
+
+    def get_state_data(self) -> dict:
+        return {
+            "entered": self._entered,
+            "stopped_for_day": self._stopped_for_day,
+            "ce_token": self._ce_token,
+            "pe_token": self._pe_token,
+            "ce_symbol": self._ce_symbol,
+            "pe_symbol": self._pe_symbol,
+            "ce_strike": self._ce_strike,
+            "pe_strike": self._pe_strike,
+            "entry_premium": str(self._entry_premium),
+            "peak_premium": str(self._peak_premium),
+            "adjustments_today": self._adjustments_today,
+            "last_adjustment_date": self._last_adjustment_date.isoformat() if self._last_adjustment_date else None,
+        }
+
+    def load_state_data(self, data: dict) -> None:
+        self._entered = data.get("entered", False)
+        self._stopped_for_day = data.get("stopped_for_day", False)
+        self._ce_token = data.get("ce_token", 0)
+        self._pe_token = data.get("pe_token", 0)
+        self._ce_symbol = data.get("ce_symbol", "")
+        self._pe_symbol = data.get("pe_symbol", "")
+        self._ce_strike = data.get("ce_strike", 0)
+        self._pe_strike = data.get("pe_strike", 0)
+        self._entry_premium = Decimal(data.get("entry_premium", "0"))
+        self._peak_premium = Decimal(data.get("peak_premium", "0"))
+        self._adjustments_today = data.get("adjustments_today", 0)
+        adj_date = data.get("last_adjustment_date")
+        self._last_adjustment_date = date.fromisoformat(adj_date) if adj_date else None

@@ -1,0 +1,328 @@
+"""Short Straddle strategy — sells ATM CE + PE with adjustments.
+
+The bread-and-butter of Indian F&O algo trading.
+Profits from time decay (theta) when the market stays range-bound.
+"""
+
+import logging
+from datetime import date, datetime, time
+from decimal import Decimal
+
+from src.core.constants import LOT_SIZES
+from src.core.models import OHLC, Order, Signal, SignalLeg, Subscription, Tick
+from src.core.types import OptionType, OrderSide, OrderType, SignalType
+from src.strategy.base import BaseStrategy
+from src.strategy.params import ShortStraddleParams
+from src.strategy.registry import register_strategy
+from src.strategy.signals import entry_signal, exit_signal, adjust_signal, make_leg
+
+logger = logging.getLogger(__name__)
+
+
+@register_strategy("short_straddle", ShortStraddleParams)
+class ShortStraddleStrategy(BaseStrategy):
+    """Sells ATM Call + ATM Put at a configured time.
+
+    Features:
+    - ATM strike selection based on spot price
+    - Configurable entry/exit time
+    - Adjustment when premium moves X% against
+    - Stop loss at X% of total premium collected
+    - Optional hedge with far OTM options
+    """
+
+    params: ShortStraddleParams
+
+    def __init__(self, strategy_id: str, params: ShortStraddleParams):
+        super().__init__(strategy_id, params)
+        self._entered = False
+        self._stopped_for_day = False  # Prevents re-entry after stop loss
+        self._ce_token: int = 0
+        self._pe_token: int = 0
+        self._ce_symbol: str = ""
+        self._pe_symbol: str = ""
+        self._entry_premium: Decimal = Decimal("0")
+        self._peak_premium: Decimal = Decimal("0")  # For trailing stop
+        self._atm_strike: float = 0
+        self._expiry: date | None = None
+        self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
+        self._quantity: int = params.quantity_lots * self._lot_size
+
+    def get_subscriptions(self) -> Subscription:
+        # We subscribe dynamically after determining ATM strike
+        return Subscription(instrument_tokens=[], timeframes=[])
+
+    async def on_start(self) -> None:
+        """Initialize — determine expiry and subscribe to spot."""
+        self._expiry = self.ctx.next_expiry(self.params.underlying)
+        logger.info(
+            f"[{self.strategy_id}] Started: {self.params.underlying} "
+            f"expiry={self._expiry} lots={self.params.quantity_lots}"
+        )
+
+    async def on_tick(self, tick: Tick) -> Signal | None:
+        now = self.ctx.clock.now()
+
+        # Expiry rollover — if past expiry, update to next one
+        new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
+        if new_expiry:
+            self._expiry = new_expiry
+
+        # Check exit time
+        if now.time() >= self.params.exit_time and self._entered:
+            return self._create_exit_signal("Exit time reached")
+
+        # Check entry time (don't re-enter after stop loss)
+        if not self._entered and not self._stopped_for_day and now.time() >= self.params.entry_time:
+            return await self._try_entry()
+
+        # Monitor position if entered
+        if self._entered:
+            return self._check_adjustments(tick)
+
+        return None
+
+    async def _try_entry(self) -> Signal | None:
+        """Enter the straddle — sell ATM CE + ATM PE."""
+        # VIX filter — skip entry in high-volatility environments
+        vix_block = self._check_vix_filter()
+        if vix_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+            return None
+
+        # Trend filter — skip if market is trending >0.7% from open
+        trend_block = self._check_trend_filter(self.params.underlying)
+        if trend_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
+            return None
+
+        spot = self.ctx.get_spot_price(self.params.underlying)
+        if spot <= 0:
+            return None
+
+        # VIX-adjusted position sizing
+        adjusted_lots = self._get_vix_adjusted_lots()
+        self._quantity = adjusted_lots * self._lot_size
+
+        # Determine ATM strike
+        strike_interval = 50 if self.params.underlying in ("NIFTY", "FINNIFTY") else 100
+        self._atm_strike = round(float(spot) / strike_interval) * strike_interval
+
+        # Get option chain to find instruments
+        chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+        if not chain:
+            logger.warning(f"[{self.strategy_id}] No option chain available")
+            return None
+
+        # Find CE and PE at ATM strike
+        for entry in chain.strikes:
+            if float(entry.strike) == self._atm_strike:
+                if entry.ce:
+                    self._ce_token = entry.ce.instrument_token
+                    self._ce_symbol = entry.ce.tradingsymbol
+                if entry.pe:
+                    self._pe_token = entry.pe.instrument_token
+                    self._pe_symbol = entry.pe.tradingsymbol
+                break
+
+        if not self._ce_token or not self._pe_token:
+            logger.warning(f"[{self.strategy_id}] Could not find ATM options at strike {self._atm_strike}")
+            return None
+
+        # Record entry premium
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        self._entry_premium = ce_ltp + pe_ltp
+
+        legs = [
+            make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity),
+            make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity),
+        ]
+
+        # Add hedge legs if configured
+        if self.params.add_hedge:
+            hedge_legs = self._create_hedge_legs(chain)
+            legs.extend(hedge_legs)
+
+        self._entered = True
+        self._peak_premium = self._entry_premium  # Initialize trailing stop tracker
+        logger.info(
+            f"[{self.strategy_id}] ENTRY: Straddle @ {self._atm_strike} "
+            f"premium={self._entry_premium} qty={self._quantity}"
+        )
+
+        return entry_signal(self.strategy_id, legs, f"Straddle @ {self._atm_strike}")
+
+    def _check_adjustments(self, tick: Tick) -> Signal | None:
+        """Monitor position and adjust if needed."""
+        if not self._entered:
+            return None
+
+        # Calculate current premium
+        ce_ltp = self.ctx.get_ltp(self._ce_token)
+        pe_ltp = self.ctx.get_ltp(self._pe_token)
+        current_premium = ce_ltp + pe_ltp
+
+        if self._entry_premium <= 0:
+            return None
+
+        premium_change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
+
+        # Stop loss check
+        if premium_change_pct > self.params.stop_loss_pct:
+            logger.info(
+                f"[{self.strategy_id}] STOP LOSS: premium up {premium_change_pct:.1f}% "
+                f"(threshold: {self.params.stop_loss_pct}%)"
+            )
+            signal = self._create_exit_signal(f"Stop loss: premium +{premium_change_pct:.1f}%")
+            self._entered = False
+            self._stopped_for_day = True
+            return signal
+
+        # Trailing stop — lock in profits as premium decays
+        if self.params.trail_stop_pct > 0 and current_premium < self._peak_premium:
+            # Premium is decaying (good for us) — track the low
+            self._peak_premium = min(self._peak_premium, current_premium)
+        elif self.params.trail_stop_pct > 0 and current_premium > self._peak_premium:
+            # Premium bouncing back — check if we should trail-exit
+            bounce_pct = float(
+                (current_premium - self._peak_premium) / self._entry_premium * 100
+            )
+            if bounce_pct > self.params.trail_stop_pct:
+                profit_locked = float(
+                    (self._entry_premium - self._peak_premium) / self._entry_premium * 100
+                )
+                logger.info(
+                    f"[{self.strategy_id}] TRAIL STOP: premium bounced {bounce_pct:.1f}% "
+                    f"from low, locking {profit_locked:.1f}% profit"
+                )
+                signal = self._create_exit_signal(
+                    f"Trailing stop: bounced {bounce_pct:.1f}% from {self._peak_premium}"
+                )
+                self._entered = False
+                self._stopped_for_day = True
+                return signal
+
+        # Adjustment: shift the losing leg to the new ATM strike
+        if premium_change_pct > self.params.adjustment_threshold_pct:
+            return self._adjust_losing_leg(ce_ltp, pe_ltp)
+
+        return None
+
+    def _adjust_losing_leg(self, ce_ltp: Decimal, pe_ltp: Decimal) -> Signal | None:
+        """Close the losing leg and re-enter at the new ATM strike."""
+        spot = self.ctx.get_spot_price(self.params.underlying)
+        if spot <= 0:
+            return None
+
+        strike_interval = 50 if self.params.underlying in ("NIFTY", "FINNIFTY") else 100
+        new_atm = round(float(spot) / strike_interval) * strike_interval
+
+        if new_atm == self._atm_strike:
+            return None  # No shift needed, spot hasn't moved enough
+
+        chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+        if not chain:
+            return None
+
+        # Determine which leg is losing (further ITM = higher premium)
+        is_ce_losing = ce_ltp > pe_ltp
+        legs: list[SignalLeg] = []
+
+        if is_ce_losing:
+            # Close existing CE, open new CE at new ATM
+            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity))
+            for entry in chain.strikes:
+                if float(entry.strike) == new_atm and entry.ce:
+                    self._ce_token = entry.ce.instrument_token
+                    self._ce_symbol = entry.ce.tradingsymbol
+                    legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity))
+                    break
+        else:
+            # Close existing PE, open new PE at new ATM
+            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity))
+            for entry in chain.strikes:
+                if float(entry.strike) == new_atm and entry.pe:
+                    self._pe_token = entry.pe.instrument_token
+                    self._pe_symbol = entry.pe.tradingsymbol
+                    legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity))
+                    break
+
+        if len(legs) != 2:
+            logger.warning(f"[{self.strategy_id}] Could not find new ATM option at {new_atm}")
+            return None
+
+        old_atm = self._atm_strike
+        self._atm_strike = new_atm
+        # Re-record entry premium after adjustment
+        self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
+
+        side = "CE" if is_ce_losing else "PE"
+        logger.info(
+            f"[{self.strategy_id}] ADJUST: Shifted {side} from {old_atm} to {new_atm}"
+        )
+
+        return adjust_signal(
+            self.strategy_id, legs,
+            f"Shifted {side} from {old_atm} to {new_atm}"
+        )
+
+    def _create_exit_signal(self, reason: str) -> Signal:
+        """Create signal to close all positions."""
+        legs = [
+            make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
+            make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
+        ]
+        return exit_signal(self.strategy_id, legs, reason)
+
+    def _create_hedge_legs(self, chain) -> list[SignalLeg]:
+        """Create far OTM hedge legs for margin benefit and tail risk."""
+        legs = []
+        offset = self.params.hedge_offset_strikes
+        strike_interval = 50 if self.params.underlying in ("NIFTY", "FINNIFTY") else 100
+
+        hedge_ce_strike = self._atm_strike + (offset * strike_interval)
+        hedge_pe_strike = self._atm_strike - (offset * strike_interval)
+
+        for entry in chain.strikes:
+            strike = float(entry.strike)
+            if strike == hedge_ce_strike and entry.ce:
+                legs.append(make_leg(
+                    entry.ce.tradingsymbol, entry.ce.instrument_token,
+                    OrderSide.BUY, self._quantity
+                ))
+            elif strike == hedge_pe_strike and entry.pe:
+                legs.append(make_leg(
+                    entry.pe.tradingsymbol, entry.pe.instrument_token,
+                    OrderSide.BUY, self._quantity
+                ))
+
+        return legs
+
+    async def on_stop(self) -> None:
+        if self._entered:
+            logger.info(f"[{self.strategy_id}] Stopping with open position")
+
+    def get_state_data(self) -> dict:
+        return {
+            "entered": self._entered,
+            "stopped_for_day": self._stopped_for_day,
+            "ce_token": self._ce_token,
+            "pe_token": self._pe_token,
+            "ce_symbol": self._ce_symbol,
+            "pe_symbol": self._pe_symbol,
+            "entry_premium": str(self._entry_premium),
+            "peak_premium": str(self._peak_premium),
+            "atm_strike": self._atm_strike,
+        }
+
+    def load_state_data(self, data: dict) -> None:
+        self._entered = data.get("entered", False)
+        self._stopped_for_day = data.get("stopped_for_day", False)
+        self._ce_token = data.get("ce_token", 0)
+        self._pe_token = data.get("pe_token", 0)
+        self._ce_symbol = data.get("ce_symbol", "")
+        self._pe_symbol = data.get("pe_symbol", "")
+        self._entry_premium = Decimal(data.get("entry_premium", "0"))
+        self._peak_premium = Decimal(data.get("peak_premium", "0"))
+        self._atm_strike = data.get("atm_strike", 0)
