@@ -881,9 +881,14 @@ function renderPositions() {
 
   let totalD = 0, totalG = 0, totalT = 0, totalV = 0;
   tbody.innerHTML = positions.map(p => {
-    const pnl = parseFloat(p.pnl) || 0;
+    const qty = p.quantity || 0;
+    const avgPrice = parseFloat(p.average_price || 0);
+    const ltpVal = parseFloat(p.ltp || 0);
+    const pnl = qty > 0 ? (ltpVal - avgPrice) * qty
+              : qty < 0 ? (avgPrice - ltpVal) * Math.abs(qty)
+              : parseFloat(p.pnl) || 0;
     const greeks = p.greeks || {};
-    totalD += (greeks.delta || 0) * (p.quantity || 0);
+    totalD += (greeks.delta || 0) * qty;
     totalG += (greeks.gamma || 0) * Math.abs(p.quantity || 0);
     totalT += (greeks.theta || 0) * Math.abs(p.quantity || 0);
     totalV += (greeks.vega || 0) * Math.abs(p.quantity || 0);

@@ -22,10 +22,33 @@ async def list_strategies(
             "strategy_id": sid,
             "state": strategy.state.value,
             "params": strategy.params.model_dump(mode="json"),
+            "state_data": strategy.get_state_data(),
         })
     return {
         "strategies": items,
         "registered_types": list_registered(),
+    }
+
+
+@router.get("/{strategy_id}", dependencies=[Depends(verify_api_key)])
+async def get_strategy_detail(
+    strategy_id: str,
+    runner: StrategyRunner = Depends(get_strategy_runner),
+) -> dict:
+    """Get detailed state of a specific strategy."""
+    strategy = runner.get_strategy(strategy_id)
+    if not strategy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Strategy '{strategy_id}' not found.",
+        )
+    tokens = runner._strategy_tokens.get(strategy_id, set())
+    return {
+        "strategy_id": strategy_id,
+        "state": strategy.state.value,
+        "params": strategy.params.model_dump(mode="json"),
+        "state_data": strategy.get_state_data(),
+        "subscribed_tokens": sorted(tokens),
     }
 
 
