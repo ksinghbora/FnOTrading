@@ -17,7 +17,7 @@ class BaseStrategyParams(BaseModel):
     product: str = "NRML"
     use_weekly_expiry: bool = True
     # VIX filter — skip entry when VIX exceeds threshold
-    vix_entry_max: float = 22.0       # Don't enter if VIX > this
+    vix_entry_max: float = 25.0       # Don't enter if VIX > this
     vix_reduce_above: float = 18.0    # Halve position size if VIX > this
 
 

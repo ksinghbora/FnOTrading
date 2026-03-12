@@ -25,9 +25,14 @@ class TickFeedManager:
         self._subscriptions: dict[int, set[str]] = {}  # token -> set of strategy_ids
         self._latest_ticks: dict[int, Tick] = {}
         self._running = False
+        self._ticker = None  # Optional: Kite ticker for live subscriptions
 
         # Subscribe to TICK events to cache and forward
         self._event_bus.subscribe(EventType.TICK, self._on_tick)
+
+    def set_ticker(self, ticker) -> None:
+        """Set the Kite ticker so new subscriptions are forwarded to it."""
+        self._ticker = ticker
 
     @property
     def latest_ticks(self) -> dict[int, Tick]:
@@ -59,6 +64,9 @@ class TickFeedManager:
                 f"Strategy {strategy_id} subscribed to {len(new_tokens)} new tokens "
                 f"(total active: {len(self._subscriptions)})"
             )
+            # Forward to Kite ticker if available
+            if self._ticker:
+                self._ticker.subscribe(new_tokens)
         return new_tokens
 
     def unsubscribe(self, strategy_id: str) -> list[int]:

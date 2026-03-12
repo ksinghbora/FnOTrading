@@ -434,6 +434,109 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
 .pnl-bar.win { background: var(--green); }
 .pnl-bar.loss { background: var(--red); }
 
+/* Backtest Controls */
+.bt-controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.bt-controls .field { display: flex; flex-direction: column; gap: 4px; }
+.bt-controls label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.bt-controls select, .bt-controls input {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  min-width: 100px;
+}
+.bt-controls select { min-width: 160px; }
+.bt-mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+}
+.bt-mode-tab {
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+}
+.bt-mode-tab:first-child { border-radius: 6px 0 0 6px; }
+.bt-mode-tab:last-child { border-radius: 0 6px 6px 0; }
+.bt-mode-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.bt-progress {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 12px;
+  display: none;
+}
+.bt-progress .bar {
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.bt-progress .fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+/* Comparison Table */
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.compare-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-table tr:hover { background: var(--bg3); }
+.compare-table .positive { color: var(--green); font-weight: 600; }
+.compare-table .negative { color: var(--red); font-weight: 600; }
+.seed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.seed-chip {
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.seed-chip.win { background: rgba(0,196,140,0.15); color: var(--green); }
+.seed-chip.loss { background: rgba(255,71,87,0.15); color: var(--red); }
+
 /* Responsive */
 @media (max-width: 1024px) {
   .main-grid { grid-template-columns: 1fr; }
@@ -685,68 +788,143 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
 <div class="page" id="page-backtest">
 <div class="container">
   <div class="bt-header">
-    <div>
-      <h2>Backtest Results</h2>
-      <div class="bt-info" id="btInfo">
-        <span id="btStrategy">--</span>
-        <span id="btPeriod">--</span>
-        <span id="btLots">--</span>
+    <h2>Backtest Lab</h2>
+  </div>
+
+  <!-- Mode Tabs -->
+  <div class="bt-mode-tabs">
+    <div class="bt-mode-tab active" onclick="switchBtMode('single')">Single Run</div>
+    <div class="bt-mode-tab" onclick="switchBtMode('multi')">Multi-Seed Validation</div>
+  </div>
+
+  <!-- Controls -->
+  <div class="bt-controls">
+    <div class="field">
+      <label>Strategy</label>
+      <select id="btStrategySelect">
+        <option value="short_straddle">Short Straddle</option>
+        <option value="short_strangle">Short Strangle</option>
+        <option value="iron_condor" selected>Iron Condor</option>
+        <option value="delta_neutral">Delta Neutral</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Underlying</label>
+      <select id="btUnderlying">
+        <option value="NIFTY">NIFTY</option>
+        <option value="BANKNIFTY">BANKNIFTY</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Days</label>
+      <input type="number" id="btDays" value="30" min="5" max="90" style="width:70px">
+    </div>
+    <div class="field">
+      <label>Lots</label>
+      <input type="number" id="btLots" value="1" min="1" max="10" style="width:60px">
+    </div>
+    <div class="field" id="seedField">
+      <label>Seed</label>
+      <input type="number" id="btSeed" value="42" min="1" max="999" style="width:70px">
+    </div>
+    <div class="field" id="numSeedsField" style="display:none">
+      <label>Seeds</label>
+      <input type="number" id="btNumSeeds" value="10" min="3" max="20" style="width:70px">
+    </div>
+    <div class="field" id="multiStratField" style="display:none">
+      <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="btAllStrategies" checked> All Strategies</label>
+    </div>
+    <button class="run-btn" id="runBtBtn" onclick="runCurrentBacktest()">Run Backtest</button>
+  </div>
+
+  <!-- Progress -->
+  <div class="bt-progress" id="btProgress">
+    <span id="btProgressText">Running...</span>
+    <div class="bar"><div class="fill" id="btProgressFill" style="width:0%"></div></div>
+  </div>
+
+  <!-- ===== SINGLE RUN VIEW ===== -->
+  <div id="btSingleView">
+    <div class="bt-info" id="btInfo" style="margin-bottom:16px">
+      <span id="btStrategyLabel">--</span>
+      <span id="btPeriod">--</span>
+      <span id="btLotsLabel">--</span>
+    </div>
+
+    <div class="metrics-grid" id="btMetrics">
+      <div class="metric-card"><div class="label">Total P&L</div><div class="value" id="btTotalPnl">--</div></div>
+      <div class="metric-card"><div class="label">Return %</div><div class="value" id="btReturn">--</div></div>
+      <div class="metric-card"><div class="label">Max Drawdown</div><div class="value" id="btDrawdown">--</div></div>
+      <div class="metric-card"><div class="label">Sharpe Ratio</div><div class="value" id="btSharpe">--</div></div>
+      <div class="metric-card"><div class="label">Sortino Ratio</div><div class="value" id="btSortino">--</div></div>
+      <div class="metric-card"><div class="label">Win Rate</div><div class="value" id="btWinRate">--</div></div>
+      <div class="metric-card"><div class="label">Profit Factor</div><div class="value" id="btProfitFactor">--</div></div>
+      <div class="metric-card"><div class="label">Avg Daily P&L</div><div class="value" id="btAvgPnl">--</div></div>
+    </div>
+
+    <div class="equity-chart">
+      <h3>Equity Curve</h3>
+      <canvas id="equityCanvas" height="250"></canvas>
+    </div>
+
+    <div class="equity-chart">
+      <h3>Daily P&L</h3>
+      <canvas id="dailyPnlCanvas" height="200"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Daily Breakdown</h2>
+        <span class="count" id="btDayCount">0</span>
+      </div>
+      <div class="panel-body">
+        <table class="daily-table">
+          <thead>
+            <tr><th>Date</th><th>Day</th><th>Open</th><th>Close</th><th>P&L</th><th>Charges</th><th>Trades</th><th>Visual</th></tr>
+          </thead>
+          <tbody id="btDailyTable">
+            <tr><td colspan="8" class="empty">Run a backtest to see results</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-    <button class="run-btn" id="runBtBtn" onclick="runBacktest()">Run Backtest</button>
   </div>
 
-  <!-- Metrics Cards -->
-  <div class="metrics-grid" id="btMetrics">
-    <div class="metric-card"><div class="label">Total P&L</div><div class="value" id="btTotalPnl">--</div></div>
-    <div class="metric-card"><div class="label">Return %</div><div class="value" id="btReturn">--</div></div>
-    <div class="metric-card"><div class="label">Max Drawdown</div><div class="value" id="btDrawdown">--</div></div>
-    <div class="metric-card"><div class="label">Sharpe Ratio</div><div class="value" id="btSharpe">--</div></div>
-    <div class="metric-card"><div class="label">Sortino Ratio</div><div class="value" id="btSortino">--</div></div>
-    <div class="metric-card"><div class="label">Win Rate</div><div class="value" id="btWinRate">--</div></div>
-    <div class="metric-card"><div class="label">Profit Factor</div><div class="value" id="btProfitFactor">--</div></div>
-    <div class="metric-card"><div class="label">Avg Daily P&L</div><div class="value" id="btAvgPnl">--</div></div>
-  </div>
-
-  <!-- Equity Curve -->
-  <div class="equity-chart">
-    <h3>Equity Curve</h3>
-    <canvas id="equityCanvas" height="250"></canvas>
-  </div>
-
-  <!-- Daily PnL Bar Chart -->
-  <div class="equity-chart">
-    <h3>Daily P&L</h3>
-    <canvas id="dailyPnlCanvas" height="200"></canvas>
-  </div>
-
-  <!-- Daily Results Table -->
-  <div class="panel">
-    <div class="panel-header">
-      <h2>Daily Breakdown</h2>
-      <span class="count" id="btDayCount">0</span>
+  <!-- ===== MULTI-SEED VIEW ===== -->
+  <div id="btMultiView" style="display:none">
+    <!-- Strategy Comparison Table -->
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-header"><h2>Strategy Comparison</h2></div>
+      <div class="panel-body">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Mean P&L</th>
+              <th>Win Rate</th>
+              <th>Best</th>
+              <th>Worst</th>
+              <th>Std Dev</th>
+              <th>Sharpe</th>
+            </tr>
+          </thead>
+          <tbody id="msCompareTable">
+            <tr><td colspan="7" class="empty">Run multi-seed validation to see results</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <div class="panel-body">
-      <table class="daily-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Day</th>
-            <th>Strike</th>
-            <th>Entry</th>
-            <th>Exit</th>
-            <th>P&L</th>
-            <th>Charges</th>
-            <th>Reason</th>
-            <th>Visual</th>
-          </tr>
-        </thead>
-        <tbody id="btDailyTable">
-          <tr><td colspan="9" class="empty">Run a backtest to see results</td></tr>
-        </tbody>
-      </table>
+
+    <!-- Per-Strategy Seed Breakdown -->
+    <div id="msSeedBreakdown"></div>
+
+    <!-- Overlaid Equity Curves -->
+    <div class="equity-chart">
+      <h3>Equity Curves (All Seeds)</h3>
+      <canvas id="msEquityCanvas" height="300"></canvas>
     </div>
   </div>
+
 </div>
 </div><!-- /page-backtest -->
 
@@ -1189,66 +1367,148 @@ function switchPage(page) {
 
 // ── Backtest ────────────────────────────────────────────────────
 let btResults = null;
+let msResults = null;
+let btMode = 'single';
+
+function switchBtMode(mode) {
+  btMode = mode;
+  document.querySelectorAll('.bt-mode-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && mode === 'single') || (i === 1 && mode === 'multi'));
+  });
+  document.getElementById('btSingleView').style.display = mode === 'single' ? '' : 'none';
+  document.getElementById('btMultiView').style.display = mode === 'multi' ? '' : 'none';
+  document.getElementById('seedField').style.display = mode === 'single' ? '' : 'none';
+  document.getElementById('numSeedsField').style.display = mode === 'multi' ? '' : 'none';
+  document.getElementById('multiStratField').style.display = mode === 'multi' ? '' : 'none';
+}
 
 async function fetchBacktestResults() {
   const data = await api('/api/backtest/results');
   if (!data || data.status !== 'ok') return;
   btResults = data.results;
-  renderBacktest();
+  renderSingleBacktest();
 }
 
-async function runBacktest() {
-  const btn = document.getElementById('runBtBtn');
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  addLog('info', 'Backtest started...');
+function runCurrentBacktest() {
+  if (btMode === 'single') runSingleBacktest();
+  else runMultiSeed();
+}
 
-  const data = await api('/api/backtest/run', { method: 'POST' });
-  btn.disabled = false;
-  btn.textContent = 'Run Backtest';
+async function runSingleBacktest() {
+  const btn = document.getElementById('runBtBtn');
+  btn.disabled = true; btn.textContent = 'Running...';
+  showProgress('Running backtest...');
+
+  const body = {
+    strategy: document.getElementById('btStrategySelect').value,
+    underlying: document.getElementById('btUnderlying').value,
+    num_days: parseInt(document.getElementById('btDays').value),
+    quantity_lots: parseInt(document.getElementById('btLots').value),
+    seed: parseInt(document.getElementById('btSeed').value),
+  };
+
+  const data = await api('/api/backtest/run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  btn.disabled = false; btn.textContent = 'Run Backtest';
+  hideProgress();
 
   if (data && data.status === 'ok') {
-    addLog('fill', 'Backtest completed!');
-    await fetchBacktestResults();
+    btResults = data.results;
+    switchBtMode('single');
+    renderSingleBacktest();
+    addLog('fill', `Backtest complete: ${body.strategy} P&L=${formatCurrency(btResults.final_pnl)}`);
   } else {
-    addLog('warn', `Backtest failed: ${data?.message || 'unknown error'}`);
+    addLog('warn', `Backtest failed: ${data?.message || 'unknown'}`);
   }
 }
 
-function renderBacktest() {
+async function runMultiSeed() {
+  const btn = document.getElementById('runBtBtn');
+  btn.disabled = true; btn.textContent = 'Running...';
+
+  const allStrats = document.getElementById('btAllStrategies').checked;
+  const strat = document.getElementById('btStrategySelect').value;
+  const numSeeds = parseInt(document.getElementById('btNumSeeds').value);
+  const strategies = allStrats
+    ? ['short_straddle', 'short_strangle', 'iron_condor', 'delta_neutral']
+    : [strat];
+
+  const totalRuns = strategies.length * numSeeds;
+  showProgress(`Running ${totalRuns} backtests (${strategies.length} strategies x ${numSeeds} seeds)...`);
+
+  const body = {
+    strategies,
+    underlying: document.getElementById('btUnderlying').value,
+    num_days: parseInt(document.getElementById('btDays').value),
+    quantity_lots: parseInt(document.getElementById('btLots').value),
+    num_seeds: numSeeds,
+  };
+
+  const data = await api('/api/backtest/multi-seed', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  btn.disabled = false; btn.textContent = 'Run Backtest';
+  hideProgress();
+
+  if (data && data.status === 'ok') {
+    msResults = data.results;
+    switchBtMode('multi');
+    renderMultiSeed();
+    addLog('fill', 'Multi-seed validation complete!');
+  } else {
+    addLog('warn', `Multi-seed failed: ${data?.message || 'unknown'}`);
+  }
+}
+
+function showProgress(text) {
+  const el = document.getElementById('btProgress');
+  el.style.display = '';
+  document.getElementById('btProgressText').textContent = text;
+  document.getElementById('btProgressFill').style.width = '100%';
+  document.getElementById('btProgressFill').style.animation = 'none';
+  document.getElementById('btProgressFill').style.background = 'linear-gradient(90deg, var(--blue), var(--purple), var(--blue))';
+  document.getElementById('btProgressFill').style.backgroundSize = '200% 100%';
+  document.getElementById('btProgressFill').style.animation = 'shimmer 1.5s infinite';
+}
+function hideProgress() {
+  document.getElementById('btProgress').style.display = 'none';
+}
+
+// ── Single Run Rendering ──────────────────────────────────────
+
+function renderSingleBacktest() {
   if (!btResults) return;
   const m = btResults.metrics;
 
-  // Header info
-  document.getElementById('btStrategy').textContent = btResults.strategy;
+  document.getElementById('btStrategyLabel').textContent = btResults.strategy;
   document.getElementById('btPeriod').textContent = btResults.period;
-  document.getElementById('btLots').textContent = `${btResults.lots} lot (${btResults.lot_size} qty)`;
+  document.getElementById('btLotsLabel').textContent = `${btResults.lots} lot (${btResults.lot_size} qty)`;
 
-  // Metrics
   setMetricValue('btTotalPnl', m.total_pnl, true);
   setMetricValue('btReturn', m.total_return_pct, true, '%');
   setMetricValue('btDrawdown', m.max_drawdown, true);
-  document.getElementById('btSharpe').textContent = m.sharpe_ratio.toFixed(2);
-  document.getElementById('btSortino').textContent = m.sortino_ratio.toFixed(2);
-  document.getElementById('btWinRate').textContent = m.win_rate + '%';
-  document.getElementById('btWinRate').className = 'value ' + (m.win_rate >= 50 ? 'positive' : 'negative');
-  document.getElementById('btProfitFactor').textContent = m.profit_factor.toFixed(2);
+  document.getElementById('btSharpe').textContent = (m.sharpe_ratio || 0).toFixed(2);
+  document.getElementById('btSortino').textContent = (m.sortino_ratio || 0).toFixed(2);
+  document.getElementById('btWinRate').textContent = (m.win_rate || 0) + '%';
+  document.getElementById('btWinRate').className = 'value ' + ((m.win_rate || 0) >= 50 ? 'positive' : 'negative');
+  document.getElementById('btProfitFactor').textContent = typeof m.profit_factor === 'number' ? m.profit_factor.toFixed(2) : m.profit_factor;
   setMetricValue('btAvgPnl', m.avg_daily_pnl, true);
-
-  // Day count
   document.getElementById('btDayCount').textContent = btResults.num_days;
 
-  // Render charts
   drawEquityCurve(btResults.equity_curve);
   drawDailyPnl(btResults.daily_results);
-
-  // Render daily table
   renderDailyTable(btResults.daily_results);
 }
 
 function setMetricValue(id, val, isCurrency, suffix) {
   const el = document.getElementById(id);
-  const num = parseFloat(val);
+  if (!el) return;
+  const num = parseFloat(val) || 0;
   if (isCurrency && !suffix) {
     el.textContent = formatCurrency(val);
   } else if (suffix) {
@@ -1257,8 +1517,169 @@ function setMetricValue(id, val, isCurrency, suffix) {
   el.className = 'value ' + (num > 0 ? 'positive' : num < 0 ? 'negative' : 'neutral');
 }
 
+// ── Multi-Seed Rendering ──────────────────────────────────────
+
+function renderMultiSeed() {
+  if (!msResults) return;
+  renderCompareTable();
+  renderSeedBreakdowns();
+  renderMultiEquity();
+}
+
+function renderCompareTable() {
+  const tbody = document.getElementById('msCompareTable');
+  const strategies = Object.keys(msResults);
+
+  // Sort by mean P&L descending
+  strategies.sort((a, b) => msResults[b].summary.mean_pnl - msResults[a].summary.mean_pnl);
+
+  tbody.innerHTML = strategies.map(s => {
+    const sm = msResults[s].summary;
+    const meanClass = sm.mean_pnl >= 0 ? 'positive' : 'negative';
+    const wrClass = sm.win_rate_pct >= 50 ? 'positive' : 'negative';
+    // Compute average sharpe across seeds
+    const sharpes = msResults[s].seeds.map(sd => sd.metrics?.sharpe_ratio || 0);
+    const avgSharpe = sharpes.reduce((a,b)=>a+b,0) / sharpes.length;
+    return `<tr>
+      <td><strong>${formatStrategyName(s)}</strong></td>
+      <td class="${meanClass}">${formatCurrency(sm.mean_pnl)}</td>
+      <td class="${wrClass}">${sm.win_count}/${sm.total_seeds} (${sm.win_rate_pct}%)</td>
+      <td class="positive">${formatCurrency(sm.best_pnl)}</td>
+      <td class="negative">${formatCurrency(sm.worst_pnl)}</td>
+      <td>${formatCurrency(sm.std_dev)}</td>
+      <td>${avgSharpe.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSeedBreakdowns() {
+  const container = document.getElementById('msSeedBreakdown');
+  const strategies = Object.keys(msResults);
+
+  container.innerHTML = strategies.map(s => {
+    const seeds = msResults[s].seeds;
+    const sm = msResults[s].summary;
+    const meanClass = sm.mean_pnl >= 0 ? 'positive' : 'negative';
+
+    const seedChips = seeds.map(sd => {
+      const cls = sd.pnl >= 0 ? 'win' : 'loss';
+      return `<div class="seed-chip ${cls}" title="Seed ${sd.seed}">
+        S${sd.seed}<br>${sd.pnl >= 0 ? '+' : ''}${Math.round(sd.pnl).toLocaleString('en-IN')}
+      </div>`;
+    }).join('');
+
+    return `<div class="panel" style="margin-bottom:16px">
+      <div class="panel-header">
+        <h2>${formatStrategyName(s)}</h2>
+        <span class="${meanClass}" style="font-weight:700;font-size:16px">Mean: ${formatCurrency(sm.mean_pnl)}</span>
+      </div>
+      <div class="panel-body">
+        <div class="seed-grid">${seedChips}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMultiEquity() {
+  const canvas = document.getElementById('msEquityCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width - 40;
+  const h = 300;
+
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = '#1a1d27';
+  ctx.fillRect(0, 0, w, h);
+
+  const padding = { top: 20, bottom: 40, left: 70, right: 20 };
+  const plotW = w - padding.left - padding.right;
+  const plotH = h - padding.top - padding.bottom;
+
+  // Collect all equity values to find range
+  let allEquities = [];
+  const colors = { short_straddle: '#4a9eff', short_strangle: '#a855f7', iron_condor: '#00c48c', delta_neutral: '#ff8c00' };
+  const strategies = Object.keys(msResults);
+
+  strategies.forEach(s => {
+    msResults[s].seeds.forEach(sd => {
+      if (sd.equity_curve) sd.equity_curve.forEach(p => allEquities.push(p.equity));
+    });
+  });
+
+  if (allEquities.length === 0) return;
+  const minE = Math.min(...allEquities) - 2000;
+  const maxE = Math.max(...allEquities) + 2000;
+  const range = maxE - minE || 1;
+
+  // Grid
+  ctx.strokeStyle = '#2e3347';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const y = padding.top + (plotH / 5) * i;
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(w - padding.right, y); ctx.stroke();
+    const val = maxE - (range / 5) * i;
+    ctx.fillStyle = '#8b90a0';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(val).toLocaleString('en-IN'), padding.left - 8, y + 4);
+  }
+
+  // Starting capital line
+  const startY = padding.top + plotH - ((1000000 - minE) / range) * plotH;
+  ctx.strokeStyle = '#ffffff22';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(padding.left, startY); ctx.lineTo(w - padding.right, startY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw curves
+  strategies.forEach(s => {
+    const color = colors[s] || '#888';
+    msResults[s].seeds.forEach(sd => {
+      if (!sd.equity_curve || sd.equity_curve.length === 0) return;
+      const equities = sd.equity_curve.map(p => p.equity);
+      ctx.strokeStyle = color + '55';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < equities.length; i++) {
+        const x = padding.left + (plotW / (equities.length - 1)) * i;
+        const y = padding.top + plotH - ((equities[i] - minE) / range) * plotH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    });
+  });
+
+  // Legend
+  let lx = padding.left;
+  strategies.forEach(s => {
+    const color = colors[s] || '#888';
+    ctx.fillStyle = color;
+    ctx.fillRect(lx, h - 15, 12, 3);
+    ctx.fillStyle = '#8b90a0';
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(formatStrategyName(s), lx + 16, h - 10);
+    lx += ctx.measureText(formatStrategyName(s)).width + 30;
+  });
+}
+
+function formatStrategyName(s) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// ── Charts ────────────────────────────────────────────────────
+
 function drawEquityCurve(curve) {
   const canvas = document.getElementById('equityCanvas');
+  if (!canvas || !curve || curve.length === 0) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
@@ -1279,63 +1700,39 @@ function drawEquityCurve(curve) {
   const plotW = w - padding.left - padding.right;
   const plotH = h - padding.top - padding.bottom;
 
-  // Background
   ctx.fillStyle = '#1a1d27';
   ctx.fillRect(0, 0, w, h);
 
-  // Grid lines
-  ctx.strokeStyle = '#2e3347';
-  ctx.lineWidth = 0.5;
-  const gridSteps = 5;
-  for (let i = 0; i <= gridSteps; i++) {
-    const y = padding.top + (plotH / gridSteps) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(w - padding.right, y);
-    ctx.stroke();
-
-    // Y-axis labels
-    const val = maxE - (range / gridSteps) * i;
-    ctx.fillStyle = '#8b90a0';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.textAlign = 'right';
+  ctx.strokeStyle = '#2e3347'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const y = padding.top + (plotH / 5) * i;
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(w - padding.right, y); ctx.stroke();
+    const val = maxE - (range / 5) * i;
+    ctx.fillStyle = '#8b90a0'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(Math.round(val).toLocaleString('en-IN'), padding.left - 8, y + 4);
   }
 
-  // X-axis labels
-  ctx.fillStyle = '#8b90a0';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = '#8b90a0'; ctx.textAlign = 'center';
   const labelStep = Math.max(1, Math.floor(curve.length / 6));
   for (let i = 0; i < curve.length; i += labelStep) {
     const x = padding.left + (plotW / (curve.length - 1)) * i;
-    const d = curve[i].date.slice(5); // MM-DD
-    ctx.fillText(d, x, h - 8);
+    ctx.fillText(curve[i].date.slice(5), x, h - 8);
   }
 
-  // Starting capital line
-  const startY = padding.top + plotH - ((btResults.initial_capital - minE) / range) * plotH;
-  ctx.strokeStyle = '#4a9eff33';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([5, 5]);
-  ctx.beginPath();
-  ctx.moveTo(padding.left, startY);
-  ctx.lineTo(w - padding.right, startY);
-  ctx.stroke();
+  const startY = padding.top + plotH - (((btResults?.initial_capital || 1000000) - minE) / range) * plotH;
+  ctx.strokeStyle = '#4a9eff33'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(padding.left, startY); ctx.lineTo(w - padding.right, startY); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Equity line
-  ctx.strokeStyle = '#4a9eff';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#4a9eff'; ctx.lineWidth = 2;
   ctx.beginPath();
   for (let i = 0; i < equities.length; i++) {
     const x = padding.left + (plotW / (equities.length - 1)) * i;
     const y = padding.top + plotH - ((equities[i] - minE) / range) * plotH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   }
   ctx.stroke();
 
-  // Gradient fill under curve
   const gradient = ctx.createLinearGradient(0, padding.top, 0, h - padding.bottom);
   gradient.addColorStop(0, 'rgba(74, 158, 255, 0.15)');
   gradient.addColorStop(1, 'rgba(74, 158, 255, 0)');
@@ -1348,16 +1745,15 @@ function drawEquityCurve(curve) {
 
 function drawDailyPnl(daily) {
   const canvas = document.getElementById('dailyPnlCanvas');
+  if (!canvas || !daily || daily.length === 0) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.parentElement.getBoundingClientRect();
   const w = rect.width - 40;
   const h = 200;
 
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   ctx.scale(dpr, dpr);
 
   const pnls = daily.map(d => d.pnl);
@@ -1368,38 +1764,23 @@ function drawDailyPnl(daily) {
   const midY = padding.top + plotH / 2;
   const barW = Math.max(4, (plotW / daily.length) - 3);
 
-  // Background
-  ctx.fillStyle = '#1a1d27';
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#1a1d27'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = '#4a4a5a'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padding.left, midY); ctx.lineTo(w - padding.right, midY); ctx.stroke();
 
-  // Zero line
-  ctx.strokeStyle = '#4a4a5a';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, midY);
-  ctx.lineTo(w - padding.right, midY);
-  ctx.stroke();
-
-  // Y-axis labels
-  ctx.fillStyle = '#8b90a0';
-  ctx.font = '10px -apple-system, sans-serif';
-  ctx.textAlign = 'right';
+  ctx.fillStyle = '#8b90a0'; ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'right';
   ctx.fillText('+' + Math.round(maxPnl).toLocaleString('en-IN'), padding.left - 8, padding.top + 10);
   ctx.fillText('0', padding.left - 8, midY + 4);
   ctx.fillText('-' + Math.round(maxPnl).toLocaleString('en-IN'), padding.left - 8, h - padding.bottom - 2);
 
-  // Bars
   for (let i = 0; i < pnls.length; i++) {
     const x = padding.left + (plotW / daily.length) * i + (plotW / daily.length - barW) / 2;
     const barH = (Math.abs(pnls[i]) / maxPnl) * (plotH / 2);
     const y = pnls[i] >= 0 ? midY - barH : midY;
     ctx.fillStyle = pnls[i] >= 0 ? '#00c48c' : '#ff4757';
     ctx.fillRect(x, y, barW, barH);
-
-    // X-axis date label (every few bars)
     if (i % Math.max(1, Math.floor(daily.length / 8)) === 0) {
-      ctx.fillStyle = '#8b90a0';
-      ctx.textAlign = 'center';
+      ctx.fillStyle = '#8b90a0'; ctx.textAlign = 'center';
       ctx.fillText(daily[i].date.slice(5), x + barW / 2, h - 8);
     }
   }
@@ -1407,6 +1788,7 @@ function drawDailyPnl(daily) {
 
 function renderDailyTable(daily) {
   const tbody = document.getElementById('btDailyTable');
+  if (!tbody || !daily) return;
   const maxPnl = Math.max(...daily.map(d => Math.abs(d.pnl))) || 1;
 
   tbody.innerHTML = daily.map(d => {
@@ -1414,19 +1796,18 @@ function renderDailyTable(daily) {
     const barWidth = Math.round((Math.abs(d.pnl) / maxPnl) * 80);
     return `<tr>
       <td>${d.date}</td>
-      <td>${d.day_of_week.slice(0, 3)}</td>
-      <td>${d.atm_strike}</td>
-      <td>${d.entry_premium ? d.entry_premium.toFixed(2) : '--'}</td>
-      <td>${d.exit_premium ? d.exit_premium.toFixed(2) : '--'}</td>
+      <td>${(d.day_of_week || '').slice(0, 3)}</td>
+      <td>${d.spot_open ? Math.round(d.spot_open).toLocaleString('en-IN') : '--'}</td>
+      <td>${d.spot_close ? Math.round(d.spot_close).toLocaleString('en-IN') : '--'}</td>
       <td class="${pnlClass}"><strong>${formatCurrency(d.pnl)}</strong></td>
-      <td class="neutral">${d.charges ? d.charges.toFixed(2) : '0'}</td>
-      <td>${d.exit_reason}</td>
+      <td class="neutral">${d.charges ? d.charges.toFixed(0) : '0'}</td>
+      <td>${d.trades || '--'}</td>
       <td><div class="pnl-bar ${pnlClass}" style="width:${barWidth}px"></div></td>
     </tr>`;
   }).join('');
 }
 
-// Auto-load backtest results on page load
+// Auto-load last backtest results
 fetchBacktestResults();
 </script>
 </body>

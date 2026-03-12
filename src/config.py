@@ -43,6 +43,7 @@ class Settings(BaseSettings):
 
     # ─── Paper Trading ───────────────────────────────────────────────
     paper_trading: bool = True  # Default to paper trading for safety
+    use_live_data: bool = True  # Use Kite ticker for real market data even in paper mode
 
     # ─── Strategies ────────────────────────────────────────────────
     # JSON array of strategies to auto-start, e.g.:

@@ -95,9 +95,11 @@ class OptionChainBuilder:
             # Throttled spot logging — log on >0.1% move or first tick
             last_logged = self._last_spot_log.get(underlying, 0)
             if last_logged == 0 or abs(float(tick.ltp) - last_logged) / last_logged > 0.001:
+                chains = list(self._chains.get(underlying, {}).values())
+                atm = chains[-1].atm_strike if chains else "N/A"
                 logger.info(
                     f"[SPOT] underlying={underlying} price={tick.ltp} "
-                    f"atm_strike={chain.atm_strike}"
+                    f"atm_strike={atm}"
                 )
                 self._last_spot_log[underlying] = float(tick.ltp)
             return

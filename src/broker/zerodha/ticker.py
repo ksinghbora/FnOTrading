@@ -34,6 +34,12 @@ class TickerManager:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_tick_time: datetime | None = None
         self._heartbeat_task: asyncio.Task | None = None
+        # Token -> tradingsymbol lookup (Kite ticks don't include tradingsymbol)
+        self._token_symbols: dict[int, str] = {}
+
+    def set_symbol_map(self, token_symbols: dict[int, str]) -> None:
+        """Set token -> tradingsymbol mapping for tick enrichment."""
+        self._token_symbols.update(token_symbols)
 
     async def start(self) -> None:
         """Start the WebSocket ticker in a background thread."""
@@ -74,18 +80,21 @@ class TickerManager:
         """Subscribe to instrument tokens.
 
         Modes: 'full' (all data), 'quote' (no depth), 'ltp' (only LTP)
+
+        Tokens are always stored and (re-)subscribed on WebSocket connect,
+        so it's safe to call this before the connection is established.
         """
+        self._subscribed_tokens.update(tokens)
         if not self._ticker:
-            # Store for subscription on connect
-            self._subscribed_tokens.update(tokens)
             return
 
-        new_tokens = [t for t in tokens if t not in self._subscribed_tokens]
-        if new_tokens:
-            self._ticker.subscribe(new_tokens)
-            self._ticker.set_mode(mode, new_tokens)
-            self._subscribed_tokens.update(new_tokens)
-            logger.info(f"Subscribed to {len(new_tokens)} tokens (total: {len(self._subscribed_tokens)})")
+        try:
+            self._ticker.subscribe(list(tokens))
+            self._ticker.set_mode(mode, list(tokens))
+            logger.info(f"Subscribed to {len(tokens)} tokens (total: {len(self._subscribed_tokens)})")
+        except Exception:
+            # WebSocket not connected yet — tokens stored, will subscribe on connect
+            pass
 
     def unsubscribe(self, tokens: list[int]) -> None:
         """Unsubscribe from instrument tokens."""
@@ -187,9 +196,11 @@ class TickerManager:
         buy_depth = depth.get("buy", [{}])
         sell_depth = depth.get("sell", [{}])
 
+        token = tick_data["instrument_token"]
+        symbol = tick_data.get("tradingsymbol") or self._token_symbols.get(token, "")
         return Tick(
-            instrument_token=tick_data["instrument_token"],
-            tradingsymbol=tick_data.get("tradingsymbol", ""),
+            instrument_token=token,
+            tradingsymbol=symbol,
             timestamp=tick_data.get("exchange_timestamp", datetime.now()),
             ltp=Decimal(str(tick_data.get("last_price", 0))),
             volume=tick_data.get("volume_traded", 0),

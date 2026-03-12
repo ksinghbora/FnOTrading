@@ -35,6 +35,57 @@ from src.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
+# Kite instrument tokens for index spot
+NIFTY_SPOT_TOKEN = 256265
+BANKNIFTY_SPOT_TOKEN = 260105
+
+
+def _register_instruments_from_db(
+    instrument_manager: "InstrumentManager",
+    chain_builder: "OptionChainBuilder",
+    clock: "MarketClock",
+) -> list[int]:
+    """Register spot and option instruments from DB into the chain builder.
+
+    Returns list of all instrument tokens that should be subscribed on the ticker.
+    """
+    from decimal import Decimal
+    from src.core.types import InstrumentType, OptionType
+
+    # Register spot tokens
+    chain_builder.register_spot(NIFTY_SPOT_TOKEN, "NIFTY")
+    chain_builder.register_spot(BANKNIFTY_SPOT_TOKEN, "BANKNIFTY")
+
+    tokens = [NIFTY_SPOT_TOKEN, BANKNIFTY_SPOT_TOKEN]
+
+    # Register F&O instruments for upcoming expiries
+    registered = 0
+    for underlying in ("NIFTY", "BANKNIFTY"):
+        expiry = clock.next_expiry(underlying)
+        instruments = instrument_manager.get_option_chain_instruments(underlying, expiry)
+        if not instruments:
+            # Try monthly expiry
+            expiry = clock.next_monthly_expiry()
+            instruments = instrument_manager.get_option_chain_instruments(underlying, expiry)
+
+        for inst in instruments:
+            opt_type = (
+                OptionType.CE if inst.instrument_type == InstrumentType.CE else OptionType.PE
+            )
+            chain_builder.register_option(
+                instrument_token=inst.instrument_token,
+                underlying=underlying,
+                expiry=inst.expiry,
+                strike=Decimal(str(inst.strike)),
+                option_type=opt_type,
+                tradingsymbol=inst.tradingsymbol,
+            )
+            tokens.append(inst.instrument_token)
+            registered += 1
+
+    logger.info(f"Registered {registered} option instruments from DB into chain builder")
+    return tokens
+
 
 async def create_app(settings: Settings):
     """Create and wire all application components."""
@@ -57,11 +108,27 @@ async def create_app(settings: Settings):
     clock = MarketClock()
 
     # ─── Broker ──────────────────────────────────────────────────
+    # Detect hybrid mode: paper trading + real Kite data
+    has_kite_creds = bool(settings.kite_api_key and settings.kite_access_token)
+    use_hybrid = settings.paper_trading and settings.use_live_data and has_kite_creds
+
+    # Create a Kite client for API access (instruments, LTP) in hybrid/live mode
+    kite_client = None
+    if has_kite_creds:
+        kite_client = ZerodhaClient(settings.kite_api_key, settings.kite_access_token)
+        try:
+            await kite_client.connect()
+            logger.info("Kite API connected")
+        except Exception as e:
+            logger.warning(f"Kite API connection failed: {e}. Falling back to simulator.")
+            kite_client = None
+            use_hybrid = False
+
     if settings.paper_trading:
         broker = PaperBrokerClient(initial_capital=1_000_000)
-        logger.info("Using PAPER TRADING broker")
+        logger.info(f"Using PAPER TRADING broker (data: {'Kite live' if use_hybrid else 'simulator'})")
 
-        # Feed simulated tick LTPs into paper broker for realistic fills
+        # Feed tick LTPs into paper broker for realistic fills
         from src.core.events import Event as _Event
 
         async def _feed_paper_ltp(event: _Event) -> None:
@@ -71,17 +138,31 @@ async def create_app(settings: Settings):
 
         event_bus.subscribe(EventType.TICK, _feed_paper_ltp)
     else:
-        broker = ZerodhaClient(settings.kite_api_key, settings.kite_access_token)
+        broker = kite_client or ZerodhaClient(settings.kite_api_key, settings.kite_access_token)
+        if not kite_client:
+            await broker.connect()
         logger.info("Using LIVE Zerodha broker")
 
     await broker.connect()
 
     # ─── Instruments ─────────────────────────────────────────────
-    instrument_manager = InstrumentManager(broker, session_factory)
+    # Use Kite client for instruments if available, else fall back to broker
+    instrument_broker = kite_client if kite_client else broker
+    instrument_manager = InstrumentManager(instrument_broker, session_factory)
     try:
         await instrument_manager.load_from_db()
+        if not instrument_manager._instruments and kite_client:
+            logger.info("No instruments in DB — downloading from Kite...")
+            await instrument_manager.download_and_store()
     except Exception:
-        logger.warning("Could not load instruments from DB. Run download_instruments.py first.")
+        if kite_client:
+            try:
+                logger.info("Instruments DB not ready — downloading from Kite...")
+                await instrument_manager.download_and_store()
+            except Exception as dl_err:
+                logger.warning(f"Could not download instruments: {dl_err}")
+        else:
+            logger.warning("Could not load instruments from DB. Run download_instruments.py first.")
 
     # ─── Market Data Pipeline ────────────────────────────────────
     feed = TickFeedManager(event_bus, redis_client)
@@ -92,12 +173,26 @@ async def create_app(settings: Settings):
     # ─── Ticker / Simulator ───────────────────────────────────────
     ticker = None
     simulator = None
-    if settings.paper_trading:
+    if use_hybrid or not settings.paper_trading:
+        # Hybrid mode or live mode: use Kite WebSocket for real market data
+        ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
+        feed.set_ticker(ticker)  # Forward subscriptions to Kite WebSocket
+
+        # Build token -> tradingsymbol map for tick enrichment
+        symbol_map = {token: inst.tradingsymbol for token, inst in instrument_manager._instruments.items()}
+        symbol_map[NIFTY_SPOT_TOKEN] = "NIFTY"
+        symbol_map[BANKNIFTY_SPOT_TOKEN] = "BANKNIFTY"
+        ticker.set_symbol_map(symbol_map)
+        logger.info(f"Using Kite ticker for real-time market data ({len(symbol_map)} symbols mapped)")
+
+        # Register real instruments from DB and subscribe on ticker
+        option_tokens = _register_instruments_from_db(instrument_manager, chain_builder, clock)
+        ticker.subscribe(option_tokens)
+    else:
+        # Pure paper mode (no Kite credentials): use simulator
         from src.market_data.simulator import SimulationEngine
         simulator = SimulationEngine(event_bus, chain_builder, tick_interval=1.0)
-        logger.info("Simulation engine created for paper trading mode")
-    else:
-        ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
+        logger.info("Using simulator for synthetic market data")
 
     # ─── Portfolio ───────────────────────────────────────────────
     portfolio = PortfolioManager(event_bus, broker, chain_builder)
@@ -298,7 +393,26 @@ async def run():
     if app["ticker"]:
         await app["ticker"].start()
     elif app["simulator"]:
-        await app["simulator"].start()
+        # Only run simulator during market hours to avoid confusion
+        async def _simulator_market_hours_task():
+            """Start/stop simulator based on market hours."""
+            sim = app["simulator"]
+            _clock = app["chain_builder"]._clock
+            was_running = False
+            while True:
+                if _clock.is_market_open():
+                    if not was_running:
+                        await sim.start()
+                        logger.info("Simulator started (market open)")
+                        was_running = True
+                else:
+                    if was_running:
+                        await sim.stop()
+                        logger.info("Simulator stopped (market closed)")
+                        was_running = False
+                await asyncio.sleep(30)
+
+        asyncio.create_task(_simulator_market_hours_task())
 
     # Import strategy implementations to trigger registration
     import src.strategy.implementations.short_straddle  # noqa: F401
