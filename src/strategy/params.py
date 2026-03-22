@@ -20,6 +20,15 @@ class BaseStrategyParams(BaseModel):
     vix_entry_max: float = 25.0       # Don't enter if VIX > this
     vix_reduce_above: float = 18.0    # Halve position size if VIX > this
 
+    # PCR filter — skip entry when PCR_OI is outside healthy range
+    pcr_filter_enabled: bool = False   # Log-only when False
+    pcr_oi_min: float = 0.7           # Skip if PCR_OI < this (call-heavy, bearish/volatile)
+    pcr_oi_max: float = 1.5           # Skip if PCR_OI > this (extreme put hedging)
+
+    # Max pain filter — skip entry when spot is far from max pain
+    max_pain_filter_enabled: bool = False  # Log-only when False
+    max_pain_proximity_pct: float = 3.0    # Skip if spot > X% from max pain
+
 
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""

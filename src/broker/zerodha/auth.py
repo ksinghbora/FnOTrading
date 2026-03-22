@@ -49,7 +49,25 @@ class KiteAuth:
         return None
 
     def _save_token(self, access_token: str) -> None:
-        """Persist access token to file."""
+        """Persist access token to file and update .env."""
         TOKEN_FILE.write_text(access_token)
         # Restrict file permissions
         TOKEN_FILE.chmod(0o600)
+        # Also update .env so the server picks up the new token
+        self._update_env_token(access_token)
+
+    def _update_env_token(self, access_token: str) -> None:
+        """Update KITE_ACCESS_TOKEN in .env file."""
+        env_path = Path(".env")
+        if not env_path.exists():
+            return
+        lines = env_path.read_text().splitlines()
+        updated = False
+        for i, line in enumerate(lines):
+            if line.startswith("KITE_ACCESS_TOKEN="):
+                lines[i] = f"KITE_ACCESS_TOKEN={access_token}"
+                updated = True
+                break
+        if updated:
+            env_path.write_text("\n".join(lines) + "\n")
+            logger.info("Updated KITE_ACCESS_TOKEN in .env")

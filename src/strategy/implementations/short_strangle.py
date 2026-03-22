@@ -67,6 +67,7 @@ class ShortStrangleStrategy(BaseStrategy):
             self._expiry = new_expiry
 
         if now.time() >= self.params.exit_time and self._entered:
+            self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
         if not self._entered and not self._stopped_for_day and now.time() >= self.params.entry_time:
@@ -90,6 +91,22 @@ class ShortStrangleStrategy(BaseStrategy):
         if trend_block:
             logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
             return None
+
+        # PCR filter — check put-call ratio sentiment
+        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+        if pcr_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {pcr_block}")
+            return None
+
+        # Max pain filter — check spot proximity to max pain
+        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+        if mp_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {mp_block}")
+            return None
+
+        # Log IV skew and OI levels for research
+        self._log_iv_skew(self.params.underlying, self._expiry)
+        self._log_oi_levels(self.params.underlying, self._expiry)
 
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         if not chain or not chain.strikes:

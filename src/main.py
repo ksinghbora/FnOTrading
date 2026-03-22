@@ -326,7 +326,7 @@ async def run():
             if (
                 now.time() >= _time(9, 10)
                 and now.time() < _time(9, 15)
-                and not clock.is_trading_holiday(now.date())
+                and not app["chain_builder"]._clock.is_trading_holiday(now.date())
                 and last_reset_date != now.date()
             ):
                 app["portfolio"].reset_daily()

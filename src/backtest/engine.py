@@ -598,6 +598,8 @@ def _update_market(
     chain.total_pe_oi = sum(e.pe.oi for e in chain.strikes if e.pe)
     if chain.total_ce_oi > 0:
         chain.pcr_oi = chain.total_pe_oi / chain.total_ce_oi
+    from src.options.chain_analyzer import compute_max_pain
+    chain.max_pain = compute_max_pain(chain)
     chain.updated_at = now
 
     # Update portfolio LTPs for open positions

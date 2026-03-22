@@ -70,6 +70,22 @@ class StrategyContext:
         ltp = self._feed.get_ltp(INDIA_VIX_TOKEN)
         return float(ltp) if ltp else 0.0
 
+    def get_iv_skew(self, underlying: str, expiry: "date") -> dict:
+        """Get IV skew around ATM (OTM put/call IV comparison)."""
+        from src.options.chain_analyzer import get_iv_skew
+        chain = self._chain_builder.get_chain(underlying, expiry)
+        if not chain:
+            return {}
+        return get_iv_skew(chain)
+
+    def get_high_oi_strikes(self, underlying: str, expiry: "date", top_n: int = 5) -> dict:
+        """Get strikes with highest OI (potential support/resistance)."""
+        from src.options.chain_analyzer import get_high_oi_strikes
+        chain = self._chain_builder.get_chain(underlying, expiry)
+        if not chain:
+            return {}
+        return get_high_oi_strikes(chain, top_n=top_n)
+
     # ─── Clock ───────────────────────────────────────────────────
 
     @property
