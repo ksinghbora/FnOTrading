@@ -32,6 +32,73 @@ from src.strategy.signals import entry_signal, exit_signal, make_leg
 logger = logging.getLogger(__name__)
 
 
+# ─── IV Rank Baseline ────────────────────────────────────────────────
+
+def load_iv_rank_baseline(vix_csv: str = "data/india_vix_minute.csv") -> tuple[float, float]:
+    """Compute 52-week VIX high and low from historical minute data.
+
+    Uses the last 252 trading days of daily closing VIX values (last tick per day).
+    Returns (vix_52w_high, vix_52w_low). Falls back to (0, 0) on any error
+    so callers can detect unavailability and skip IV Rank calculation.
+    """
+    try:
+        from pathlib import Path
+        import csv
+        from collections import defaultdict
+
+        path = Path(vix_csv)
+        if not path.exists():
+            return 0.0, 0.0
+
+        # Group by date, keep last close per day
+        daily: dict[str, float] = {}
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                date_str = row["date"][:10]  # "2025-09-29"
+                try:
+                    daily[date_str] = float(row["close"])
+                except (ValueError, KeyError):
+                    continue
+
+        if not daily:
+            return 0.0, 0.0
+
+        closes = [v for _, v in sorted(daily.items())]
+        window = closes[-252:] if len(closes) >= 252 else closes
+        return max(window), min(window)
+
+    except Exception as e:
+        logger.warning(f"IV Rank baseline load failed: {e}")
+        return 0.0, 0.0
+
+
+def compute_iv_rank(vix: float, vix_52w_high: float, vix_52w_low: float) -> float | None:
+    """Return IV Rank (0-100) or None if baseline unavailable."""
+    rng = vix_52w_high - vix_52w_low
+    if rng <= 0 or vix_52w_high <= 0:
+        return None
+    return round((vix - vix_52w_low) / rng * 100, 1)
+
+
+def iv_rank_shadow_adj(iv_rank: float | None) -> tuple[int, str]:
+    """Return (hypothetical_score_adj, reason) for IV Rank — NOT applied to score.
+
+    Used in shadow mode to log what adjustment would have been made.
+    Rules (tastytrade-derived, calibrated to Indian market data):
+      IV Rank < 30%  → -15  (selling at multi-year lows, thin premium)
+      IV Rank 30-50% → -8   (below-average premium environment)
+      IV Rank ≥ 50%  → 0    (acceptable or rich premium — no adjustment)
+    """
+    if iv_rank is None:
+        return 0, "iv_rank=unavailable"
+    if iv_rank < 30:
+        return -15, f"iv_rank={iv_rank:.0f}% low(thin_premium)"
+    if iv_rank < 50:
+        return -8, f"iv_rank={iv_rank:.0f}% below_avg"
+    return 0, f"iv_rank={iv_rank:.0f}% acceptable"
+
+
 # ─── Signal Scoring ──────────────────────────────────────────────────
 
 def score_premium_selling(
@@ -296,6 +363,10 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_trades_today: int = 0
         self._last_monitor_minute: int = -1  # Combined unrealized P&L
 
+        # ─── IV Rank (shadow mode — log hypothetical adj, don't apply) ──
+        self._iv_rank_52w_high: float = 0.0
+        self._iv_rank_52w_low: float = 0.0
+
         # ─── VIX direction tracking (for trend scoring) ───────
         # Stores VIX readings every 5 min to detect rising/falling VIX at entry.
         self._vix_history: list[tuple[datetime, float]] = []  # (timestamp, vix)
@@ -322,6 +393,16 @@ class PortfolioStrategy(BaseStrategy):
         self._regime_detector = RegimeDetector(
             self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder
         )
+        # IV Rank baseline — precomputed from 6-month VIX CSV
+        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline()
+        if self._iv_rank_52w_high > 0:
+            logger.info(
+                f"[{self.strategy_id}] IV Rank baseline loaded: "
+                f"52w_high={self._iv_rank_52w_high:.1f} 52w_low={self._iv_rank_52w_low:.1f}"
+            )
+        else:
+            logger.warning(f"[{self.strategy_id}] IV Rank baseline unavailable — shadow logging disabled")
+
         # Load AI advisor day bias (if available)
         self._load_day_bias()
         logger.info(
@@ -532,6 +613,21 @@ class PortfolioStrategy(BaseStrategy):
 
         is_phase1 = now.time() < time(10, 0)
         threshold = self.params.phase1_threshold if is_phase1 else 65
+
+        # IV Rank shadow — compute hypothetical adjustment but do NOT apply.
+        # Log once per 5 minutes so we can correlate with outcomes later.
+        iv_rank = compute_iv_rank(vix, self._iv_rank_52w_high, self._iv_rank_52w_low)
+        iv_adj, iv_reason = iv_rank_shadow_adj(iv_rank)
+        if now.minute % 5 == 0 and iv_rank is not None:
+            shadow_score = max(0, self._prem_score + iv_adj)
+            would_change = shadow_score != self._prem_score
+            would_block = shadow_score < threshold and self._prem_score >= threshold
+            logger.info(
+                f"[{self.strategy_id}] [IV_RANK_SHADOW] {iv_reason} "
+                f"would_adj={iv_adj:+d} actual_score={self._prem_score} "
+                f"shadow_score={shadow_score} "
+                f"{'WOULD_BLOCK' if would_block else 'no_block'}"
+            )
 
         if now.minute % 5 == 0:
             phase = "P1" if is_phase1 else "P2"
