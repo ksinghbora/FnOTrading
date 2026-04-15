@@ -134,8 +134,17 @@ def score_trend_following(
     oi_confirmed: bool,
     trend_duration_minutes: int,
     vix: float,
+    vix_prev: float = 0.0,
+    banknifty_confirming: bool | None = None,
 ) -> tuple[int, list[str]]:
-    """Score conditions for trend following (0-100)."""
+    """Score conditions for trend following (0-100).
+
+    New factors vs original:
+    - vix_prev: VIX from ~20 min ago. Rising VIX on UP breakout = counter-signal (-15).
+      Falling VIX on UP breakout = environment supports move (+10). Inverted for DOWN.
+    - banknifty_confirming: True if BankNifty is also above (UP) or below (DOWN) its
+      morning high/low. None = unknown (no penalty). False = divergence (-15).
+    """
     score = 0
     reasons: list[str] = []
 
@@ -163,13 +172,42 @@ def score_trend_following(
         score += 12
         reasons.append(f"sustained={trend_duration_minutes}min early")
 
-    # 4. VIX adequate (+20)
+    # 4. VIX level adequate (+20)
     if vix >= 14:
         score += 20
         reasons.append(f"VIX={vix:.1f} supports trend")
     elif vix >= 11:
         score += 8
         reasons.append(f"VIX={vix:.1f} low for trend")
+
+    # 5. VIX direction (+10 / -15)
+    # Rising VIX + UP breakout = contradiction (fear rising while buying = fake move).
+    # Rising VIX + DOWN breakout = confirmation (fear + breakdown = real selling).
+    if vix_prev > 0:
+        vix_rising = vix > vix_prev * 1.01  # >1% rise in VIX = meaningful
+        if breakout.direction == "UP":
+            if vix_rising:
+                score -= 15
+                reasons.append(f"VIX_rising={vix:.1f}>{vix_prev:.1f} contradicts UP")
+            else:
+                score += 10
+                reasons.append(f"VIX_stable/falling supports UP")
+        else:  # DOWN
+            if vix_rising:
+                score += 10
+                reasons.append(f"VIX_rising={vix:.1f} confirms DOWN")
+            else:
+                score -= 15
+                reasons.append(f"VIX_falling contradicts DOWN(bounce risk)")
+
+    # 6. BankNifty sector confirmation (+10 / -15)
+    # BankNifty is ~33% of NIFTY. Divergence = sector-specific move, not index-wide.
+    if banknifty_confirming is True:
+        score += 10
+        reasons.append("BankNifty confirming")
+    elif banknifty_confirming is False:
+        score -= 15
+        reasons.append("BankNifty diverging(sector-only move)")
 
     return score, reasons
 
@@ -258,6 +296,14 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_trades_today: int = 0
         self._last_monitor_minute: int = -1  # Combined unrealized P&L
 
+        # ─── VIX direction tracking (for trend scoring) ───────
+        # Stores VIX readings every 5 min to detect rising/falling VIX at entry.
+        self._vix_history: list[tuple[datetime, float]] = []  # (timestamp, vix)
+
+        # ─── BankNifty morning range (for trend confirmation) ─────
+        self._bn_morning_high: float = 0.0
+        self._bn_morning_low: float = 0.0
+
         # ─── Decision snapshot logger (ML data collection) ────
         self._decision_logger = DecisionLogger()
         self._last_skip_minute: int = -1  # throttle SKIP logs to 1/5min
@@ -294,6 +340,26 @@ class PortfolioStrategy(BaseStrategy):
         new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
         if new_expiry:
             self._expiry = new_expiry
+
+        # Record VIX every 5 minutes for direction detection at trend entry
+        if now.minute % 5 == 0 and now.second < 10:
+            vix_now = self.ctx.get_vix()
+            if vix_now > 0:
+                self._vix_history.append((now, vix_now))
+                # Keep only last 60 minutes of history (12 readings)
+                if len(self._vix_history) > 12:
+                    self._vix_history.pop(0)
+
+        # Build BankNifty morning range (9:15-9:30) from M5 candles once per day.
+        # Only possible if BANKNIFTY spot is being subscribed and aggregated.
+        if not self._bn_morning_high:
+            bn_token = self._find_underlying_token("BANKNIFTY")
+            if bn_token:
+                bn_candles = self.ctx.get_candles(bn_token, Timeframe.M5, limit=10)
+                if len(bn_candles) >= 3:
+                    morning = bn_candles[:3]
+                    self._bn_morning_high = max(float(c.high) for c in morning)
+                    self._bn_morning_low = min(float(c.low) for c in morning)
 
         # Time exit — close all open legs
         if now.time() >= self.params.exit_time:
@@ -520,13 +586,18 @@ class PortfolioStrategy(BaseStrategy):
 
     def _evaluate_trend(self, now) -> Signal | None:
         """Score and enter trend following on confirmed breakout."""
-        # Block trend entry on expiry day — near-zero DTE debit spreads have
-        # massive gamma, negligible extrinsic value, and terrible risk/reward
-        if self._expiry and now.date() == self._expiry:
-            if not self._paper_mode:
+        # Hard block: expiry day AND ≤2 DTE — theta math is too punishing for debit
+        # spread buyers. At 0-2 DTE, the long leg loses 25-60% of value per day.
+        # This is a hard block even in paper mode — it produces meaningless results.
+        if self._expiry:
+            dte = (self._expiry - now.date()).days
+            if dte <= 2:
+                if now.minute == 0:  # Log once per hour, not every tick
+                    logger.info(
+                        f"[{self.strategy_id}] TREND hard-blocked: DTE={dte} ≤ 2 "
+                        f"(theta too punishing for debit spread buyers)"
+                    )
                 return None
-            else:
-                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] TREND blocked on expiry day — entering anyway (paper mode)")
 
         spot = float(self.ctx.get_spot_price(self.params.underlying))
         vix = self.ctx.get_vix()
@@ -535,11 +606,29 @@ class PortfolioStrategy(BaseStrategy):
 
         breakout, oi_confirmed, trend_duration = self._assess_trend(spot)
 
+        # VIX from ~20 minutes ago (4 readings back at 5-min cadence)
+        vix_prev = self._vix_history[-4][1] if len(self._vix_history) >= 4 else 0.0
+
+        # BankNifty sector confirmation
+        try:
+            bn_price = float(self.ctx.get_spot_price("BANKNIFTY"))
+        except Exception:
+            bn_price = 0.0
+        if bn_price > 0 and self._bn_morning_high > 0:
+            if breakout.direction == "UP":
+                banknifty_confirming = bn_price > self._bn_morning_high
+            else:
+                banknifty_confirming = bn_price < self._bn_morning_low
+        else:
+            banknifty_confirming = None  # Unknown — no penalty
+
         self._trend_score, reasons = score_trend_following(
             breakout=breakout,
             oi_confirmed=oi_confirmed,
             trend_duration_minutes=trend_duration,
             vix=vix,
+            vix_prev=vix_prev,
+            banknifty_confirming=banknifty_confirming,
         )
 
         # Apply AI confluence adjustment
@@ -811,12 +900,14 @@ class PortfolioStrategy(BaseStrategy):
         width = self.params.trend_spread_width_strikes * step
         atm = float(chain.atm_strike)
 
+        # Buy ATM (50Δ) not ATM+1 — captures the first point of movement immediately.
+        # Short leg 3 strikes OTM (15-20Δ) for cost reduction. Net delta ~0.30-0.35.
         if breakout.direction == "UP":
-            buy_strike = atm + step
+            buy_strike = atm
             sell_strike = buy_strike + width
             opt_attr = "ce"
         else:
-            buy_strike = atm - step
+            buy_strike = atm
             sell_strike = buy_strike - width
             opt_attr = "pe"
 
@@ -1662,6 +1753,13 @@ class PortfolioStrategy(BaseStrategy):
         """Find spot instrument token for the underlying."""
         for token, name in self.ctx._chain_builder._spot_tokens.items():
             if name == self.params.underlying:
+                return token
+        return None
+
+    def _find_underlying_token(self, underlying: str) -> int | None:
+        """Find spot instrument token for any underlying name (e.g. BANKNIFTY)."""
+        for token, name in self.ctx._chain_builder._spot_tokens.items():
+            if name == underlying:
                 return token
         return None
 

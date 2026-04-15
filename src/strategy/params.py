@@ -164,7 +164,7 @@ class PortfolioParams(BaseStrategyParams):
     theta_gamma_min_ratio: float = 0.0     # Exit when |theta/gamma| < this (0 = disabled)
 
     # Trend mode (debit spread) — used when trending
-    trend_spread_width_strikes: int = 2
+    trend_spread_width_strikes: int = 3      # 150pts wide (was 2/100pts) — more room for move to reach max value
     trend_stop_loss_pct: float = 20.0       # Tighter — cut trend losers fast (was 25, OOS-validated)
     trend_profit_target_pct: float = 55.0    # Let winners run slightly bigger (was 50)
     trend_trailing_stop_pct: float = 15.0    # Reduced trail — still protects gains (was 25)
@@ -178,12 +178,12 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     Profits from trending markets that hurt premium sellers.
     """
 
-    entry_time: time = time(10, 0)            # Wait for morning range to fully form (was 9:45)
-    exit_time: time = time(15, 0)            # Exit before close
-    breakout_confirmation_pct: float = 0.7   # Stronger breakout required (was 0.5 — too many false signals)
-    spread_width_strikes: int = 3            # 150pts on NIFTY (3 x 50pt) — better reward/risk
+    entry_time: time = time(10, 30)           # 10:30 avoids peak morning trap window (10:00-10:30)
+    exit_time: time = time(13, 0)            # 13:00 time stop — afternoon theta too punishing at 5 DTE
+    breakout_confirmation_pct: float = 0.7   # Fallback % — overridden by ATR-normalized threshold in code
+    spread_width_strikes: int = 3            # 150pts on NIFTY (3 x 50pt) — more room to reach max value
     stop_loss_pct: float = 35.0              # Cut losers faster (was 50 — too wide)
-    profit_target_pct: float = 50.0          # Unchanged — good balance
+    profit_target_pct: float = 50.0          # Unchanged — 50% of max spread value
     trailing_stop_pct: float = 15.0          # Tighter trail (was 25), activation threshold also fixed
     max_trades_per_day: int = 1              # Reduced from 2 — avoid whipsaw re-entries
     oi_confirm: bool = True                  # Require OI level breach to confirm breakout
