@@ -1,0 +1,35 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113
+2025-09-01T11:32:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24546.3,14.5,1.0,0.0,0.0,1.037,0.0,0.0,1,11,32,0,0,95,0,95,65,normal_range,23.96,75,,,
+2025-09-01T13:25:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24583.25,14.5,1.0,0.0,0.0,1.037,0.041,0.144,1,13,25,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.8%,1092.0,113

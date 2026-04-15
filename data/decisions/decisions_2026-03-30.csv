@@ -1,0 +1,5 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-03-30T09:30:00.182224+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,22580.45,28.79,1.231004188139008,22650.0,0.31,1.17,0.177,0.13,0,9,30,0,1,37,0,37,75,high_vol_range,32.5,75,,,
+2026-03-30T09:36:19.654886+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,22684.1,28.32,1.4269220617334009,22700.0,0.07,1.151,0.637,0.742,0,9,36,0,1,0,0,0,0,high_vol_range,0.0,0,Stop loss: premium up 60.6%,-1477.5,6
+2026-03-30T09:36:19.789487+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,22684.25,28.33,1.4269220617334009,22700.0,0.07,1.151,0.638,0.742,0,9,36,0,1,5,0,5,75,high_vol_range,36.2,75,,,
+2026-03-30T10:23:46.803365+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,22540.95,28.47,1.2361837093279804,22650.0,0.48,1.119,0.002,0.495,0,10,23,0,1,0,0,0,0,high_vol_range,0.0,0,Trail stop: bounced 20.3% after 28% decay,210.0,47

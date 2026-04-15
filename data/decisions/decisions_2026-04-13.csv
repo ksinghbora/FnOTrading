@@ -1,0 +1,3 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-04-13T09:30:00.035737+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,23605.6,21.3,0.6758641905347862,23800.0,0.82,1.072,0.076,3.345,8,9,30,0,0,60,0,60,75,high_vol_range,69.45,75,,,
+2026-04-13T15:15:00.119030+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,23845.6,20.56,0.7455422343788611,23800.0,0.19,1.163,1.094,0.315,8,15,15,0,0,0,0,0,0,trending,0.0,0,Time exit,-191.25,345

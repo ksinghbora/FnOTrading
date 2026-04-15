@@ -162,6 +162,34 @@ class OHLCAggregator:
 
             builder.update(tick)
 
+    def process_tick_direct(self, tick: Tick) -> None:
+        """Process a tick directly without EventBus (for backtesting).
+
+        Same logic as _on_tick but synchronous and without publishing events.
+        """
+        for tf in self._timeframes:
+            key = (tick.instrument_token, tf)
+
+            if key not in self._builders:
+                self._builders[key] = CandleBuilder(
+                    tick.instrument_token, tick.tradingsymbol, tf
+                )
+
+            builder = self._builders[key]
+
+            if builder.start_time is not None:
+                seconds = TIMEFRAME_SECONDS[tf]
+                candle_end = builder.start_time + timedelta(seconds=seconds)
+                if tick.timestamp >= candle_end:
+                    ohlc = builder.to_ohlc()
+                    if ohlc:
+                        self._completed_candles.append(ohlc)
+                        if len(self._completed_candles) > self.MAX_COMPLETED_CANDLES:
+                            self._completed_candles = self._completed_candles[-self.MAX_COMPLETED_CANDLES:]
+                    builder.reset()
+
+            builder.update(tick)
+
     def get_latest_candle(
         self, instrument_token: int, timeframe: Timeframe
     ) -> OHLC | None:

@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # ─── AI Advisor ──────────────────────────────────────────────────
+    anthropic_api_key: str = ""
+    advisor_model: str = "claude-sonnet-4-20250514"
+    advisor_confluence_enabled: bool = False  # False = shadow mode (log only)
+    advisor_confluence_weight: float = 1.0  # Scale AI adjustment (0.5 = half weight)
+
     # ─── Paper Trading ───────────────────────────────────────────────
     paper_trading: bool = True  # Default to paper trading for safety
 

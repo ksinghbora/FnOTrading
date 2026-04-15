@@ -6,6 +6,7 @@ Defined max loss = wing width - net credit received.
 """
 
 import logging
+import os
 import time as _time
 from datetime import date, time
 from decimal import Decimal
@@ -15,7 +16,9 @@ from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide
 from src.strategy.base import BaseStrategy
 from src.strategy.params import IronCondorParams
+from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
+from src.strategy.scoring import IRON_CONDOR_CONFIG, score_strategy
 from src.strategy.signals import adjust_signal, entry_signal, exit_signal, make_leg
 
 logger = logging.getLogger(__name__)
@@ -31,14 +34,20 @@ class IronCondorStrategy(BaseStrategy):
     - Defined risk: max loss = wing width - net credit
     - Adjustment: close threatened side and re-enter at new strikes
     - Stop loss at configurable % of max credit received
+    - Expiry day: no adjustments (gamma too high, let wings protect)
+    - Max 2 adjustments per day to prevent churn
     """
 
     params: IronCondorParams
+
+    MAX_ADJUSTMENTS_PER_DAY = 2  # Cap adjustments to prevent churn
 
     def __init__(self, strategy_id: str, params: IronCondorParams):
         super().__init__(strategy_id, params)
         self._entered = False
         self._stopped_for_day = False
+        self._regime: RegimeDetector | None = None
+        self._paper_mode: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
         # Short legs
         self._short_ce_token: int = 0
         self._short_pe_token: int = 0
@@ -59,12 +68,14 @@ class IronCondorStrategy(BaseStrategy):
         self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
         self._quantity: int = params.quantity_lots * self._lot_size
         self._last_adjustment_time: float = 0.0
+        self._adjustments_today: int = 0
 
     def get_subscriptions(self) -> Subscription:
         return Subscription(instrument_tokens=[], timeframes=[])
 
     async def on_start(self) -> None:
         self._expiry = self.ctx.next_expiry(self.params.underlying)
+        self._regime = RegimeDetector(self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder)
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} short_call_delta={self.params.short_call_delta} "
@@ -95,11 +106,72 @@ class IronCondorStrategy(BaseStrategy):
 
     async def _try_entry(self) -> Signal | None:
         """Select strikes by delta and enter the iron condor."""
+        # --- Signal scoring ---
+        vix = self.ctx.get_vix()
+        morning_range_pct = 0.0
+        move_from_open_pct = 0.0
+        if self._regime:
+            regime = self._regime.assess(self.params.underlying)
+            morning_range_pct = regime.morning_range_pct
+            move_from_open_pct = regime.move_from_open_pct
+        pcr_oi = 0.0
+        if self._expiry:
+            chain_for_score = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+            if chain_for_score:
+                pcr_oi = chain_for_score.pcr_oi
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 0
+        is_expiry_day = self._expiry == self.ctx.clock.now().date() if self._expiry else False
+
+        score, reasons = score_strategy(
+            IRON_CONDOR_CONFIG, vix, morning_range_pct, move_from_open_pct,
+            pcr_oi, is_expiry_day, dte,
+        )
+        reasons_str = ", ".join(reasons)
+        logger.info(
+            f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
+        )
+        if score < 60:
+            if self._paper_mode:
+                logger.info(
+                    f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
+                    f"< 60 — proceeding anyway (paper mode)"
+                )
+            else:
+                logger.info(
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60"
+                )
+                return None
+
         # VIX filter
         vix_block = self._check_vix_filter()
         if vix_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
-            return None
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {vix_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+                return None
+
+        # PCR filter
+        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+        if pcr_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {pcr_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {pcr_block}")
+                return None
+
+        # Max pain filter
+        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+        if mp_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {mp_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {mp_block}")
+                return None
+
+        # Log IV skew and OI levels for research
+        self._log_iv_skew(self.params.underlying, self._expiry)
+        self._log_oi_levels(self.params.underlying, self._expiry)
 
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         if not chain or not chain.strikes:
@@ -242,13 +314,27 @@ class IronCondorStrategy(BaseStrategy):
             self._stopped_for_day = True
             return self._create_exit_signal(f"Stop loss: position loss +{loss_pct:.1f}%")
 
-        # Cooldown: don't adjust more than once per 30s
-        if _time.time() - self._last_adjustment_time < 30:
+        # Cooldown: don't adjust more than once per 30 minutes (simulated time)
+        # Uses strategy clock so it works in both live and backtest
+        now_ts = self.ctx.clock.now().timestamp()
+        if now_ts - self._last_adjustment_time < 30 * 60:
             return None
 
         # Skip adjustment if less than 1 hour to close — cost > remaining theta
         now_time = self.ctx.clock.now().time()
         if now_time >= time(14, 15):
+            return None
+
+        # Cap adjustments per day — each adjustment locks in loss + charges
+        if self._adjustments_today >= self.MAX_ADJUSTMENTS_PER_DAY:
+            return None
+
+        # Skip adjustments on expiry day — gamma is too high, adjustments churn
+        # Wings provide defined risk protection, let them do their job
+        if self._expiry and self.ctx.clock.now().date() == self._expiry:
+            logger.debug(
+                f"[{self.strategy_id}] Skipping adjustment on expiry day — wings protect"
+            )
             return None
 
         # Check if one side is threatened
@@ -418,9 +504,11 @@ class IronCondorStrategy(BaseStrategy):
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
         self._entry_credit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
 
-        self._last_adjustment_time = _time.time()
+        self._last_adjustment_time = self.ctx.clock.now().timestamp()
+        self._adjustments_today += 1
         logger.info(
-            f"[{self.strategy_id}] ADJUSTED {side} side: "
+            f"[{self.strategy_id}] ADJUSTED {side} side "
+            f"({self._adjustments_today}/{self.MAX_ADJUSTMENTS_PER_DAY} today): "
             f"new short_CE@{self._short_ce_strike} short_PE@{self._short_pe_strike} "
             f"long_CE@{self._long_ce_strike} long_PE@{self._long_pe_strike}"
         )
@@ -444,6 +532,7 @@ class IronCondorStrategy(BaseStrategy):
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
         )
         self._entered = False
+        self._stopped_for_day = True
         legs = [
             # Buy back short legs
             make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity),
@@ -457,6 +546,12 @@ class IronCondorStrategy(BaseStrategy):
     async def on_stop(self) -> None:
         if self._entered:
             logger.info(f"[{self.strategy_id}] Stopping with open position")
+
+    def reset_day_state(self) -> None:
+        """Reset intraday flags at start of new trading day."""
+        self._entered = False
+        self._stopped_for_day = False
+        self._adjustments_today = 0
 
     def get_state_data(self) -> dict:
         return {
@@ -475,6 +570,7 @@ class IronCondorStrategy(BaseStrategy):
             "long_pe_strike": self._long_pe_strike,
             "entry_credit": str(self._entry_credit),
             "stopped_for_day": self._stopped_for_day,
+            "adjustments_today": self._adjustments_today,
         }
 
     def load_state_data(self, data: dict) -> None:
@@ -493,3 +589,4 @@ class IronCondorStrategy(BaseStrategy):
         self._long_ce_strike = data.get("long_ce_strike", 0)
         self._long_pe_strike = data.get("long_pe_strike", 0)
         self._entry_credit = Decimal(data.get("entry_credit", "0"))
+        self._adjustments_today = data.get("adjustments_today", 0)

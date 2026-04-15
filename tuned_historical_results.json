@@ -1,0 +1,34 @@
+{
+  "short_straddle": {
+    "pnl": 11853.44,
+    "sharpe": 0.15,
+    "win_rate": 28.5,
+    "total_trades": 0,
+    "max_drawdown": -2441.27,
+    "num_days": 123
+  },
+  "short_strangle": {
+    "pnl": 11569.74,
+    "sharpe": 0.01,
+    "win_rate": 52.3,
+    "total_trades": 0,
+    "max_drawdown": -1561.62,
+    "num_days": 123
+  },
+  "iron_condor": {
+    "pnl": -104886.71,
+    "sharpe": 0.76,
+    "win_rate": 26.1,
+    "total_trades": 0,
+    "max_drawdown": -19020.34,
+    "num_days": 123
+  },
+  "trend_debit_spread": {
+    "pnl": 5325.41,
+    "sharpe": -0.15,
+    "win_rate": 45.1,
+    "total_trades": 0,
+    "max_drawdown": -5412.76,
+    "num_days": 123
+  }
+}

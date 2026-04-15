@@ -1,0 +1,1091 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-03-11T09:30:00+05:30,portfolio_10d,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,87,0,87,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_10d,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T13:17:00+05:30,portfolio_10d,PREMIUM,EXIT,iron_condor,23917.8,21.38,1.0,0.0,0.0,1.038,1.27,0.293,6,13,17,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 41.4%,-1592.25,227
+2026-03-11T14:59:00+05:30,portfolio_10d,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,65,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,70,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,65,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,70,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,65,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,55,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:15:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24068.0,19.97,1.0,0.0,0.0,1.038,0.65,0.234,6,11,15,2,0,50,0,50,50,high_vol_range,38.41,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,903.0,224
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,55,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,55,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:25:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24022.65,20.33,1.0,0.0,0.0,1.038,0.838,0.417,6,11,25,2,0,62,0,62,60,high_vol_range,38.34,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,696.75,231
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,35.24,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-996.0,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,62.94,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-2301.0,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,59.3,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,1082.25,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,76.21,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,1432.5,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,59.3,75,,,
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,1082.25,236
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,0,0,0,0,high_vol_range,0.0,0,Trail stop: bounced 15.3%,-577.5,75
+2026-03-11T10:46:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24054.45,20.0,1.0,0.0,0.0,1.038,0.706,0.264,6,10,46,2,0,75,0,75,65,high_vol_range,56.19,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T13:12:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23940.9,21.08,1.0,0.0,0.0,1.038,1.175,0.222,6,13,12,2,0,0,0,0,0,trending,0.0,0,Trail stop: bounced 15.1%,-360.75,146
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,0,0,0,0,high_vol_range,0.0,0,Trail stop: bounced 15.3%,-577.5,75
+2026-03-11T10:46:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24054.45,20.0,1.0,0.0,0.0,1.038,0.706,0.264,6,10,46,2,0,75,0,75,65,high_vol_range,56.19,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T13:12:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23940.9,21.08,1.0,0.0,0.0,1.038,1.175,0.222,6,13,12,2,0,0,0,0,0,trending,0.0,0,Trail stop: bounced 15.1%,-360.75,146
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:07:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23854.8,21.16,1.0,0.0,0.0,1.038,1.53,0.272,6,15,7,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 46.2%,-1779.75,337
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T11:21:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24035.85,20.19,1.0,0.0,0.0,1.038,0.783,0.286,6,11,21,2,0,0,0,0,0,high_vol_range,0.0,0,Trend profit: spread at 40.4% of max,-41.25,1
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T14:59:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23871.8,21.2,1.0,0.0,0.0,1.039,1.46,0.319,6,14,59,2,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 50.5% of max,709.5,219
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T11:20:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24026.85,20.21,1.0,0.0,0.0,1.038,0.82,0.286,6,11,20,2,0,62,0,62,60,high_vol_range,40.99,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1661.25,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,726.0,236
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,pre_market,51.33,75,,,
+2026-03-11T11:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24068.0,19.97,1.0,0.0,0.0,1.038,0.65,0.234,6,11,15,2,0,50,0,50,60,pre_market,38.41,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.309,6,15,15,2,0,0,0,0,0,pre_market,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.309,6,15,16,2,0,0,0,0,0,pre_market,0.0,0,Time exit,919.5,241
+2026-03-11T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,strangle,24227.25,18.78,1.0,0.0,0.0,1.324,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,37.65,75,,,
+2026-03-11T09:53:00+05:30,portfolio_replay,PREMIUM,EXIT,strangle,24160.95,19.28,1.0,0.0,0.0,1.333,0.267,0.472,6,9,53,2,0,0,0,0,0,high_vol_range,0.0,0,Profit target: premium decayed 13.2%,373.5,23
+2026-03-11T09:54:00+05:30,portfolio_replay,PREMIUM,ENTER,strangle,24148.55,19.27,1.0,0.0,0.0,1.332,0.318,0.472,6,9,54,2,0,67,0,67,75,high_vol_range,32.06,75,,,
+2026-03-11T10:45:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.335,0.673,0.264,6,10,45,2,0,62,0,62,60,high_vol_range,36.4,75,,,
+2026-03-11T13:16:00+05:30,portfolio_replay,PREMIUM,EXIT,strangle,23923.5,21.25,1.0,0.0,0.0,1.333,1.247,0.294,6,13,16,2,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 26.7%,-642.75,202
+2026-03-11T15:15:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,23864.05,21.04,1.0,0.0,0.0,1.332,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,832.5,270
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,high_vol_range,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,high_vol_range,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,high_vol_range,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,trending,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,trending,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,trending,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,trending,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,trending,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,trending,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,trending,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,choppy,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,conflicted,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,conflicted,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,choppy,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,conflicted,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,conflicted,0.0,0,Time exit,891.75,271
+2026-03-11T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24227.25,18.78,1.0,0.0,0.0,1.038,0.007,0.29,6,9,30,2,0,100,0,100,75,conflicted,51.33,75,,,
+2026-03-11T10:45:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24062.55,19.97,1.0,0.0,0.0,1.038,0.673,0.264,6,10,45,2,0,62,0,62,60,choppy,38.78,75,,,
+2026-03-11T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,23864.05,21.04,1.0,0.0,0.0,1.038,1.492,0.293,6,15,15,2,0,0,0,0,0,conflicted,0.0,0,Time exit,-1665.75,345
+2026-03-11T15:16:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,23869.5,21.04,1.0,0.0,0.0,1.038,1.47,0.293,6,15,16,2,0,0,0,0,0,conflicted,0.0,0,Time exit,891.75,271

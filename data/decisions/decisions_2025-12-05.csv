@@ -1,0 +1,61 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,low_vol_range,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,choppy,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,low_vol_range,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,low_vol_range,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,choppy,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,low_vol_range,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230
+2025-12-05T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26030.45,10.82,1.0,0.0,0.0,1.035,0.007,0.234,4,9,30,4,0,75,0,75,75,conflicted,49.08,75,,,
+2025-12-05T10:29:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26040.75,10.59,1.0,0.0,0.0,1.035,0.032,0.388,4,10,29,4,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 13.9%,512.25,59
+2025-12-05T10:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26025.95,10.65,1.0,0.0,0.0,1.035,0.024,0.388,4,10,30,4,0,62,0,62,65,conflicted,42.8,75,,,
+2025-12-05T11:11:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26143.5,10.65,1.0,0.0,0.0,1.035,0.427,0.248,4,11,11,4,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.1%,-807.0,41
+2025-12-05T11:25:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26144.05,10.58,1.0,0.0,0.0,1.035,0.429,0.145,4,11,25,4,0,55,0,55,60,low_vol_range,38.74,75,,,
+2025-12-05T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26187.85,10.29,1.0,0.0,0.0,1.035,0.598,0.253,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,357.75,230

@@ -1,0 +1,5 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-04-02T09:40:55.110818+05:30,portfolio_1,PREMIUM,ENTER,strangle,22257.4,26.05,1.142708393986827,22500.0,1.09,0.0,0.0,0.0,5,9,40,3,0,95,0,95,75,high_vol_range,122.65,75,,,
+2026-04-02T11:58:54.193964+05:30,portfolio_1,PREMIUM,EXIT,strangle,22294.5,25.81,1.0274562714633244,22400.0,0.47,1.091,0.231,0.243,5,11,58,3,0,0,0,0,0,high_vol_range,0.0,0,Profit target: premium decayed 12.0%,1106.25,137
+2026-04-02T13:30:00.203949+05:30,portfolio_1,TREND,ENTER,debit_spread,22487.35,26.05,1.2567492994708476,22500.0,0.06,1.059,1.098,0.511,5,13,30,3,0,50,0,50,60,trending,48.8,75,,,
+2026-04-02T13:34:54.448763+05:30,portfolio_1,TREND,EXIT,debit_spread,22491.4,26.07,1.3101776940255365,22500.0,0.04,1.059,1.116,0.702,5,13,34,3,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.4% of max,495.0,4

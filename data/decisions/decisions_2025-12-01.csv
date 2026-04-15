@@ -1,0 +1,41 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,low_vol_range,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,low_vol_range,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,low_vol_range,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,low_vol_range,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19
+2025-12-01T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26294.4,11.32,1.0,0.0,0.0,1.035,0.015,0.494,1,9,30,0,0,69,0,69,75,conflicted,27.54,75,,,
+2025-12-01T10:08:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26290.35,11.49,1.0,0.0,0.0,1.035,0.0,0.178,1,10,8,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.6%,259.5,38
+2025-12-01T10:09:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26285.4,11.49,1.0,0.0,0.0,1.035,0.019,0.178,1,10,9,0,0,82,0,82,65,conflicted,24.06,75,,,
+2025-12-01T10:28:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26280.45,11.24,1.0,0.0,0.0,1.035,0.038,0.099,1,10,28,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 14.3%,258.75,19

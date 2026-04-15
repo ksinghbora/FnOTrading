@@ -1,0 +1,41 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,low_vol_range,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,low_vol_range,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,low_vol_range,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,low_vol_range,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,low_vol_range,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,low_vol_range,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219
+2025-10-24T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25879.45,11.87,1.0,0.0,0.0,1.035,0.004,0.327,4,9,30,4,0,74,0,74,75,conflicted,46.82,75,,,
+2025-10-24T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25888.15,11.82,1.0,0.0,0.0,1.035,0.03,0.189,4,10,0,4,0,63,0,63,60,conflicted,35.78,75,,,
+2025-10-24T11:30:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25794.7,11.78,1.0,0.0,0.0,1.036,0.331,0.124,4,11,30,4,0,0,0,0,0,low_vol_range,0.0,0,Trail stop: bounced 10.0% after 10% decay,5.25,120
+2025-10-24T13:39:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25736.0,11.78,1.0,0.0,0.0,1.035,0.558,0.285,4,13,39,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.1% of max,1449.75,219

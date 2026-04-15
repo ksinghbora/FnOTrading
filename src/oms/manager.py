@@ -127,11 +127,42 @@ class OrderManager:
     async def place_multi_leg(self, requests: list[OrderRequest]) -> list[Order]:
         """Place multiple orders as a group (e.g., iron condor = 4 legs).
 
-        All legs share a group_id. If any leg fails, all previously filled
-        legs are reversed to prevent naked/unhedged positions.
+        All legs share a group_id. Pre-validates all legs before placing any.
+        If any leg fails during execution, previously filled legs are reversed.
         """
         import uuid
         group_id = str(uuid.uuid4())[:8]
+
+        # Pre-validate ALL legs before placing any — prevents partial execution
+        if self._risk_manager:
+            for req in requests:
+                try:
+                    self._validator.validate(req)
+                    self._risk_manager.validate_order(req)
+                except (OrderValidationError, RiskLimitBreachError) as e:
+                    logger.warning(
+                        f"Multi-leg pre-validation failed for {req.tradingsymbol}: {e} "
+                        f"— rejecting entire group (group: {group_id})"
+                    )
+                    # Return all legs as REJECTED without placing any
+                    rejected_orders = []
+                    for r in requests:
+                        order = Order(
+                            strategy_id=r.strategy_id,
+                            instrument_token=r.instrument_token,
+                            tradingsymbol=r.tradingsymbol,
+                            order_side=r.order_side,
+                            order_type=r.order_type,
+                            product=r.product,
+                            quantity=r.quantity,
+                            price=r.price,
+                            trigger_price=r.trigger_price,
+                            tag=r.tag,
+                            group_id=group_id,
+                        )
+                        order.status = OrderStatus.REJECTED
+                        rejected_orders.append(order)
+                    return rejected_orders
 
         orders = []
         failed = False
@@ -178,6 +209,9 @@ class OrderManager:
                     OrderSide.BUY if filled_order.order_side == OrderSide.SELL
                     else OrderSide.SELL
                 )
+                # Use fill_quantity (actual filled amount), not quantity (original request).
+                # On partial fills, reversing the original quantity would overshoot.
+                reverse_qty = filled_order.fill_quantity or filled_order.quantity
                 reverse_req = OrderRequest(
                     strategy_id=filled_order.strategy_id,
                     instrument_token=filled_order.instrument_token,
@@ -185,7 +219,7 @@ class OrderManager:
                     order_side=reverse_side,
                     order_type=filled_order.order_type,
                     product=filled_order.product,
-                    quantity=filled_order.quantity,
+                    quantity=reverse_qty,
                     tag=f"reverse_{group_id}",
                     group_id=group_id,
                 )

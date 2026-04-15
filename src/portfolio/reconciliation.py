@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from src.broker.base import BrokerClient
 from src.core.exceptions import ReconciliationError
+from src.core.structured_logger import get_structured_logger
 from src.portfolio.positions import PositionTracker
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,8 @@ class Reconciler:
                     "difference": broker_qty - internal_qty,
                 })
 
+        slog = get_structured_logger()
+
         if discrepancies:
             logger.warning(f"Reconciliation found {len(discrepancies)} discrepancies")
             for d in discrepancies:
@@ -70,7 +73,22 @@ class Reconciler:
                     f"  {d['tradingsymbol']}: broker={d['broker_qty']} "
                     f"internal={d['internal_qty']} diff={d['difference']}"
                 )
+            slog.log(
+                "RECONCILE",
+                status="mismatch",
+                broker_positions=len(broker_map),
+                internal_positions=len(internal_map),
+                discrepancy_count=len(discrepancies),
+                discrepancies=discrepancies,
+            )
             return {"status": "mismatch", "discrepancies": discrepancies}
         else:
             logger.info("Reconciliation: all positions match")
+            slog.log(
+                "RECONCILE",
+                status="ok",
+                broker_positions=len(broker_map),
+                internal_positions=len(internal_map),
+                discrepancy_count=0,
+            )
             return {"status": "ok", "discrepancies": []}

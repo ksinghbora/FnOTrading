@@ -7,6 +7,7 @@ from src.core.constants import LOT_SIZES
 from src.core.events import EventBus
 from src.core.exceptions import CircuitBreakerActiveError, KillSwitchActiveError, RiskLimitBreachError
 from src.core.models import OrderRequest
+from src.core.structured_logger import get_structured_logger
 from src.core.types import OrderSide
 from src.portfolio.manager import PortfolioManager
 from src.risk.circuit_breaker import CircuitBreaker
@@ -134,11 +135,82 @@ class RiskManager:
         # Update circuit breaker with current P&L
         self._circuit_breaker.check_pnl(day_pnl)
 
+        # Log risk proximity after every successful validation
+        self._log_risk_proximity(day_pnl, strategy_pnl, total_lots, open_order_count, order.strategy_id)
+
         if risk_reducing:
             logger.info(
                 f"Risk-reducing order allowed: {order.order_side.value} "
                 f"{order.quantity} {order.tradingsymbol} [{order.strategy_id}]"
             )
+
+    def _log_risk_proximity(
+        self,
+        day_pnl: Decimal,
+        strategy_pnl: Decimal,
+        total_lots: int,
+        open_orders: int,
+        strategy_id: str = "",
+    ) -> None:
+        """Log how close we are to each risk limit."""
+        limits = self._limits
+        day_pct = abs(float(day_pnl) / float(limits.max_day_loss) * 100) if limits.max_day_loss else 0
+        strat_pct = abs(float(strategy_pnl) / float(limits.max_strategy_loss) * 100) if limits.max_strategy_loss else 0
+        lots_pct = total_lots / limits.max_total_lots * 100 if limits.max_total_lots else 0
+        orders_pct = open_orders / limits.max_open_orders * 100 if limits.max_open_orders else 0
+
+        level = "WARNING" if max(day_pct, strat_pct, lots_pct, orders_pct) > 70 else "INFO"
+
+        msg = (
+            f"[RISK_PROXIMITY] day_pnl={float(day_pnl):+,.0f}/{float(-limits.max_day_loss):,.0f} ({day_pct:.0f}%) "
+            f"strategy_pnl={float(strategy_pnl):+,.0f}/{float(-limits.max_strategy_loss):,.0f} ({strat_pct:.0f}%) "
+            f"lots={total_lots}/{limits.max_total_lots} ({lots_pct:.0f}%) "
+            f"orders={open_orders}/{limits.max_open_orders} ({orders_pct:.0f}%)"
+        )
+
+        if level == "WARNING":
+            logger.warning(msg)
+        else:
+            logger.info(msg)
+
+        slog = get_structured_logger()
+        slog.log(
+            "RISK_PROXIMITY",
+            strategy_id=strategy_id,
+            day_pnl=float(day_pnl),
+            day_pnl_limit=float(-limits.max_day_loss),
+            day_pnl_pct=round(day_pct, 1),
+            strategy_pnl=float(strategy_pnl),
+            strategy_pnl_limit=float(-limits.max_strategy_loss),
+            strategy_pnl_pct=round(strat_pct, 1),
+            total_lots=total_lots,
+            max_lots=limits.max_total_lots,
+            lots_pct=round(lots_pct, 1),
+            open_orders=open_orders,
+            max_orders=limits.max_open_orders,
+            orders_pct=round(orders_pct, 1),
+        )
+
+    def get_risk_snapshot(self) -> dict:
+        """Get current risk limit utilization for API/dashboard."""
+        day_pnl = self._portfolio.get_day_pnl()
+        positions = self._portfolio.get_open_positions()
+        total_lots = self._count_total_lots(positions)
+        open_orders = len(self._order_manager.get_open_orders()) if self._order_manager else 0
+        limits = self._limits
+
+        return {
+            "day_pnl": float(day_pnl),
+            "day_pnl_limit": float(-limits.max_day_loss),
+            "day_pnl_pct": round(abs(float(day_pnl) / float(limits.max_day_loss) * 100) if limits.max_day_loss else 0, 1),
+            "total_lots": total_lots,
+            "max_lots": limits.max_total_lots,
+            "lots_pct": round(total_lots / limits.max_total_lots * 100 if limits.max_total_lots else 0, 1),
+            "open_orders": open_orders,
+            "max_orders": limits.max_open_orders,
+            "circuit_breaker": self._circuit_breaker.state.value,
+            "kill_switch": self._kill_switch.is_activated,
+        }
 
     def update_greeks(self) -> None:
         """Recalculate portfolio Greeks from current positions."""

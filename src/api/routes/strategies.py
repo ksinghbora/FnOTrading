@@ -52,6 +52,26 @@ async def get_strategy_detail(
     }
 
 
+@router.get("/{strategy_id}/diagnostics", dependencies=[Depends(verify_api_key)])
+async def get_strategy_diagnostics(
+    strategy_id: str,
+    runner: StrategyRunner = Depends(get_strategy_runner),
+) -> dict:
+    """Get live diagnostics for a portfolio strategy (per-leg state, Greeks, P&L)."""
+    strategy = runner.get_strategy(strategy_id)
+    if not strategy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Strategy '{strategy_id}' not found.",
+        )
+    if not hasattr(strategy, "get_diagnostics"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Strategy '{strategy_id}' does not support diagnostics.",
+        )
+    return strategy.get_diagnostics()
+
+
 @router.post("/{strategy_id}/start", dependencies=[Depends(verify_api_key)])
 async def start_strategy(
     strategy_id: str,

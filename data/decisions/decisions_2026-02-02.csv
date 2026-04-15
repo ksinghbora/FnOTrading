@@ -1,0 +1,71 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24879.8,15.34,1.0,0.0,0.0,1.037,0.16,0.516,1,9,30,0,0,62,0,62,75,pre_market,24.84,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24852.55,15.19,1.0,0.0,0.0,1.037,0.05,0.319,1,10,0,0,0,75,0,75,60,pre_market,28.23,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24793.85,15.1,1.0,0.0,0.0,1.037,0.186,0.234,1,10,55,0,0,0,0,0,0,pre_market,0.0,0,Trail stop: bounced 22.3% after 43% decay,383.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24788.4,15.12,1.0,0.0,0.0,1.037,0.208,0.234,1,10,56,0,0,82,0,82,65,pre_market,25.78,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.471,0.512,1,11,9,0,0,0,0,0,0,pre_market,0.0,0,Trend profit: spread at 55.0% of max,2008.5,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.45,14.76,1.0,0.0,0.0,1.037,0.283,0.213,1,12,14,0,0,0,0,0,0,pre_market,0.0,0,Stop loss: premium up 52.1%,-1006.5,78
+2026-02-02T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.307,0.166,0.521,1,9,30,0,0,62,0,62,75,normal_range,235.23,75,,,
+2026-02-02T10:00:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.307,0.041,0.318,1,10,0,0,0,50,0,50,60,normal_range,35.55,75,,,
+2026-02-02T11:22:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24694.55,15.24,1.0,0.0,0.0,1.313,0.584,0.604,1,11,22,0,0,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.0% of max,1458.75,82
+2026-02-02T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,25095.3,13.87,1.0,0.0,0.0,1.312,1.029,0.528,1,15,15,0,0,0,0,0,0,trending,0.0,0,Time exit,-2177.25,345
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,choppy,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,choppy,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,choppy,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,choppy,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78
+2026-02-02T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24880.8,15.34,1.0,0.0,0.0,1.037,0.166,0.521,1,9,30,0,0,62,0,62,75,conflicted,24.89,75,,,
+2026-02-02T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24849.9,15.19,1.0,0.0,0.0,1.037,0.041,0.318,1,10,0,0,0,75,0,75,60,conflicted,28.69,75,,,
+2026-02-02T10:55:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24794.05,15.1,1.0,0.0,0.0,1.037,0.184,0.237,1,10,55,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 22.2% after 43% decay,389.25,85
+2026-02-02T10:56:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24789.05,15.12,1.0,0.0,0.0,1.037,0.204,0.237,1,10,56,0,0,82,0,82,65,normal_range,25.81,75,,,
+2026-02-02T11:09:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24723.0,15.24,1.0,0.0,0.0,1.037,0.47,0.518,1,11,9,0,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1974.0,69
+2026-02-02T12:14:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24910.65,14.76,1.0,0.0,0.0,1.037,0.286,0.211,1,12,14,0,0,0,0,0,0,normal_range,0.0,0,Stop loss: premium up 52.2%,-1009.5,78

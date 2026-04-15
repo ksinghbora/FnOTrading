@@ -178,6 +178,13 @@ class SimulationEngine:
         """Generate one batch of ticks for all instruments."""
         now = datetime.now()
 
+        # Only generate ticks during market hours (9:15-15:30 IST) + weekdays
+        if now.weekday() >= 5:  # Saturday/Sunday
+            return
+        from datetime import time as _time
+        if now.time() < _time(9, 15) or now.time() > _time(15, 30):
+            return
+
         # Update prices with random walk (realistic per-second vol)
         self._nifty_spot = self._walk_price(self._nifty_spot, vol=0.00007)
         self._banknifty_spot = self._walk_price(self._banknifty_spot, vol=0.0001)

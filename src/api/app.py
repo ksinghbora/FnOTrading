@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import backtest, dashboard, orders, positions, risk, strategies
+from src.api.routes import advisor, backtest, dashboard, decisions, execution, orders, positions, risk, strategies
 from src.api.ws import live_feed
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -53,6 +53,9 @@ def create_app(is_production: bool = False) -> FastAPI:
     app.include_router(positions.router)
     app.include_router(risk.router)
     app.include_router(backtest.router)
+    app.include_router(advisor.router)
+    app.include_router(decisions.router)
+    app.include_router(execution.router)
 
     # ─── WebSocket Routes ──────────────────────────────────────────
     app.include_router(live_feed.router)

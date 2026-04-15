@@ -95,6 +95,41 @@ class InstrumentManager:
 
         logger.info(f"Loaded {len(self._instruments)} instruments into memory")
 
+    async def load_from_kite_api(self, api_key: str, access_token: str) -> None:
+        """Fallback: load instruments directly from Kite HTTP API when DB is unavailable."""
+        from kiteconnect import KiteConnect
+        kc = KiteConnect(api_key=api_key)
+        kc.set_access_token(access_token)
+
+        self._instruments.clear()
+        self._symbol_map.clear()
+
+        for exchange in ["NFO", "NSE"]:
+            try:
+                raw = kc.instruments(exchange)
+                for item in raw:
+                    inst = Instrument(
+                        instrument_token=item["instrument_token"],
+                        exchange=item.get("exchange", exchange),
+                        tradingsymbol=item.get("tradingsymbol", ""),
+                        name=item.get("name", ""),
+                        segment=item.get("segment", ""),
+                        instrument_type=InstrumentType(item["instrument_type"])
+                        if item.get("instrument_type", "") in InstrumentType.__members__
+                        else InstrumentType.EQ,
+                        strike=float(item.get("strike", 0)),
+                        expiry=item.get("expiry") or None,
+                        lot_size=int(item.get("lot_size", 1)),
+                        tick_size=float(item.get("tick_size", 0.05)),
+                        underlying=self._extract_underlying(item),
+                    )
+                    self._instruments[inst.instrument_token] = inst
+                    self._symbol_map[inst.tradingsymbol] = inst.instrument_token
+            except Exception as e:
+                logger.warning(f"Failed to fetch {exchange} instruments from Kite API: {e}")
+
+        logger.info(f"Loaded {len(self._instruments)} instruments from Kite API (DB fallback)")
+
     def get_by_token(self, token: int) -> Instrument | None:
         return self._instruments.get(token)
 

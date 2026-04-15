@@ -103,22 +103,25 @@ RISK_FREE_RATE = 0.07  # 7%
 # ─── NSE Holidays 2026 (update annually) ────────────────────────────
 # Format: list of (month, day) tuples
 NSE_HOLIDAYS_2026 = [
+    # Source: NSE official API /api/holiday-master (fetched 2026-03-26)
+    (1, 15),   # Municipal Corporation Election - Maharashtra
     (1, 26),   # Republic Day
-    (3, 10),   # Holi
-    (3, 30),   # Id-Ul-Fitr
-    (4, 2),    # Ram Navami
-    (4, 14),   # Dr. Ambedkar Jayanti
-    (4, 18),   # Good Friday
+    (2, 15),   # Mahashivratri
+    (3, 3),    # Holi
+    (3, 21),   # Id-Ul-Fitr (Ramadan Eid)
+    (3, 26),   # Shri Ram Navami
+    (3, 31),   # Shri Mahavir Jayanti
+    (4, 3),    # Good Friday
+    (4, 14),   # Dr. Baba Saheb Ambedkar Jayanti
     (5, 1),    # Maharashtra Day
-    (6, 6),    # Eid-Ul-Adha
-    (7, 6),    # Muharram
+    (5, 28),   # Bakri Id (Eid-Ul-Adha)
+    (6, 26),   # Muharram
     (8, 15),   # Independence Day
-    (8, 16),   # Janmashtami
+    (9, 14),   # Ganesh Chaturthi
     (10, 2),   # Mahatma Gandhi Jayanti
     (10, 20),  # Dussehra
-    (10, 21),  # Dussehra
-    (11, 9),   # Diwali (Laxmi Puja)
+    (11, 8),   # Diwali Laxmi Pujan
     (11, 10),  # Diwali (Balipratipada)
-    (11, 24),  # Guru Nanak Jayanti
+    (11, 24),  # Prakash Gurpurb Sri Guru Nanak Dev
     (12, 25),  # Christmas
 ]

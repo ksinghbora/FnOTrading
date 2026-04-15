@@ -1,0 +1,19 @@
+{
+  "portfolio": {
+    "test_total_pnl": 88287.38,
+    "test_mean_pnl": 88287.38,
+    "test_win_rate": 100.0,
+    "test_sharpe": 6.77,
+    "test_max_drawdown": -10390.49,
+    "train_mean_pnl": 5709.99,
+    "degradation_pct": -1446.2,
+    "num_windows": 1,
+    "windows": [
+      {
+        "train_pnl": 5709.99,
+        "test_pnl": 88287.38
+      }
+    ],
+    "verdict": "PASS"
+  }
+}

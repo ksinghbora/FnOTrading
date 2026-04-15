@@ -5,6 +5,7 @@ Profits from time decay (theta) when the market stays range-bound.
 """
 
 import logging
+import os
 from datetime import date, datetime, time
 from decimal import Decimal
 
@@ -13,7 +14,9 @@ from src.core.models import OHLC, Order, Signal, SignalLeg, Subscription, Tick
 from src.core.types import OptionType, OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
 from src.strategy.params import ShortStraddleParams
+from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
+from src.strategy.scoring import SHORT_STRADDLE_CONFIG, score_strategy
 from src.strategy.signals import entry_signal, exit_signal, adjust_signal, make_leg
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,8 @@ class ShortStraddleStrategy(BaseStrategy):
         super().__init__(strategy_id, params)
         self._entered = False
         self._stopped_for_day = False  # Prevents re-entry after stop loss
+        self._regime: RegimeDetector | None = None
+        self._paper_mode: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
         self._ce_token: int = 0
         self._pe_token: int = 0
         self._ce_symbol: str = ""
@@ -59,6 +64,7 @@ class ShortStraddleStrategy(BaseStrategy):
     async def on_start(self) -> None:
         """Initialize — determine expiry and subscribe to spot."""
         self._expiry = self.ctx.next_expiry(self.params.underlying)
+        self._regime = RegimeDetector(self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder)
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} lots={self.params.quantity_lots}"
@@ -89,17 +95,81 @@ class ShortStraddleStrategy(BaseStrategy):
 
     async def _try_entry(self) -> Signal | None:
         """Enter the straddle — sell ATM CE + ATM PE."""
+        # --- Signal scoring ---
+        vix = self.ctx.get_vix()
+        morning_range_pct = 0.0
+        move_from_open_pct = 0.0
+        if self._regime:
+            regime = self._regime.assess(self.params.underlying)
+            morning_range_pct = regime.morning_range_pct
+            move_from_open_pct = regime.move_from_open_pct
+        pcr_oi = 0.0
+        if self._expiry:
+            chain_for_score = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+            if chain_for_score:
+                pcr_oi = chain_for_score.pcr_oi
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 0
+        is_expiry_day = self._expiry == self.ctx.clock.now().date() if self._expiry else False
+
+        score, reasons = score_strategy(
+            SHORT_STRADDLE_CONFIG, vix, morning_range_pct, move_from_open_pct,
+            pcr_oi, is_expiry_day, dte,
+        )
+        reasons_str = ", ".join(reasons)
+        logger.info(
+            f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
+        )
+        if score < 60:
+            if self._paper_mode:
+                logger.info(
+                    f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
+                    f"< 60 — proceeding anyway (paper mode)"
+                )
+            else:
+                logger.info(
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60"
+                )
+                return None
+
         # VIX filter — skip entry in high-volatility environments
         vix_block = self._check_vix_filter()
         if vix_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
-            return None
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {vix_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+                return None
 
         # Trend filter — skip if market is trending >0.7% from open
         trend_block = self._check_trend_filter(self.params.underlying)
         if trend_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
-            return None
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {trend_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
+                return None
+
+        # PCR filter
+        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+        if pcr_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {pcr_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {pcr_block}")
+                return None
+
+        # Max pain filter
+        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+        if mp_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {mp_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {mp_block}")
+                return None
+
+        # Log IV skew and OI levels for research
+        self._log_iv_skew(self.params.underlying, self._expiry)
+        self._log_oi_levels(self.params.underlying, self._expiry)
 
         spot = self.ctx.get_spot_price(self.params.underlying)
         if spot <= 0:
@@ -306,6 +376,7 @@ class ShortStraddleStrategy(BaseStrategy):
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
         )
         self._entered = False
+        self._stopped_for_day = True
         legs = [
             make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
             make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
@@ -318,32 +389,59 @@ class ShortStraddleStrategy(BaseStrategy):
         return exit_signal(self.strategy_id, legs, reason)
 
     def _create_hedge_legs(self, chain) -> list[SignalLeg]:
-        """Create far OTM hedge legs for margin benefit and tail risk."""
-        legs = []
+        """Create far OTM hedge legs for margin benefit and tail risk.
+
+        IMPORTANT: Both CE and PE hedges must be added together.
+        A partial hedge (one wing only) creates asymmetric risk worse than no hedge.
+        If either leg cannot be found, no hedge legs are added.
+        """
         offset = self.params.hedge_offset_strikes
         strike_interval = 50 if self.params.underlying in ("NIFTY", "FINNIFTY") else 100
 
         hedge_ce_strike = self._atm_strike + (offset * strike_interval)
         hedge_pe_strike = self._atm_strike - (offset * strike_interval)
 
+        ce_token = 0
+        ce_symbol = ""
+        pe_token = 0
+        pe_symbol = ""
+
         for entry in chain.strikes:
             strike = float(entry.strike)
             if strike == hedge_ce_strike and entry.ce:
-                self._hedge_ce_token = entry.ce.instrument_token
-                self._hedge_ce_symbol = entry.ce.tradingsymbol
-                legs.append(make_leg(
-                    entry.ce.tradingsymbol, entry.ce.instrument_token,
-                    OrderSide.BUY, self._quantity
-                ))
-            elif strike == hedge_pe_strike and entry.pe:
-                self._hedge_pe_token = entry.pe.instrument_token
-                self._hedge_pe_symbol = entry.pe.tradingsymbol
-                legs.append(make_leg(
-                    entry.pe.tradingsymbol, entry.pe.instrument_token,
-                    OrderSide.BUY, self._quantity
-                ))
+                ce_token = entry.ce.instrument_token
+                ce_symbol = entry.ce.tradingsymbol
+            if strike == hedge_pe_strike and entry.pe:
+                pe_token = entry.pe.instrument_token
+                pe_symbol = entry.pe.tradingsymbol
 
-        return legs
+        if not ce_token:
+            logger.warning(
+                f"[{self.strategy_id}] Hedge CE not found at strike {hedge_ce_strike} — "
+                f"skipping hedge entirely to avoid asymmetric risk"
+            )
+            return []
+        if not pe_token:
+            logger.warning(
+                f"[{self.strategy_id}] Hedge PE not found at strike {hedge_pe_strike} — "
+                f"skipping hedge entirely to avoid asymmetric risk"
+            )
+            return []
+
+        # Both legs found — safe to create symmetric hedge
+        self._hedge_ce_token = ce_token
+        self._hedge_ce_symbol = ce_symbol
+        self._hedge_pe_token = pe_token
+        self._hedge_pe_symbol = pe_symbol
+
+        logger.info(
+            f"[{self.strategy_id}] Hedge legs: CE={ce_symbol} @ {hedge_ce_strike}, "
+            f"PE={pe_symbol} @ {hedge_pe_strike}"
+        )
+        return [
+            make_leg(ce_symbol, ce_token, OrderSide.BUY, self._quantity),
+            make_leg(pe_symbol, pe_token, OrderSide.BUY, self._quantity),
+        ]
 
     async def on_stop(self) -> None:
         if self._entered:

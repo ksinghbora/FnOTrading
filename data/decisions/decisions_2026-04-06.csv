@@ -1,0 +1,5 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-04-06T09:35:45.554149+05:30,portfolio_1,PREMIUM,ENTER,strangle,22696.35,26.28,0.8192510477220495,22600.0,0.42,0.0,0.0,0.0,1,9,35,0,0,90,0,90,75,high_vol_range,76.6,75,,,
+2026-04-06T10:09:02.784846+05:30,portfolio_1,PREMIUM,EXIT,strangle,22617.25,26.35,0.8694008845605882,22650.0,0.14,1.046,0.145,0.812,1,10,9,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.0%,690.0,33
+2026-04-06T10:09:02.874053+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,22617.3,26.34,0.8694008845605882,22650.0,0.14,1.047,0.145,0.812,1,10,9,0,0,65,0,65,65,conflicted,63.5,75,,,
+2026-04-06T15:01:12.516432+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,22958.7,25.55,1.2830844653161866,22850.0,0.47,0.965,1.657,0.234,1,15,1,0,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 60.3%,-2872.5,292

@@ -80,10 +80,8 @@ class PaperBrokerClient(BrokerClient):
             logger.warning(f"[PAPER] No LTP for {tradingsymbol}, cannot fill order")
             raise ValueError(f"No LTP available for {tradingsymbol}")
 
-        # Simulate slippage (0.05% for market orders)
-        if order_type == OrderType.MARKET:
-            slippage_factor = 1.0005 if side == OrderSide.BUY else 0.9995
-            fill_price *= slippage_factor
+        # No artificial slippage — fill at exact LTP
+        # Strategy decisions and fills use the same price source (chain builder via tick feed)
 
         order = {
             "order_id": order_id,

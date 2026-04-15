@@ -1,0 +1,421 @@
+{
+  "metadata": {
+    "source": "Invest Aaj For Kal - Anant Ladha Option Course",
+    "channel": "youtube.com/channel/UCWHCXSKASuSzao_pplQ7SPw",
+    "playlist_id": "PLp_BsC0lduVSK-oI63rspciNR_tdsp-Ft",
+    "total_videos": 17,
+    "author_credentials": "CFA, CA, CFP, LL.B.",
+    "market_context": "Indian markets - NSE/BSE, Nifty, BankNifty",
+    "purpose": "F&O LLM system prompt knowledge base"
+  },
+
+  "core_philosophy": {
+    "primary_goal": "Generate regular monthly income from options, not speculative one-time gains",
+    "seller_advantage": "Option sellers win ~70-80% of the time due to time decay (theta). The house always wins.",
+    "key_principle": "Sell options when IV is high, buy when IV is low. Never reverse this.",
+    "risk_mindset": "Define maximum loss BEFORE entering any trade. Never let a loss run without a stop.",
+    "capital_rule": "Never deploy more than 20-25% of capital in a single options position",
+    "consistency_over_bigwin": "A consistent 3-5% monthly return beats chasing 50% in one trade"
+  },
+
+  "foundational_concepts": {
+    "option_basics": {
+      "CE": "Call European - right to BUY underlying at strike price",
+      "PE": "Put European - right to SELL underlying at strike price",
+      "option_buyer": "Pays premium, has unlimited upside, limited loss (premium paid). Wins only on big directional moves.",
+      "option_seller": "Receives premium, has limited profit (premium received), theoretically unlimited loss. Wins when market stays stable.",
+      "lot_sizes": {
+        "Nifty": 50,
+        "BankNifty": 15,
+        "FinNifty": 40
+      },
+      "expiry": {
+        "Nifty": "Weekly - every Thursday",
+        "BankNifty": "Weekly - every Wednesday",
+        "monthly": "Last Thursday of month"
+      },
+      "moneyness": {
+        "ITM": "In The Money - strike has intrinsic value, expensive, high delta",
+        "ATM": "At The Money - strike nearest to current price, highest time value",
+        "OTM": "Out of The Money - no intrinsic value, cheap, low delta, preferred for selling"
+      }
+    },
+
+    "option_greeks": {
+      "delta": {
+        "definition": "How much option price moves for every 1 point move in underlying",
+        "range": "0 to 1 for calls, 0 to -1 for puts",
+        "ATM_delta": "~0.5",
+        "OTM_delta": "0.1 to 0.3 (preferred for selling - low risk)",
+        "ITM_delta": "0.7 to 1.0",
+        "trading_use": "Sell options with delta 0.15-0.25 for high probability of profit (~75-85%)",
+        "delta_neutral": "When total delta of position = 0. Market direction doesn't matter. Pure theta play."
+      },
+      "theta": {
+        "definition": "Time decay - how much option premium erodes every day",
+        "seller_benefit": "Theta works FOR option sellers. Every day that passes, seller profits.",
+        "acceleration": "Theta decay accelerates in last 7 days before expiry - maximum decay near expiry",
+        "ATM_theta": "Highest at ATM strikes - avoid buying ATM unless expecting big move",
+        "strategy": "Sell options with high theta. Weekly expiry = faster theta decay = faster income",
+        "anant_rule": "The last 2-3 days before expiry, 70% of remaining premium decays. Sellers' golden window."
+      },
+      "vega": {
+        "definition": "Sensitivity to Implied Volatility changes",
+        "seller_impact": "When IV drops, option premiums drop - PROFITS for seller even without price move",
+        "buyer_impact": "IV crush after events (budget, RBI policy, results) destroys option buyer premiums",
+        "rule": "Sell options when IV is HIGH (before events). Buy when IV is LOW.",
+        "iv_crush_events": ["Budget", "RBI Policy", "Quarterly Results", "Election Results"]
+      },
+      "gamma": {
+        "definition": "Rate of change of delta. How fast delta accelerates.",
+        "seller_risk": "High gamma = dangerous for sellers near expiry. Big moves can wipe out profit fast.",
+        "rule": "Square off selling positions by Wednesday/Thursday if expiry is near and market is volatile"
+      }
+    }
+  },
+
+  "option_chain_analysis": {
+    "structure": {
+      "left_side": "CALL options data",
+      "right_side": "PUT options data",
+      "center": "Strike prices in ascending order",
+      "ATM_identification": "Strike closest to current spot price. Usually highlighted."
+    },
+
+    "key_metrics": {
+      "open_interest": {
+        "definition": "Total outstanding contracts at a strike. Higher OI = more significant level.",
+        "call_OI_wall": "Strike with HIGHEST Call OI = strong RESISTANCE. Market unlikely to cross above it.",
+        "put_OI_wall": "Strike with HIGHEST Put OI = strong SUPPORT. Market unlikely to fall below it.",
+        "fresh_buildup": "OI increasing + price rising = fresh longs (bullish signal)",
+        "short_covering": "OI decreasing + price rising = shorts covering (weak/temporary bounce)",
+        "long_unwinding": "OI decreasing + price falling = longs exiting (bearish signal)",
+        "anant_rule": "The strikes with max OI define your trading range for the week/month"
+      },
+
+      "change_in_OI": {
+        "definition": "How OI changed from previous session",
+        "positive_change_calls": "New call writing = sellers expect market to stay below this strike (bearish above)",
+        "positive_change_puts": "New put writing = sellers expect market to stay above this strike (bullish below)",
+        "reading": "Track CHANGE in OI, not just absolute OI. Fresh positions matter more."
+      },
+
+      "put_call_ratio": {
+        "formula": "PCR = Total Put OI / Total Call OI",
+        "bullish": "PCR > 1.2 → More puts written → writers confident market will hold → BULLISH",
+        "bearish": "PCR < 0.8 → More calls written → writers expect market to stay down → BEARISH",
+        "neutral": "PCR 0.9 to 1.1 → Sideways market expected → good for Iron Condor / Strangle",
+        "contrarian_use": "Extreme PCR > 1.5 = overly bullish = potential reversal warning",
+        "anant_rule": "PCR between 1.0-1.3 is the sweet spot for selling both sides (non-directional)"
+      },
+
+      "implied_volatility": {
+        "definition": "Market's expectation of future volatility priced into options",
+        "high_iv": "IV > 20% = Premiums are fat. SELL options. This is the seller's market.",
+        "low_iv": "IV < 13% = Premiums are thin. Poor time to sell. Consider buying.",
+        "iv_skew": "Put IV usually higher than Call IV (market fears downside more) - NORMAL",
+        "reverse_skew": "Call IV > Put IV = Market expects upside breakout - unusual, be cautious",
+        "anant_rule": "Always check India VIX before selling. VIX below 14 = low premium, not worth selling naked"
+      },
+
+      "india_vix": {
+        "definition": "India's fear index. Measures expected volatility of Nifty over next 30 days.",
+        "low_vix": "VIX < 13 → Market calm → Low premiums → Prefer buying or avoid selling",
+        "medium_vix": "VIX 13-18 → Normal → Good for most selling strategies",
+        "high_vix": "VIX 18-25 → Elevated fear → Fat premiums → BEST for selling, but add protection",
+        "extreme_vix": "VIX > 25 → Panic → Premiums very fat BUT market can move violently. Sell spreads not naked.",
+        "market_range_formula": "Expected weekly range = (Spot × VIX × √7) / (√365 × 100)",
+        "example": "Nifty at 20000, VIX=15: Weekly range = (20000 × 15 × 2.646) / (19.1 × 100) = ±415 points"
+      },
+
+      "max_pain": {
+        "definition": "Strike at which maximum number of option buyers lose money at expiry",
+        "market_tendency": "Market gravitates toward max pain as expiry approaches (option writers are institutions)",
+        "use": "If max pain is 19400 and market is at 19600, lean bearish going into expiry",
+        "anant_rule": "Max pain is not a guarantee but a probability magnet. Use as bias, not as target."
+      }
+    },
+
+    "reading_process": {
+      "step1": "Check India VIX first - determines whether to buy or sell",
+      "step2": "Identify ATM strike - your reference point",
+      "step3": "Find highest Call OI strike = resistance",
+      "step4": "Find highest Put OI strike = support",
+      "step5": "Check PCR - market sentiment",
+      "step6": "Check OI changes - where fresh money is going",
+      "step7": "Calculate expected range using VIX",
+      "step8": "Identify your trading range for the week",
+      "step9": "Select strikes OUTSIDE this range for selling",
+      "step10": "Check max pain for expiry day bias"
+    }
+  },
+
+  "strategies": {
+
+    "covered_call": {
+      "description": "Own underlying stock + sell OTM call against it. Classic income strategy.",
+      "structure": "Long Stock + Short Call",
+      "best_market": "Neutral to mildly bullish. Works poorly in strongly trending markets.",
+      "income_potential": "1-3% monthly on stock value in normal volatility environments",
+
+      "entry_rules": {
+        "own_the_stock": "MUST own at least 1 lot equivalent of the stock (not index)",
+        "stock_selection": "Only on liquid F&O stocks you're happy holding long-term: RELIANCE, INFY, TCS, HDFC Bank, ITC, WIPRO",
+        "strike_selection": "Sell 2-5% OTM strike. Delta 0.25-0.35 range.",
+        "timing": "Sell on Monday morning after checking option chain. Capture full week theta.",
+        "iv_condition": "Only sell when IV is above stock's 30-day historical volatility",
+        "expiry": "Monthly expiry preferred for covered calls (more premium, less monitoring)"
+      },
+
+      "exit_rules": {
+        "profit_target": "Buy back call when 50-70% of premium is captured (don't be greedy for last 30%)",
+        "loss_rule": "If stock rises and call goes deep ITM, buy back call and roll up to higher strike",
+        "rolling_up": "If stock rises beyond strike: buy back current call, sell higher strike call for next expiry",
+        "early_exit": "If only 2-3 days to expiry and 80%+ premium captured, close and redeploy",
+        "stock_called_away": "If assigned, sell cash-secured put at lower strike to re-enter position (wheel strategy)"
+      },
+
+      "risk_management": {
+        "max_loss": "Unlimited downside on stock position (offset slightly by premium received)",
+        "opportunity_risk": "If stock rockets, you cap gains at strike price + premium",
+        "mitigation": "Only run on blue chip stocks you'd hold anyway. Premium is bonus income.",
+        "position_size": "Never more than 25% of portfolio in covered calls on single stock"
+      },
+
+      "wheel_strategy": {
+        "description": "Systematic covered call + cash secured put cycle for continuous income",
+        "step1": "Sell Cash Secured Put at support level (collect premium, potentially buy stock cheap)",
+        "step2": "If assigned stock, immediately sell Covered Call at resistance (collect more premium)",
+        "step3": "If call assigned, stock sold at profit. Restart with cash secured put.",
+        "income": "2-4% monthly with disciplined execution on quality stocks"
+      }
+    },
+
+    "short_strangle": {
+      "description": "Sell OTM Call + Sell OTM Put simultaneously. Pure non-directional income.",
+      "structure": "Short OTM Call + Short OTM Put (same expiry)",
+      "best_market": "Non-trending, sideways market. PCR near 1.0. VIX 14-20.",
+      "profit_condition": "Market stays between both strikes at expiry. Both options expire worthless.",
+
+      "entry_rules": {
+        "instrument": "Nifty or BankNifty weekly options (most liquid, tightest spreads)",
+        "call_strike": "Sell at or just above highest Call OI resistance",
+        "put_strike": "Sell at or just below highest Put OI support",
+        "delta_target": "Each leg delta 0.15-0.25 (individually)",
+        "premium_target": "Collect minimum 0.5% of index value total premium. Below this not worth the risk.",
+        "vix_condition": "VIX between 14-22. Below 14 = too little premium. Above 22 = too risky naked.",
+        "pcr_condition": "PCR 0.9-1.2 ideal",
+        "timing": "Enter Monday morning. Exit by Wednesday afternoon (avoid gamma risk near expiry)"
+      },
+
+      "exit_rules": {
+        "profit_target": "Close at 40-50% of max profit (premium collected). Don't hold to full expiry.",
+        "stop_loss_call": "If call side premium doubles (2x), close entire position",
+        "stop_loss_put": "If put side premium doubles (2x), close entire position",
+        "time_stop": "Mandatory close by Wednesday 2:30 PM regardless of P&L (avoid Thursday gamma risk)",
+        "adjustment": "If one side is threatened, roll it out to next strike or next expiry"
+      },
+
+      "risk_management": {
+        "naked_risk": "Unlimited loss if market moves violently beyond your strikes",
+        "solution": "Convert to Iron Condor by buying further OTM options as protection (recommended)",
+        "margin": "Requires significant margin - check SPAN margin on Sensibull before entry",
+        "max_positions": "Max 2 strangle positions simultaneously. Concentration kills."
+      }
+    },
+
+    "iron_condor": {
+      "description": "Short Strangle + protection wings. Defined risk, regular income. Anant's preferred strategy.",
+      "structure": "Sell OTM Call + Buy further OTM Call + Sell OTM Put + Buy further OTM Put",
+      "best_market": "Sideways to mildly trending. Best in medium VIX (14-20).",
+      "advantage_over_strangle": "Defined maximum loss. Lower margin requirement. Sleep well at night.",
+
+      "entry_rules": {
+        "instrument": "Nifty monthly options (more stable than weekly for condor)",
+        "sell_call": "Sell at resistance (highest Call OI strike). Delta ~0.20",
+        "buy_call": "Buy 200-300 points above sell call (protection wing)",
+        "sell_put": "Sell at support (highest Put OI strike). Delta ~0.20",
+        "buy_put": "Buy 200-300 points below sell put (protection wing)",
+        "net_premium": "Minimum ₹80-100 per lot after buying protection wings",
+        "wing_width": "Wider wings = more protection but less premium. 200 points standard for Nifty.",
+        "risk_reward": "Target 1:1.5 risk:reward minimum. Risk ₹100 to make ₹150 net premium."
+      },
+
+      "exit_rules": {
+        "profit_target": "Close at 50% of max profit. Don't be greedy.",
+        "adjustment_call_side": "If Nifty approaches sell call strike: roll call spread up by 200-300 points",
+        "adjustment_put_side": "If Nifty approaches sell put strike: roll put spread down by 200-300 points",
+        "max_loss_rule": "If position hits 2x premium received in loss, close entire position",
+        "time_based_exit": "Close entire position 5 days before expiry (avoid gamma risk)"
+      },
+
+      "monthly_income_example": {
+        "capital": "₹5,00,000",
+        "nifty_spot": 20000,
+        "sell_call": "20400 CE at ₹80",
+        "buy_call": "20600 CE at ₹35",
+        "sell_put": "19600 PE at ₹75",
+        "buy_put": "19400 PE at ₹30",
+        "net_premium": "₹80 + ₹75 - ₹35 - ₹30 = ₹90 per lot",
+        "lots": 2,
+        "gross_income": "₹90 × 50 × 2 = ₹9,000 per month",
+        "return": "1.8% monthly on capital deployed"
+      }
+    },
+
+    "zero_risk_strategy": {
+      "description": "PR Sundar's strategy - sell ATM option and buy 2x OTM options. Net zero or small credit.",
+      "structure": "Sell 1 ATM CE + Buy 2 OTM CEs (or same for puts)",
+      "logic": "Premium from selling 1 ATM finances buying 2 OTM. If market moves big, OTM gains > ATM loss.",
+      "best_market": "High volatility events - Budget, Results, RBI policy",
+      "anant_note": "Called '0 risk' because max loss is zero or small debit. But opportunity cost is real.",
+      "entry": "Enter before event when IV is elevated. ATM premium is fat.",
+      "exit": "Exit after event announcement when IV collapses (within 30-60 minutes of event)",
+      "key_risk": "IV crush post-event can make OTM worthless even if market moves moderately"
+    },
+
+    "dhrishyam_strategy": {
+      "description": "Non-directional strategy for sideways markets. Named after the movie (no direction).",
+      "structure": "Short Straddle (sell ATM CE + sell ATM PE) with dynamic adjustment",
+      "best_market": "Absolutely range-bound market. Low VIX. No major events.",
+      "premium_collection": "ATM options have maximum time value. Collect maximum premium.",
+      "adjustment_rule": "If market moves beyond 1 SD, convert one side to spread to limit loss",
+      "anant_rule": "Dhrishyam only when VIX < 14 and no event in next 7 days. Otherwise avoid.",
+      "risk": "Highest risk of all selling strategies. Market gaps can cause severe loss."
+    },
+
+    "bumper_returns_strategy": {
+      "description": "Directional option selling combined with option chain confirmation",
+      "setup": "Strong directional bias confirmed by option chain + TA breakout",
+      "entry": "Sell OTM options on the OPPOSITE side of direction (sell puts in uptrend, sell calls in downtrend)",
+      "confirmation_required": [
+        "OI addition on the direction side",
+        "PCR confirming direction",
+        "Price above/below key OI level",
+        "VIX not spiking"
+      ],
+      "strike": "Sell 1 SD away from current price in the direction of resistance",
+      "target": "3-5x premium in 2-3 days on directional moves",
+      "stop_loss": "2x premium collected is stop loss"
+    }
+  },
+
+  "option_buying_strategies": {
+    "when_to_buy": {
+      "iv_condition": "Buy ONLY when IV is low (below 30-day historical volatility)",
+      "vix_condition": "VIX below 14 = good time to buy options",
+      "event_based": "Buy before event when IV is low, sell after when IV explodes",
+      "trend_based": "Strong trending market where 1 SD moves are common"
+    },
+
+    "kunal_saraogi_strategy": {
+      "name": "Regular income with option buying",
+      "approach": "Buy options at strong support/resistance. Tight stop loss. Multiple small wins.",
+      "key_rule": "Never spend more than 1-2% of capital on single option buy",
+      "target": "3:1 reward:risk minimum on every option buy",
+      "instrument": "Only buy Nifty/BankNifty options, not stocks (more liquid)"
+    },
+
+    "brahmastra_2_strategy": {
+      "description": "Intraday option buying with momentum",
+      "setup": "Wait for 9:15-9:30 AM opening range. Enter breakout of opening range high/low.",
+      "instrument": "BankNifty weekly options (most volatile, best for intraday)",
+      "strike": "Buy ATM or 1 strike OTM in the direction of breakout",
+      "stop_loss": "Opening range opposite boundary",
+      "target": "2x the opening range size",
+      "time_stop": "Exit by 1:30 PM if target not hit"
+    },
+
+    "scalping_strategy": {
+      "description": "Quick 5-15 minute option trades with ₹10,000 capital",
+      "instrument": "BankNifty or Nifty weekly (0DTE or 1DTE near expiry)",
+      "entry": "Enter on 5-minute chart breakout with volume confirmation",
+      "target": "20-30% gain on option premium",
+      "stop_loss": "10-15% loss on option premium",
+      "max_trades": "3-4 per day maximum",
+      "capital_rule": "Never deploy more than 30% of scalping capital in one trade",
+      "anant_warning": "Scalping is highest risk. Suitable only for experienced traders. Theta kills on 0DTE."
+    }
+  },
+
+  "risk_management_rules": {
+    "golden_rules": [
+      "Never sell naked options without a stop loss or protection wing",
+      "Never average a losing option selling position - it WILL kill your account",
+      "Close losing positions at 2x premium received - no exceptions",
+      "Never deploy more than 30% capital in options at any time",
+      "Keep 30% cash for adjustments and recovery",
+      "Track each trade in a journal - without data you cannot improve",
+      "Never trade options on Budget/RBI day without hedges in place",
+      "One bad trade can wipe 3 months of income - protect capital first"
+    ],
+
+    "position_sizing": {
+      "per_trade_max": "2-3% of total trading capital at risk per trade",
+      "portfolio_options_max": "25-30% of total portfolio in options",
+      "single_strategy_max": "Not more than 2 Iron Condors or 2 Strangles simultaneously",
+      "monthly_income_target": "Realistic target: 2-4% monthly on capital deployed in options"
+    },
+
+    "common_mistakes_anant": [
+      "Holding losing positions hoping for recovery - options decay, never hope",
+      "Selling options in trending markets without direction bias",
+      "Ignoring India VIX before entering selling trades",
+      "Not booking profit at 50% - greed kills consistency",
+      "Trading without checking option chain first",
+      "Using full capital in first week of month, nothing left for adjustments",
+      "Confusing option buying with selling psychology - they are completely different games",
+      "Trading BankNifty without understanding its volatility vs Nifty"
+    ],
+
+    "adjustment_techniques": {
+      "rolling": "Move strike to next expiry or further OTM strike when position is threatened",
+      "converting_to_spread": "When naked position threatened, buy protection to convert to spread",
+      "delta_hedging": "Buy/sell futures to neutralise directional risk when large move happens",
+      "stop_and_reverse": "Rare but valid: close losing position and take opposite position if bias changes"
+    }
+  },
+
+  "market_regime_rules": {
+    "trending_market": {
+      "vix_indicator": "VIX rising + directional price action",
+      "avoid": "Short strangle, Iron Condor",
+      "prefer": "Directional spreads (Bull Call Spread or Bear Put Spread), Covered calls on the trend side",
+      "pcr_signal": "PCR moving sharply in one direction"
+    },
+
+    "sideways_market": {
+      "vix_indicator": "VIX stable 12-18",
+      "prefer": "Iron Condor, Short Strangle, Covered Call",
+      "pcr_signal": "PCR stable around 1.0-1.2",
+      "oi_signal": "High OI walls on both sides with no breakout attempts"
+    },
+
+    "high_volatility_market": {
+      "vix_indicator": "VIX > 22",
+      "avoid": "Naked selling, Short Straddle",
+      "prefer": "Defined risk spreads, PR Sundar zero-risk structure, or simply stay out",
+      "opportunity": "Fat premiums available but need strict discipline"
+    }
+  },
+
+  "llm_system_prompt": {
+    "usage": "Copy the section below as system prompt for your F&O LLM chatbot",
+    "prompt": "You are an expert F&O trading assistant trained on Anant Ladha's (Invest Aaj For Kal) option trading methodology for Indian markets (NSE/BSE). You have deep knowledge of: (1) Option chain analysis - reading OI, change in OI, PCR, IV, max pain and India VIX to determine market range and sentiment; (2) Option selling strategies - Covered Call, Short Strangle, Iron Condor, Dhrishyam Strategy, Zero Risk structure; (3) Option buying strategies - Brahmastra, Kunal Saraogi regular income method, scalping with small capital; (4) Greeks - Delta (target 0.15-0.25 for selling), Theta (seller's friend), Vega (sell high IV, avoid low IV), Gamma (manage near expiry); (5) Risk management - 2x stop loss on premium, 50% profit booking, never average losers, max 30% capital in options. When answering: Always check VIX condition first. Always reference option chain signals. Give specific strikes/deltas where relevant. Flag high-risk conditions. Provide India-specific context (Nifty lot=50, BankNifty lot=15). Default to capital preservation over aggressive returns."
+  },
+
+  "quick_reference_checklist": {
+    "before_every_trade": [
+      "What is India VIX today? (< 14 = buy, 14-20 = sell, > 20 = spreads only)",
+      "What is PCR? (< 0.8 bearish, 0.8-1.2 neutral, > 1.2 bullish)",
+      "Where is highest Call OI? (resistance)",
+      "Where is highest Put OI? (support)",
+      "Is my sell strike OUTSIDE the OI support-resistance range?",
+      "What is my maximum loss if wrong?",
+      "Have I set my stop loss order?",
+      "Is there any major event this week? (Budget/RBI/Results)",
+      "Is today within 2 days of expiry? (if yes, extreme caution for selling)",
+      "What % of my capital is already deployed in options?"
+    ]
+  }
+}

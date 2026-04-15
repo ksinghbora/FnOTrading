@@ -1,0 +1,71 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,3.053,0,9,30,1,1,55,0,55,75,pre_market,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25753.25,14.88,1.0,0.0,0.0,1.035,0.16,3.053,0,9,34,1,1,0,0,0,0,pre_market,0.0,0,Stop loss: premium up 67.4% (gamma-tightened),-90.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,3.029,0,9,35,1,1,42,0,42,75,pre_market,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,3.029,0,9,36,1,1,0,0,0,0,pre_market,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,pre_market,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,pre_market,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,25773.7,14.8,7.188842069945528,0.0,0.0,1.306,0.081,4.749,0,9,30,1,1,30,0,30,75,trending,241.1,75,,,
+2026-02-03T10:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,25678.2,14.57,4.323838878303631,0.0,0.0,1.304,0.451,0.353,0,10,5,1,1,50,0,50,60,normal_range,29.0,75,,,
+2026-02-03T11:32:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,25835.85,13.8,3.603439474645228,0.0,0.0,1.307,0.16,0.162,0,11,32,1,1,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.6% of max,1998.75,87
+2026-02-03T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,25746.5,12.77,3.6129273040631857,0.0,0.0,1.305,0.186,0.287,0,15,15,1,1,0,0,0,0,low_vol_range,0.0,0,Time exit,65.25,345
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,choppy,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,choppy,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2
+2026-02-03T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25773.7,14.8,1.0,0.0,0.0,1.036,0.081,4.749,0,9,30,1,1,55,0,55,75,conflicted,1.78,75,,,
+2026-02-03T09:34:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25755.15,14.88,1.0,0.0,0.0,1.036,0.153,4.749,0,9,34,1,1,0,0,0,0,choppy,0.0,0,Stop loss: premium up 56.2% (gamma-tightened),-75.0,4
+2026-02-03T09:35:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25753.45,14.94,1.0,0.0,0.0,1.035,0.16,2.124,0,9,35,1,1,42,0,42,75,choppy,6.36,75,,,
+2026-02-03T09:36:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25770.5,14.95,1.0,0.0,0.0,1.036,0.093,2.124,0,9,36,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 126.7% (gamma-tightened),-345.0,1
+2026-02-03T10:05:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25678.2,14.57,1.0,0.0,0.0,1.036,0.451,0.353,0,10,5,1,1,50,0,50,60,choppy,0.97,75,,,
+2026-02-03T10:07:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25661.7,14.58,1.0,0.0,0.0,1.036,0.515,0.353,0,10,7,1,1,0,0,0,0,choppy,0.0,0,Trend stop: lost 64.9%,-47.25,2

@@ -1,0 +1,84 @@
+{
+  "baseline_filters_off": {
+    "short_straddle": {
+      "test_total_pnl": 134805.21,
+      "test_mean_pnl": 19257.89,
+      "test_win_rate": 100.0,
+      "test_sharpe": 12.9,
+      "test_max_drawdown": -2483.37,
+      "test_profit_factor": 5.64,
+      "train_mean_pnl": 40418.26,
+      "degradation_pct": 52.4,
+      "num_windows": 7
+    },
+    "short_strangle": {
+      "test_total_pnl": 68375.95,
+      "test_mean_pnl": 9767.99,
+      "test_win_rate": 100.0,
+      "test_sharpe": 9.85,
+      "test_max_drawdown": -2087.66,
+      "test_profit_factor": 4.07,
+      "train_mean_pnl": 21910.16,
+      "degradation_pct": 55.4,
+      "num_windows": 7
+    },
+    "iron_condor": {
+      "test_total_pnl": 93246.97,
+      "test_mean_pnl": 13321.0,
+      "test_win_rate": 100.0,
+      "test_sharpe": 14.39,
+      "test_max_drawdown": -1084.46,
+      "test_profit_factor": 7.89,
+      "train_mean_pnl": 25857.27,
+      "degradation_pct": 48.5,
+      "num_windows": 7
+    }
+  },
+  "filters_on": {
+    "short_straddle": {
+      "test_total_pnl": 134805.21,
+      "test_mean_pnl": 19257.89,
+      "test_win_rate": 100.0,
+      "test_sharpe": 12.9,
+      "test_max_drawdown": -2483.37,
+      "test_profit_factor": 5.64,
+      "train_mean_pnl": 40418.26,
+      "degradation_pct": 52.4,
+      "num_windows": 7
+    },
+    "short_strangle": {
+      "test_total_pnl": 68375.95,
+      "test_mean_pnl": 9767.99,
+      "test_win_rate": 100.0,
+      "test_sharpe": 9.85,
+      "test_max_drawdown": -2087.66,
+      "test_profit_factor": 4.07,
+      "train_mean_pnl": 21910.16,
+      "degradation_pct": 55.4,
+      "num_windows": 7
+    },
+    "iron_condor": {
+      "test_total_pnl": 93246.97,
+      "test_mean_pnl": 13321.0,
+      "test_win_rate": 100.0,
+      "test_sharpe": 14.39,
+      "test_max_drawdown": -1084.46,
+      "test_profit_factor": 7.89,
+      "train_mean_pnl": 25857.27,
+      "degradation_pct": 48.5,
+      "num_windows": 7
+    }
+  },
+  "trend_debit_spread": {
+    "test_total_pnl": -11154.85,
+    "test_mean_pnl": -1593.55,
+    "test_win_rate": 28.6,
+    "test_sharpe": -1.17,
+    "test_max_drawdown": -17541.84,
+    "test_profit_factor": 0.74,
+    "train_mean_pnl": -7163.26,
+    "degradation_pct": 77.8,
+    "num_windows": 7
+  },
+  "combined_test_pnl": 285273.28
+}

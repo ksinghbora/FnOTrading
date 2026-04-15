@@ -25,14 +25,16 @@ def calculate_metrics(
         return _empty_metrics()
 
     pnl = np.array(pnl_curve, dtype=float)
-    equity = initial_capital + pnl
+    cum_pnl = np.cumsum(pnl)
+    equity = initial_capital + cum_pnl
 
     # ─── Returns ─────────────────────────────────────────────────
-    total_pnl = float(pnl[-1])
+    # pnl_curve is daily P&L values, not cumulative — sum for total
+    total_pnl = float(pnl.sum())
     total_return_pct = (total_pnl / initial_capital) * 100
 
-    # Daily returns (approximate)
-    returns = np.diff(pnl)
+    # Daily returns
+    returns = pnl  # Each entry is already a daily P&L
     if len(returns) == 0:
         returns = np.array([0.0])
 
@@ -95,7 +97,10 @@ def calculate_metrics(
 
 
 def _compute_trade_pnls(trades: list[dict]) -> list[float]:
-    """Estimate P&L per trade from trade list."""
+    """Estimate P&L per trade from trade list.
+
+    Handles both BUY-first (long) and SELL-first (short/premium selling) positions.
+    """
     pnls = []
     positions: dict[str, list[dict]] = {}
 
@@ -108,22 +113,28 @@ def _compute_trade_pnls(trades: list[dict]) -> list[float]:
         if symbol not in positions:
             positions[symbol] = []
 
-        if side == "BUY":
-            positions[symbol].append({"qty": qty, "price": price, "side": "BUY"})
-        else:
-            # Match with existing buy positions
-            remaining = qty
-            for pos in positions[symbol]:
-                if pos["side"] == "BUY" and pos["qty"] > 0:
-                    close_qty = min(remaining, pos["qty"])
+        opposite = "SELL" if side == "BUY" else "BUY"
+
+        # Try to match with opposite-side positions (close existing)
+        remaining = qty
+        for pos in positions[symbol]:
+            if pos["side"] == opposite and pos["qty"] > 0:
+                close_qty = min(remaining, pos["qty"])
+                if opposite == "BUY":
+                    # Closing a long: sold at price, bought at pos["price"]
                     pnl = close_qty * (price - pos["price"])
-                    pnls.append(pnl)
-                    pos["qty"] -= close_qty
-                    remaining -= close_qty
-                    if remaining == 0:
-                        break
-            if remaining > 0:
-                positions[symbol].append({"qty": remaining, "price": price, "side": "SELL"})
+                else:
+                    # Closing a short: bought at price, sold at pos["price"]
+                    pnl = close_qty * (pos["price"] - price)
+                pnls.append(pnl)
+                pos["qty"] -= close_qty
+                remaining -= close_qty
+                if remaining == 0:
+                    break
+
+        # Any unmatched quantity opens a new position
+        if remaining > 0:
+            positions[symbol].append({"qty": remaining, "price": price, "side": side})
 
     return pnls
 

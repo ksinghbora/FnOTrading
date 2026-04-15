@@ -1,6 +1,7 @@
 """Persistence layer for tick and OHLC data to TimescaleDB."""
 
 import logging
+import time
 from datetime import datetime
 
 from sqlalchemy import text
@@ -17,6 +18,8 @@ class MarketDataStore:
 
     Uses raw SQL inserts for performance (bypassing ORM overhead
     on the hot path of tick ingestion).
+    Gracefully skips DB writes when database is unavailable to avoid
+    blocking the event loop.
     """
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession], event_bus: EventBus):
@@ -25,6 +28,9 @@ class MarketDataStore:
         self._tick_buffer: list[Tick] = []
         self._candle_buffer: list[OHLC] = []
         self._buffer_size = 100  # Flush every N ticks
+        self._db_available = True
+        self._db_last_check = 0.0  # timestamp of last DB availability check
+        self._db_retry_interval = 60.0  # seconds between DB retry attempts
 
         self._event_bus.subscribe(EventType.TICK, self._on_tick)
         self._event_bus.subscribe(EventType.CANDLE_CLOSED, self._on_candle)
@@ -50,9 +56,25 @@ class MarketDataStore:
         ohlc = OHLC(**candle_data)
         await self._store_candle(ohlc)
 
+    def _should_skip_db(self) -> bool:
+        """Check if DB writes should be skipped (DB unavailable)."""
+        if self._db_available:
+            return False
+        now = time.monotonic()
+        if now - self._db_last_check < self._db_retry_interval:
+            return True  # Still in cooldown, skip
+        # Cooldown expired, allow retry
+        return False
+
     async def _flush_ticks(self) -> None:
         """Batch insert buffered ticks into TimescaleDB."""
         if not self._tick_buffer:
+            return
+
+        if self._should_skip_db():
+            # Drop old ticks to prevent memory leak when DB is down
+            if len(self._tick_buffer) > 1000:
+                self._tick_buffer = self._tick_buffer[-100:]
             return
 
         ticks = self._tick_buffer.copy()
@@ -86,11 +108,20 @@ class MarketDataStore:
                     await session.commit()
             # Clear only after successful commit
             self._tick_buffer = self._tick_buffer[len(ticks):]
+            if not self._db_available:
+                logger.info("TimescaleDB connection restored — resuming tick persistence")
+                self._db_available = True
         except Exception:
-            logger.exception(f"Failed to flush {len(ticks)} ticks — will retry next cycle")
+            self._db_available = False
+            self._db_last_check = time.monotonic()
+            self._tick_buffer = []  # Drop ticks to prevent memory buildup
+            logger.warning("TimescaleDB unavailable — skipping tick persistence (retry in 60s)")
 
     async def _store_candle(self, ohlc: OHLC) -> None:
         """Insert a completed candle into TimescaleDB."""
+        if self._should_skip_db():
+            return
+
         try:
             async with self._session_factory() as session:
                 sql = text(
@@ -115,8 +146,13 @@ class MarketDataStore:
                     },
                 )
                 await session.commit()
+            if not self._db_available:
+                logger.info("TimescaleDB connection restored — resuming candle persistence")
+                self._db_available = True
         except Exception:
-            logger.exception("Failed to store candle")
+            self._db_available = False
+            self._db_last_check = time.monotonic()
+            logger.warning("TimescaleDB unavailable — skipping candle persistence")
 
     async def flush(self) -> None:
         """Force flush all buffers (call on shutdown)."""

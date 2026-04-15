@@ -26,12 +26,16 @@ dependencies = [
     "apscheduler>=3.10.0",
     # HTTP Client
     "httpx>=0.28.0",
+    # AI Advisor
+    "anthropic>=0.40.0",
     # Logging
     "structlog>=24.4.0",
     # Option Pricing
     "py_vollib>=1.0.1",
     # Timezone
     "pytz>=2024.1",
+    "pyotp>=2.9.0",
+    "breeze-connect>=1.0.67",
 ]
 
 [project.optional-dependencies]

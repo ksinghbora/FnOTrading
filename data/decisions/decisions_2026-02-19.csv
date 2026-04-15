@@ -1,0 +1,51 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,pre_market,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,pre_market,0.0,0,Stop loss: premium up 26.7%,-1234.5,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,pre_market,37.28,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,pre_market,0.0,0,Time exit,1075.5,180
+2026-02-19T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.301,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,5.63,75,,,
+2026-02-19T09:37:00+05:30,portfolio_replay,PREMIUM,EXIT,strangle,25790.85,12.19,1.0,0.0,0.0,1.304,0.208,0.254,5,9,37,3,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 14.0%,59.25,7
+2026-02-19T09:38:00+05:30,portfolio_replay,PREMIUM,ENTER,strangle,25783.0,12.23,1.0,0.0,0.0,1.3,0.238,0.254,5,9,38,3,0,87,0,87,75,low_vol_range,4.69,75,,,
+2026-02-19T10:02:00+05:30,portfolio_replay,PREMIUM,EXIT,strangle,25768.0,12.23,1.0,0.0,0.0,1.305,0.296,0.158,5,10,2,3,0,0,0,0,0,low_vol_range,0.0,0,Profit target: premium decayed 13.4%,47.25,24
+2026-02-19T12:15:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.312,0.96,0.266,5,12,15,3,0,38,0,38,60,normal_range,36.3,75,,,
+2026-02-19T15:15:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.309,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1218.75,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,normal_range,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,low_vol_range,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,normal_range,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,low_vol_range,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,conflicted,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,conflicted,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180
+2026-02-19T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,25807.3,12.2,1.0,0.0,0.0,1.036,0.144,0.22,5,9,30,3,0,100,0,100,75,conflicted,61.58,75,,,
+2026-02-19T11:24:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,25683.25,12.71,1.0,0.0,0.0,1.036,0.624,0.138,5,11,24,3,0,0,0,0,0,trending,0.0,0,Stop loss: premium up 25.8%,-1190.25,114
+2026-02-19T12:15:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,25596.5,13.38,1.0,0.0,0.0,1.036,0.96,0.266,5,12,15,3,0,63,0,63,60,trending,37.26,75,,,
+2026-02-19T15:15:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,25446.6,13.46,1.0,0.0,0.0,1.036,1.54,0.337,5,15,15,3,0,0,0,0,0,trending,0.0,0,Time exit,1077.0,180

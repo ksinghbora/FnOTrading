@@ -206,6 +206,10 @@ class StrategyRunner:
 
     async def _process_signal(self, signal: Signal) -> None:
         """Convert signal to order requests and route through OMS."""
+        # Guard: never place orders on holidays or outside market hours
+        if not self._clock.is_market_open():
+            logger.warning(f"Signal from {signal.strategy_id} ignored — market not open")
+            return
         try:
             await self._order_callback(signal)
         except Exception as e:

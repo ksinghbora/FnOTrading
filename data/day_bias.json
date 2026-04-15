@@ -1,0 +1,17 @@
+{
+  "date": "2026-04-15",
+  "risk_level": "MEDIUM",
+  "mode_bias": "no_opinion",
+  "sizing_multiplier": 1.0,
+  "premium_score_adj": 5,
+  "premium_confidence": 0.6,
+  "trend_score_adj": -3,
+  "trend_confidence": 0.4,
+  "key_levels": {
+    "support": 0.0,
+    "resistance": 0.0,
+    "max_pain": 0.0
+  },
+  "reasoning": "Mixed signals creating cautious optimism for premium selling: 1) PEACE TALKS THEME: Multiple headlines point to de-escalation ('Stocks Erasing War Losses on Hopes Over Talks', 'US-Iran Talks') \u2192 reduces geopolitical risk premium \u2192 benefits option sellers as IV may compress. 2) US MARKETS STRONG: S&P +1.18%, NASDAQ +1.96%, US VIX down -3.97% signals risk-on globally \u2192 likely positive gap opening for NIFTY \u2192 supportive for premium strategies. 3) FII/DII FLOWS: FII net selling -1983cr is moderate (not extreme), while DII buying +2432cr provides good counter-support \u2192 suggests managed selling pressure rather than panic. 4) CRUDE OIL: At 95.21 (+0.44%) remains elevated for India as net importer \u2192 underlying inflation pressure limits upside euphoria \u2192 caps how bullish markets can get. 5) TREND LEG CONCERN: Peace talks and de-escalation typically lead to mean reversion rather than strong directional moves \u2192 reduces breakout probability \u2192 slight negative for trend strategies. 6) DXY stable at 98.19 (+0.07%) \u2192 no major EM flow disruption expected. Overall: peace dividend supports premium collection through IV compression, but reduces directional conviction for trend following.",
+  "confidence": 0.6
+}

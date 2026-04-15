@@ -1,0 +1,416 @@
+{
+  "strategy": "portfolio",
+  "strategy_id": "portfolio_replay",
+  "underlying": "NIFTY",
+  "data_source": "replay",
+  "snapshot_dir": "data/chain_snapshots",
+  "spot_csv": "data/nifty_spot_minute.csv",
+  "period": "2026-02-24 to 2026-03-25",
+  "num_days": 21,
+  "lots": 1,
+  "lot_size": 75,
+  "initial_capital": 1000000,
+  "params": {
+    "underlying": "NIFTY",
+    "quantity_lots": 1,
+    "entry_time": "09:30:00",
+    "exit_time": "15:15:00",
+    "max_loss": "5000",
+    "product": "NRML",
+    "use_weekly_expiry": true,
+    "vix_entry_max": 18.0,
+    "vix_reduce_above": 15.0,
+    "pcr_filter_enabled": true,
+    "pcr_oi_min": 0.7,
+    "pcr_oi_max": 1.5,
+    "max_pain_filter_enabled": true,
+    "max_pain_proximity_pct": 3.0,
+    "signal_threshold": 60,
+    "phase1_threshold": 75,
+    "strangle_vix_max": 12.0,
+    "trend_switch_threshold": 70,
+    "trend_switch_enabled": true,
+    "premium_call_delta": 0.15,
+    "premium_put_delta": -0.15,
+    "premium_stop_loss_pct": 30.0,
+    "premium_trail_stop_pct": 15.0,
+    "premium_profit_target_pct": 15.0,
+    "premium_hedge": true,
+    "premium_hedge_offset": 5,
+    "ic_short_call_delta": 0.15,
+    "ic_short_put_delta": -0.15,
+    "ic_wing_width_strikes": 5,
+    "ic_stop_loss_pct": 40.0,
+    "ic_profit_target_pct": 25.0,
+    "gamma_exit_threshold": 60.0,
+    "gamma_expiry_multiplier": 2.0,
+    "theta_gamma_min_ratio": 0.0,
+    "trend_spread_width_strikes": 2,
+    "trend_stop_loss_pct": 50.0,
+    "trend_profit_target_pct": 50.0,
+    "trend_trailing_stop_pct": 25.0,
+    "breakout_confirmation_pct": 0.5
+  },
+  "metrics": {
+    "total_pnl": 22.79,
+    "total_return_pct": 0.0,
+    "max_drawdown": -2761.54,
+    "max_drawdown_pct": -0.28,
+    "sharpe_ratio": 0.15,
+    "sortino_ratio": 0.37,
+    "calmar_ratio": 0.01,
+    "num_trades": 200,
+    "win_rate": 45.5,
+    "avg_win": 4724.84,
+    "avg_loss": -1478.16,
+    "profit_factor": 2.66,
+    "max_equity": 1002147.23,
+    "min_equity": 998859.89,
+    "total_charges": 1265.43,
+    "num_days": 21,
+    "snapshot_hits": 355,
+    "bs_fallbacks": 7520,
+    "snapshot_coverage_pct": 4.5
+  },
+  "daily_results": [
+    {
+      "date": "2026-02-24",
+      "day_of_week": "Tuesday",
+      "spot_open": 25641.8,
+      "spot_close": 25460.25,
+      "pnl": -206.9,
+      "charges": 1.4,
+      "trades": 8,
+      "equity": 999793.1,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-02-25",
+      "day_of_week": "Wednesday",
+      "spot_open": 25512.6,
+      "spot_close": 25478.65,
+      "pnl": 304.01,
+      "charges": 16.24,
+      "trades": 8,
+      "equity": 1000097.11,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-02-26",
+      "day_of_week": "Thursday",
+      "spot_open": 25556.3,
+      "spot_close": 25493.3,
+      "pnl": 485.01,
+      "charges": 13.74,
+      "trades": 8,
+      "equity": 1000582.12,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-02-27",
+      "day_of_week": "Friday",
+      "spot_open": 25459.85,
+      "spot_close": 25181.8,
+      "pnl": -258.15,
+      "charges": 17.4,
+      "trades": 8,
+      "equity": 1000323.97,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-02",
+      "day_of_week": "Monday",
+      "spot_open": 24659.25,
+      "spot_close": 24849.75,
+      "pnl": 801.09,
+      "charges": 112.41,
+      "trades": 12,
+      "equity": 1001125.06,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-04",
+      "day_of_week": "Wednesday",
+      "spot_open": 24388.8,
+      "spot_close": 24473.95,
+      "pnl": -12.16,
+      "charges": 93.16,
+      "trades": 12,
+      "equity": 1001112.9,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-05",
+      "day_of_week": "Thursday",
+      "spot_open": 24615.95,
+      "spot_close": 24737.45,
+      "pnl": 1113.57,
+      "charges": 94.68,
+      "trades": 12,
+      "equity": 1002226.47,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-06",
+      "day_of_week": "Friday",
+      "spot_open": 24656.4,
+      "spot_close": 24469.4,
+      "pnl": 209.02,
+      "charges": 85.73,
+      "trades": 12,
+      "equity": 1002435.49,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-09",
+      "day_of_week": "Monday",
+      "spot_open": 23868.05,
+      "spot_close": 24005.8,
+      "pnl": -430.36,
+      "charges": 25.36,
+      "trades": 12,
+      "equity": 1002005.13,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-10",
+      "day_of_week": "Tuesday",
+      "spot_open": 24280.8,
+      "spot_close": 24286.15,
+      "pnl": -197.4,
+      "charges": 2.4,
+      "trades": 8,
+      "equity": 1001807.73,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-11",
+      "day_of_week": "Wednesday",
+      "spot_open": 24231.85,
+      "spot_close": 23848.2,
+      "pnl": -1140.11,
+      "charges": 134.36,
+      "trades": 12,
+      "equity": 1000667.62,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-12",
+      "day_of_week": "Thursday",
+      "spot_open": 23674.85,
+      "spot_close": 23639.35,
+      "pnl": 1118.42,
+      "charges": 95.83,
+      "trades": 12,
+      "equity": 1001786.04,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-13",
+      "day_of_week": "Friday",
+      "spot_open": 23462.5,
+      "spot_close": 23170.9,
+      "pnl": 134.77,
+      "charges": 105.23,
+      "trades": 12,
+      "equity": 1001920.81,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-16",
+      "day_of_week": "Monday",
+      "spot_open": 23116.1,
+      "spot_close": 23355.6,
+      "pnl": 2147.23,
+      "charges": 43.52,
+      "trades": 12,
+      "equity": 1004068.04,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-17",
+      "day_of_week": "Tuesday",
+      "spot_open": 23493.2,
+      "spot_close": 23558.8,
+      "pnl": 0.0,
+      "charges": 0.0,
+      "trades": 0,
+      "equity": 1004068.04,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-18",
+      "day_of_week": "Wednesday",
+      "spot_open": 23632.9,
+      "spot_close": 23764.1,
+      "pnl": 702.31,
+      "charges": 98.69,
+      "trades": 12,
+      "equity": 1004770.35,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-19",
+      "day_of_week": "Thursday",
+      "spot_open": 23197.75,
+      "spot_close": 23087.85,
+      "pnl": 65.54,
+      "charges": 112.96,
+      "trades": 12,
+      "equity": 1004835.89,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-20",
+      "day_of_week": "Friday",
+      "spot_open": 23110.15,
+      "spot_close": 23134.65,
+      "pnl": -614.31,
+      "charges": 69.06,
+      "trades": 12,
+      "equity": 1004221.58,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-23",
+      "day_of_week": "Monday",
+      "spot_open": 22824.35,
+      "spot_close": 22492.65,
+      "pnl": 1781.7,
+      "charges": 48.3,
+      "trades": 12,
+      "equity": 1006003.28,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-24",
+      "day_of_week": "Tuesday",
+      "spot_open": 22878.45,
+      "spot_close": 22958.4,
+      "pnl": 0.0,
+      "charges": 0.0,
+      "trades": 0,
+      "equity": 1006003.28,
+      "data_source": "bs_fallback"
+    },
+    {
+      "date": "2026-03-25",
+      "day_of_week": "Wednesday",
+      "spot_open": 23064.4,
+      "spot_close": 23309.0,
+      "pnl": 22.79,
+      "charges": 94.96,
+      "trades": 4,
+      "equity": 1006026.07,
+      "data_source": "snapshot"
+    }
+  ],
+  "equity_curve": [
+    {
+      "date": "2026-02-24",
+      "equity": 999793.1,
+      "pnl": -206.9
+    },
+    {
+      "date": "2026-02-25",
+      "equity": 1000097.11,
+      "pnl": 304.01
+    },
+    {
+      "date": "2026-02-26",
+      "equity": 1000582.12,
+      "pnl": 485.01
+    },
+    {
+      "date": "2026-02-27",
+      "equity": 1000323.97,
+      "pnl": -258.15
+    },
+    {
+      "date": "2026-03-02",
+      "equity": 1001125.06,
+      "pnl": 801.09
+    },
+    {
+      "date": "2026-03-04",
+      "equity": 1001112.9,
+      "pnl": -12.16
+    },
+    {
+      "date": "2026-03-05",
+      "equity": 1002226.47,
+      "pnl": 1113.57
+    },
+    {
+      "date": "2026-03-06",
+      "equity": 1002435.49,
+      "pnl": 209.02
+    },
+    {
+      "date": "2026-03-09",
+      "equity": 1002005.13,
+      "pnl": -430.36
+    },
+    {
+      "date": "2026-03-10",
+      "equity": 1001807.73,
+      "pnl": -197.4
+    },
+    {
+      "date": "2026-03-11",
+      "equity": 1000667.62,
+      "pnl": -1140.11
+    },
+    {
+      "date": "2026-03-12",
+      "equity": 1001786.04,
+      "pnl": 1118.42
+    },
+    {
+      "date": "2026-03-13",
+      "equity": 1001920.81,
+      "pnl": 134.77
+    },
+    {
+      "date": "2026-03-16",
+      "equity": 1004068.04,
+      "pnl": 2147.23
+    },
+    {
+      "date": "2026-03-17",
+      "equity": 1004068.04,
+      "pnl": 0.0
+    },
+    {
+      "date": "2026-03-18",
+      "equity": 1004770.35,
+      "pnl": 702.31
+    },
+    {
+      "date": "2026-03-19",
+      "equity": 1004835.89,
+      "pnl": 65.54
+    },
+    {
+      "date": "2026-03-20",
+      "equity": 1004221.58,
+      "pnl": -614.31
+    },
+    {
+      "date": "2026-03-23",
+      "equity": 1006003.28,
+      "pnl": 1781.7
+    },
+    {
+      "date": "2026-03-24",
+      "equity": 1006003.28,
+      "pnl": 0.0
+    },
+    {
+      "date": "2026-03-25",
+      "equity": 1006026.07,
+      "pnl": 22.79
+    }
+  ],
+  "final_pnl": 6026.07
+}

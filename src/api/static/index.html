@@ -105,6 +105,77 @@ body {
 .pnl-card .value.positive { color: var(--green); }
 .pnl-card .value.negative { color: var(--red); }
 
+/* Portfolio Legs */
+.legs-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.leg-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.leg-card .leg-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.leg-card .leg-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.leg-card .leg-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.leg-badge.active { background: rgba(0,196,140,0.15); color: var(--green); }
+.leg-badge.idle { background: rgba(139,144,160,0.15); color: var(--text2); }
+.leg-badge.stopped { background: rgba(255,71,87,0.15); color: var(--red); }
+.leg-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 3px 0;
+  color: var(--text2);
+}
+.leg-row .leg-val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.leg-row .leg-val.positive { color: var(--green); }
+.leg-row .leg-val.negative { color: var(--red); }
+.leg-greeks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.greek-cell {
+  text-align: center;
+  font-size: 11px;
+}
+.greek-cell .greek-label { color: var(--text2); }
+.greek-cell .greek-val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.gamma-bar {
+  margin-top: 8px;
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.gamma-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s;
+}
+
 /* Risk Bar */
 .risk-bar {
   display: flex;
@@ -437,6 +508,7 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
 /* Responsive */
 @media (max-width: 1024px) {
   .main-grid { grid-template-columns: 1fr; }
+  .legs-panel { grid-template-columns: 1fr; }
   .pnl-row { grid-template-columns: repeat(3, 1fr); }
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -583,6 +655,109 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
       <span>Open Positions: <strong id="openPositions">0</strong></span>
     </div>
     <button class="kill-btn" id="killBtn" onclick="activateKillSwitch()">Kill Switch</button>
+  </div>
+
+  <!-- Portfolio Legs (visible when portfolio strategy is running) -->
+  <div class="legs-panel" id="legsPanel" style="display:none">
+    <!-- Premium Leg -->
+    <div class="leg-card">
+      <div class="leg-header">
+        <span class="leg-title">Premium Leg</span>
+        <span class="leg-badge idle" id="premBadge">IDLE</span>
+      </div>
+      <div id="premBody">
+        <div class="leg-row"><span>Mode</span><span class="leg-val" id="premMode">—</span></div>
+        <div class="leg-row"><span>Score</span><span class="leg-val" id="premScore">—</span></div>
+        <div class="leg-row"><span>Entry Premium</span><span class="leg-val" id="premEntry">—</span></div>
+        <div class="leg-row"><span>Current</span><span class="leg-val" id="premCurrent">—</span></div>
+        <div class="leg-row"><span>Unrealized P&L</span><span class="leg-val" id="premPnl">—</span></div>
+        <div class="leg-row"><span>Held</span><span class="leg-val" id="premHeld">—</span></div>
+        <div class="leg-greeks">
+          <div class="greek-cell"><div class="greek-label">&Delta;</div><div class="greek-val" id="premDelta">—</div></div>
+          <div class="greek-cell"><div class="greek-label">&Gamma;</div><div class="greek-val" id="premGamma">—</div></div>
+          <div class="greek-cell"><div class="greek-label">&Theta;</div><div class="greek-val" id="premTheta">—</div></div>
+          <div class="greek-cell"><div class="greek-label">V</div><div class="greek-val" id="premVega">—</div></div>
+        </div>
+        <div class="leg-row" style="margin-top:6px"><span>Gamma Exp</span><span class="leg-val" id="premGammaExp">—</span></div>
+        <div class="gamma-bar"><div class="gamma-bar-fill" id="premGammaBar" style="width:0%;background:var(--green)"></div></div>
+        <div class="leg-row"><span>&Theta;/&Gamma; Efficiency</span><span class="leg-val" id="premThetaEff">—</span></div>
+      </div>
+    </div>
+
+    <!-- Trend Leg -->
+    <div class="leg-card">
+      <div class="leg-header">
+        <span class="leg-title">Trend Leg</span>
+        <span class="leg-badge idle" id="trendBadge">IDLE</span>
+      </div>
+      <div id="trendBody">
+        <div class="leg-row"><span>Direction</span><span class="leg-val" id="trendDir">—</span></div>
+        <div class="leg-row"><span>Score</span><span class="leg-val" id="trendScore">—</span></div>
+        <div class="leg-row"><span>Entry Debit</span><span class="leg-val" id="trendEntry">—</span></div>
+        <div class="leg-row"><span>Current Value</span><span class="leg-val" id="trendCurrent">—</span></div>
+        <div class="leg-row"><span>Max Spread</span><span class="leg-val" id="trendMax">—</span></div>
+        <div class="leg-row"><span>Unrealized P&L</span><span class="leg-val" id="trendPnl">—</span></div>
+        <div class="leg-row"><span>Held</span><span class="leg-val" id="trendHeld">—</span></div>
+        <div class="leg-greeks">
+          <div class="greek-cell"><div class="greek-label">&Delta;</div><div class="greek-val" id="trendDelta">—</div></div>
+          <div class="greek-cell"><div class="greek-label">&Gamma;</div><div class="greek-val" id="trendGamma">—</div></div>
+          <div class="greek-cell"><div class="greek-label">&Theta;</div><div class="greek-val" id="trendTheta">—</div></div>
+          <div class="greek-cell"><div class="greek-label">V</div><div class="greek-val" id="trendVega">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day Summary -->
+    <div class="leg-card">
+      <div class="leg-header">
+        <span class="leg-title">Day Summary</span>
+        <span class="leg-badge" id="dayBadge" style="background:rgba(74,158,255,0.15);color:var(--blue)">LIVE</span>
+      </div>
+      <div id="dayBody">
+        <div class="leg-row"><span>Premium Realized</span><span class="leg-val" id="dayPremReal">—</span></div>
+        <div class="leg-row"><span>Premium Unrealized</span><span class="leg-val" id="dayPremUnreal">—</span></div>
+        <div class="leg-row"><span>Trend Realized</span><span class="leg-val" id="dayTrendReal">—</span></div>
+        <div class="leg-row"><span>Trend Unrealized</span><span class="leg-val" id="dayTrendUnreal">—</span></div>
+        <div class="leg-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+          <span style="font-weight:600">Total P&L</span>
+          <span class="leg-val" id="dayTotal" style="font-size:14px">—</span>
+        </div>
+        <div class="leg-row" style="margin-top:8px"><span>Premium Trades</span><span class="leg-val" id="dayPremTrades">0</span></div>
+        <div class="leg-row"><span>Trend Trades</span><span class="leg-val" id="dayTrendTrades">0</span></div>
+        <div class="leg-row" style="margin-top:6px"><span>Spot</span><span class="leg-val" id="diagSpot">—</span></div>
+        <div class="leg-row"><span>VIX</span><span class="leg-val" id="diagVix">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Strategy Comparison Panel -->
+  <div class="panel" id="strategyComparePanel" style="margin-bottom:16px">
+    <div class="panel-header">
+      <h2>Strategy Comparison (Live)</h2>
+      <span class="count" id="activeStratCount">0</span>
+    </div>
+    <div class="panel-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Positions</th>
+            <th>Entry Premium</th>
+            <th>Unrealized</th>
+            <th>Realized</th>
+            <th>Charges</th>
+            <th>Net P&L</th>
+          </tr>
+        </thead>
+        <tbody id="strategyCompareBody">
+          <tr><td colspan="9" class="empty">Loading strategies...</td></tr>
+        </tbody>
+        <tfoot id="strategyCompareFoot" style="border-top:2px solid var(--border);font-weight:600">
+        </tfoot>
+      </table>
+    </div>
   </div>
 
   <!-- Main Grid -->
@@ -791,6 +966,7 @@ const headers = { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' };
 let ws = null;
 let reconnectTimer = null;
 let positions = [];
+let allPositions = [];  // includes closed positions for strategy comparison
 let orders = [];
 let strategies = [];
 let registeredTypes = [];
@@ -822,6 +998,9 @@ async function fetchPositions() {
   if (!data) return;
   positions = data.positions || [];
   renderPositions();
+  // Also fetch closed positions for strategy comparison
+  const allData = await api('/api/positions?include_closed=true');
+  if (allData) allPositions = allData.positions || [];
 }
 
 async function fetchOrders() {
@@ -1152,6 +1331,213 @@ function updateClock() {
   document.getElementById('marketTime').textContent = `${h}:${m}:${s} IST`;
 }
 
+// ── Strategy Comparison Panel ─────────────────────────────────────
+function renderStrategyComparison() {
+  const body = document.getElementById('strategyCompareBody');
+  const foot = document.getElementById('strategyCompareFoot');
+  document.getElementById('activeStratCount').textContent = strategies.length;
+
+  if (!strategies.length) {
+    body.innerHTML = '<tr><td colspan="9" class="empty">No strategies running</td></tr>';
+    foot.innerHTML = '';
+    return;
+  }
+
+  // Group ALL positions (including closed) by strategy
+  const byStrategy = {};
+  strategies.forEach(s => {
+    const stype = s.strategy_id.replace(/_\d+$/, '');
+    byStrategy[s.strategy_id] = { type: stype, positions: [], unrealized: 0, realized: 0, charges: 0, entryPrem: 0, status: s.state };
+  });
+
+  (allPositions.length ? allPositions : positions).forEach(p => {
+    const sid = p.strategy_id;
+    if (!byStrategy[sid]) byStrategy[sid] = { type: '?', positions: [], unrealized: 0, realized: 0, charges: 0, entryPrem: 0, status: 'UNKNOWN' };
+    byStrategy[sid].positions.push(p);
+    const qty = parseInt(p.quantity) || 0;
+    const avg = parseFloat(p.average_price) || 0;
+    const ltp = parseFloat(p.ltp) || 0;
+    if (qty === 0) {
+      // Closed position — use realized P&L from server
+      byStrategy[sid].realized += parseFloat(p.pnl) || 0;
+    } else {
+      const pnl = qty > 0 ? (ltp - avg) * qty : (avg - ltp) * Math.abs(qty);
+      byStrategy[sid].unrealized += pnl;
+      if (qty < 0) byStrategy[sid].entryPrem += avg * Math.abs(qty);
+    }
+  });
+
+  // Strategy type labels
+  const typeLabels = {
+    'portfolio': 'Portfolio (IC+Trend)',
+    'iron_condor': 'Iron Condor',
+    'short_strangle': 'Short Strangle',
+    'short_straddle': 'Short Straddle',
+    'trend_debit_spread': 'Trend Debit Spread'
+  };
+
+  const typeColors = {
+    'portfolio': 'var(--blue)',
+    'iron_condor': 'var(--purple)',
+    'short_strangle': 'var(--green)',
+    'short_straddle': 'var(--orange)',
+    'trend_debit_spread': 'var(--yellow)'
+  };
+
+  let totalUnreal = 0, totalReal = 0, totalCharges = 0;
+
+  const rows = Object.entries(byStrategy).map(([sid, data]) => {
+    const typeName = typeLabels[data.type] || data.type;
+    const color = typeColors[data.type] || 'var(--text)';
+    const posCount = data.positions.length;
+    const netPnl = data.unrealized + data.realized - data.charges;
+    totalUnreal += data.unrealized;
+    totalReal += data.realized;
+    totalCharges += data.charges;
+
+    const statusBadge = data.status === 'RUNNING'
+      ? '<span style="color:var(--green);font-size:11px">RUNNING</span>'
+      : `<span style="color:var(--text2);font-size:11px">${data.status}</span>`;
+
+    const pnlClass = data.unrealized >= 0 ? 'positive' : 'negative';
+
+    return `<tr>
+      <td style="font-weight:600">${sid}</td>
+      <td><span style="color:${color}">${typeName}</span></td>
+      <td>${statusBadge}</td>
+      <td>${posCount}</td>
+      <td>${data.entryPrem > 0 ? formatCurrency(data.entryPrem) : '—'}</td>
+      <td class="${pnlClass}">${formatCurrency(data.unrealized)}</td>
+      <td>${formatCurrency(data.realized)}</td>
+      <td>${formatCurrency(data.charges)}</td>
+      <td class="${netPnl >= 0 ? 'positive' : 'negative'}" style="font-weight:600">${formatCurrency(netPnl)}</td>
+    </tr>`;
+  });
+
+  body.innerHTML = rows.join('');
+
+  const totalNet = totalUnreal + totalReal - totalCharges;
+  foot.innerHTML = `<tr>
+    <td colspan="5" style="text-align:right;padding-right:12px">TOTAL</td>
+    <td class="${totalUnreal >= 0 ? 'positive' : 'negative'}">${formatCurrency(totalUnreal)}</td>
+    <td>${formatCurrency(totalReal)}</td>
+    <td>${formatCurrency(totalCharges)}</td>
+    <td class="${totalNet >= 0 ? 'positive' : 'negative'}" style="font-weight:700;font-size:14px">${formatCurrency(totalNet)}</td>
+  </tr>`;
+}
+
+// ── Portfolio Diagnostics ─────────────────────────────────────────
+let portfolioStrategyId = null;
+
+async function fetchDiagnostics() {
+  // Auto-detect portfolio strategy from strategy list
+  if (!portfolioStrategyId && strategies.length) {
+    const ps = strategies.find(s => s.state_data && 'premium_mode' in s.state_data);
+    if (ps) portfolioStrategyId = ps.strategy_id;
+  }
+  if (!portfolioStrategyId) {
+    document.getElementById('legsPanel').style.display = 'none';
+    return;
+  }
+
+  const data = await api(`/api/strategies/${portfolioStrategyId}/diagnostics`);
+  if (!data) {
+    document.getElementById('legsPanel').style.display = 'none';
+    return;
+  }
+  document.getElementById('legsPanel').style.display = '';
+  renderDiagnostics(data);
+}
+
+function renderDiagnostics(d) {
+  const p = d.premium;
+  const t = d.trend;
+  const day = d.day;
+
+  // Premium badge
+  const premBadge = document.getElementById('premBadge');
+  if (p.active) { premBadge.textContent = p.mode.toUpperCase(); premBadge.className = 'leg-badge active'; }
+  else if (p.stopped) { premBadge.textContent = 'STOPPED'; premBadge.className = 'leg-badge stopped'; }
+  else { premBadge.textContent = 'IDLE'; premBadge.className = 'leg-badge idle'; }
+
+  document.getElementById('premMode').textContent = p.mode;
+  document.getElementById('premScore').textContent = p.score + '/100';
+  document.getElementById('premEntry').textContent = p.active ? p.entry_premium.toFixed(2) : '—';
+  document.getElementById('premCurrent').textContent = p.active ? p.current_premium.toFixed(2) : '—';
+  setPnlClass('premPnl', p.unrealized_pnl);
+  document.getElementById('premHeld').textContent = p.active ? p.held_minutes + 'min' : '—';
+
+  // Premium Greeks
+  if (p.active) {
+    document.getElementById('premDelta').textContent = p.greeks.delta.toFixed(1);
+    document.getElementById('premGamma').textContent = p.greeks.gamma.toFixed(4);
+    document.getElementById('premTheta').textContent = p.greeks.theta.toFixed(2);
+    document.getElementById('premVega').textContent = p.greeks.vega.toFixed(2);
+
+    // Gamma exposure bar
+    const gPct = Math.min(100, (p.gamma_exposure / p.gamma_threshold) * 100);
+    const gBar = document.getElementById('premGammaBar');
+    gBar.style.width = gPct + '%';
+    gBar.style.background = gPct > 80 ? 'var(--red)' : gPct > 50 ? 'var(--yellow)' : 'var(--green)';
+    document.getElementById('premGammaExp').textContent =
+      p.gamma_exposure.toFixed(0) + '/' + p.gamma_threshold.toFixed(0);
+
+    document.getElementById('premThetaEff').textContent =
+      p.theta_efficiency >= 999 ? '∞' : p.theta_efficiency.toFixed(1);
+  } else {
+    ['premDelta','premGamma','premTheta','premVega','premGammaExp','premThetaEff'].forEach(
+      id => document.getElementById(id).textContent = '—'
+    );
+    document.getElementById('premGammaBar').style.width = '0%';
+  }
+
+  // Trend badge
+  const trendBadge = document.getElementById('trendBadge');
+  if (t.active) { trendBadge.textContent = t.direction.toUpperCase(); trendBadge.className = 'leg-badge active'; }
+  else if (t.stopped) { trendBadge.textContent = 'STOPPED'; trendBadge.className = 'leg-badge stopped'; }
+  else { trendBadge.textContent = 'IDLE'; trendBadge.className = 'leg-badge idle'; }
+
+  document.getElementById('trendDir').textContent = t.direction || '—';
+  document.getElementById('trendScore').textContent = t.score + '/100';
+  document.getElementById('trendEntry').textContent = t.active ? t.entry_debit.toFixed(2) : '—';
+  document.getElementById('trendCurrent').textContent = t.active ? t.current_value.toFixed(2) : '—';
+  document.getElementById('trendMax').textContent = t.active ? t.max_spread.toFixed(2) : '—';
+  setPnlClass('trendPnl', t.unrealized_pnl);
+  document.getElementById('trendHeld').textContent = t.active ? t.held_minutes + 'min' : '—';
+
+  // Trend Greeks
+  if (t.active) {
+    document.getElementById('trendDelta').textContent = t.greeks.delta.toFixed(1);
+    document.getElementById('trendGamma').textContent = t.greeks.gamma.toFixed(4);
+    document.getElementById('trendTheta').textContent = t.greeks.theta.toFixed(2);
+    document.getElementById('trendVega').textContent = t.greeks.vega.toFixed(2);
+  } else {
+    ['trendDelta','trendGamma','trendTheta','trendVega'].forEach(
+      id => document.getElementById(id).textContent = '—'
+    );
+  }
+
+  // Day summary
+  setPnlClass('dayPremReal', day.premium_realized);
+  setPnlClass('dayPremUnreal', day.premium_unrealized);
+  setPnlClass('dayTrendReal', day.trend_realized);
+  setPnlClass('dayTrendUnreal', day.trend_unrealized);
+  setPnlClass('dayTotal', day.total_pnl);
+  document.getElementById('dayPremTrades').textContent = day.premium_trades;
+  document.getElementById('dayTrendTrades').textContent = day.trend_trades;
+  document.getElementById('diagSpot').textContent = d.spot.toLocaleString('en-IN', {maximumFractionDigits: 2});
+  document.getElementById('diagVix').textContent = d.vix.toFixed(2);
+}
+
+function setPnlClass(id, val) {
+  const el = document.getElementById(id);
+  const n = parseFloat(val);
+  el.textContent = formatCurrency(val);
+  el.classList.remove('positive', 'negative');
+  if (n > 0) el.classList.add('positive');
+  else if (n < 0) el.classList.add('negative');
+}
+
 // ── Init ────────────────────────────────────────────────────────
 async function fetchAll() {
   await Promise.all([
@@ -1161,6 +1547,9 @@ async function fetchAll() {
     fetchStrategies(),
     fetchRisk()
   ]);
+  // Fetch diagnostics after strategies are loaded (needs strategy list)
+  fetchDiagnostics();
+  renderStrategyComparison();
 }
 
 // Initial load

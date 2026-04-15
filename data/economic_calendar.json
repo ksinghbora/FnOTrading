@@ -1,0 +1,6 @@
+[
+  {"date": "2026-04-01", "event": "RBI MPC Decision", "impact": "HIGH"},
+  {"date": "2026-04-08", "event": "RBI MPC Minutes Release", "impact": "MEDIUM"},
+  {"date": "2026-05-31", "event": "Q4 GDP Data Release", "impact": "HIGH"},
+  {"date": "2026-07-23", "event": "Union Budget 2026-27", "impact": "EXTREME"}
+]

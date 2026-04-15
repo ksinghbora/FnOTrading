@@ -1,11 +1,13 @@
 """Order execution — routes orders to broker with rate limiting and slippage tracking."""
 
 import logging
+import time
 from decimal import Decimal
 
 from src.broker.base import BrokerClient
 from src.core.exceptions import BrokerOrderError, BrokerRateLimitError
 from src.core.models import OrderRequest
+from src.core.structured_logger import get_structured_logger
 from src.core.types import OrderStatus
 from src.utils.rate_limiter import RateLimiter
 
@@ -16,7 +18,7 @@ class OrderExecutor:
     """Handles the actual execution of orders against the broker.
 
     - Rate limits API calls
-    - Tracks slippage
+    - Tracks slippage and latency
     - Handles execution errors
     """
 
@@ -28,7 +30,7 @@ class OrderExecutor:
         """Execute an order against the broker.
 
         Returns:
-            Dict with 'broker_order_id', 'status', 'message'.
+            Dict with 'broker_order_id', 'status', 'message', 'submit_time_ms'.
         """
         await self._rate_limiter.acquire()
 
@@ -37,6 +39,8 @@ class OrderExecutor:
             f"side={order.order_side.value} qty={order.quantity} "
             f"type={order.order_type.value} price={order.price}"
         )
+
+        t_start = time.monotonic()
 
         try:
             broker_order_id = await self._broker.place_order(
@@ -51,16 +55,32 @@ class OrderExecutor:
                 tag=order.tag[:20] if order.tag else "",
             )
 
+            submit_ms = (time.monotonic() - t_start) * 1000
+
             logger.info(
                 f"[SUBMIT_OK] broker_order_id={broker_order_id} "
                 f"symbol={order.tradingsymbol} side={order.order_side.value} "
-                f"qty={order.quantity}"
+                f"qty={order.quantity} submit_ms={submit_ms:.0f}"
+            )
+
+            slog = get_structured_logger()
+            slog.log(
+                "SUBMIT",
+                strategy_id=order.strategy_id,
+                symbol=order.tradingsymbol,
+                side=order.order_side.value,
+                qty=order.quantity,
+                order_type=order.order_type.value,
+                price=float(order.price),
+                broker_order_id=broker_order_id,
+                submit_ms=round(submit_ms, 1),
             )
 
             return {
                 "broker_order_id": broker_order_id,
                 "status": OrderStatus.SUBMITTED,
                 "message": "Order submitted successfully",
+                "submit_time_ms": submit_ms,
             }
 
         except BrokerRateLimitError:

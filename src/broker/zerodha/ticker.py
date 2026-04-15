@@ -34,6 +34,7 @@ class TickerManager:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_tick_time: datetime | None = None
         self._heartbeat_task: asyncio.Task | None = None
+        self._tick_log_count: int = 0
 
     async def start(self) -> None:
         """Start the WebSocket ticker in a background thread."""
@@ -96,9 +97,13 @@ class TickerManager:
     def _on_ticks(self, ws: Any, ticks: list[dict]) -> None:
         """Callback: received tick data from WebSocket."""
         if not self._loop or not self._running:
+            logger.warning(f"Dropping {len(ticks)} ticks: loop={self._loop is not None} running={self._running}")
             return
 
         self._last_tick_time = datetime.now()
+        if self._tick_log_count < 3:
+            self._tick_log_count += 1
+            logger.info(f"[TICKER] Received {len(ticks)} ticks (batch #{self._tick_log_count})")
 
         for tick_data in ticks:
             try:
@@ -136,18 +141,12 @@ class TickerManager:
             )
 
     def _on_close(self, ws: Any, code: int, reason: str) -> None:
-        """Callback: WebSocket disconnected."""
+        """Callback: WebSocket disconnected.
+
+        Does NOT publish CONNECTION_LOST — the heartbeat loop handles reconnect
+        detection and notification to avoid duplicate/spammy Telegram alerts.
+        """
         logger.warning(f"KiteTicker disconnected: {code} - {reason}")
-        if self._loop and self._running:
-            event = Event.create(
-                EventType.CONNECTION_LOST,
-                source="ticker",
-                code=code,
-                reason=reason,
-            )
-            asyncio.run_coroutine_threadsafe(
-                self._event_bus.publish(event), self._loop
-            )
 
     def _on_error(self, ws: Any, code: int, reason: str) -> None:
         """Callback: WebSocket error."""
@@ -158,28 +157,103 @@ class TickerManager:
         logger.info(f"KiteTicker reconnecting (attempt {attempts})")
 
     async def _heartbeat_loop(self) -> None:
-        """Monitor tick flow — publish CONNECTION_LOST if ticks stop arriving."""
+        """Monitor tick flow — force reconnect if ticks stop arriving.
+
+        Outside market hours: sleeps in 10s increments, reconnecting at 9:10 AM
+        (5 min before open) to ensure a fresh connection before market open.
+        During market hours: checks every HEARTBEAT_TIMEOUT seconds and reconnects
+        immediately if no ticks received.
+        """
+        await asyncio.sleep(60)
+        _market_open_reconnect_done = False
+
         while self._running:
             try:
+                now = datetime.now()
+                hour, minute = now.hour, now.minute
+                is_weekday = now.weekday() < 5
+                is_market_hours = (
+                    is_weekday
+                    and ((hour == 9 and minute >= 15) or (9 < hour < 15) or (hour == 15 and minute <= 30))
+                )
+                # Reset the market-open flag after close
+                if hour >= 15 and minute > 30:
+                    _market_open_reconnect_done = False
+
+                if not is_market_hours:
+                    # Reconnect at 9:10 AM — 5 min before open, gives WebSocket time to stabilise.
+                    # Window is 9:10-9:14 so the 10s sleep loop reliably catches it.
+                    if is_weekday and hour == 9 and 10 <= minute < 15 and not _market_open_reconnect_done:
+                        logger.info(f"9:{minute:02d} AM — forcing pre-market reconnect (5 min before open)")
+                        await self._force_reconnect()
+                        _market_open_reconnect_done = True
+                    await asyncio.sleep(10)
+                    continue
+
+                # During market hours: check every HEARTBEAT_TIMEOUT seconds.
+                # No grace period — if the 9:10 reconnect worked and market opened normally,
+                # ticks arrive within seconds of 9:15 and elapsed stays < HEARTBEAT_TIMEOUT.
+                # If ticks are absent, we should reconnect immediately — not wait 3 minutes.
                 await asyncio.sleep(self.HEARTBEAT_TIMEOUT)
                 if not self._running or not self._subscribed_tokens:
                     continue
+
                 if self._last_tick_time:
                     elapsed = (datetime.now() - self._last_tick_time).total_seconds()
-                    if elapsed > self.HEARTBEAT_TIMEOUT:
-                        logger.warning(
-                            f"No ticks received for {elapsed:.0f}s — possible silent disconnect"
-                        )
-                        event = Event.create(
-                            EventType.CONNECTION_LOST,
-                            source="ticker_heartbeat",
-                            reason=f"No ticks for {elapsed:.0f}s",
-                        )
-                        await self._event_bus.publish(event)
+                else:
+                    elapsed = 999
+
+                if elapsed > self.HEARTBEAT_TIMEOUT:
+                    logger.warning(
+                        f"No ticks received for {elapsed:.0f}s — forcing reconnect"
+                    )
+                    event = Event.create(
+                        EventType.CONNECTION_LOST,
+                        source="ticker_heartbeat",
+                        reason=f"No ticks for {elapsed:.0f}s",
+                    )
+                    await self._event_bus.publish(event)
+                    await self._force_reconnect()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Error in heartbeat loop")
+
+    def update_token(self, access_token: str) -> None:
+        """Update access token for next reconnect."""
+        self._access_token = access_token
+        logger.info("Ticker access token updated")
+
+    async def _force_reconnect(self) -> None:
+        """Close and reopen the WebSocket connection."""
+        try:
+            # Read latest token from file (auto-auth may have refreshed it)
+            from pathlib import Path
+            token_file = Path(".kite_access_token")
+            if token_file.exists():
+                fresh_token = token_file.read_text().strip()
+                if fresh_token and fresh_token != self._access_token:
+                    self._access_token = fresh_token
+                    logger.info("Ticker picked up fresh token from .kite_access_token")
+
+            if self._ticker:
+                logger.info("Force-closing ticker for reconnect...")
+                self._ticker.close()
+                await asyncio.sleep(2)
+
+            self._ticker = KiteTicker(self._api_key, self._access_token)
+            self._ticker.on_ticks = self._on_ticks
+            self._ticker.on_connect = self._on_connect
+            self._ticker.on_close = self._on_close
+            self._ticker.on_error = self._on_error
+            self._ticker.on_reconnect = self._on_reconnect
+
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._ticker.connect(threaded=True)
+            )
+            logger.info("Ticker reconnected — waiting for ticks")
+        except Exception:
+            logger.exception("Failed to force reconnect ticker")
 
     def _parse_tick(self, tick_data: dict) -> Tick:
         """Parse raw Kite tick data into our Tick model."""

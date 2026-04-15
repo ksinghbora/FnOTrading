@@ -39,9 +39,16 @@ class OptionChainBuilder:
         # Mapping: instrument_token -> (underlying, expiry, strike, option_type)
         self._token_map: dict[int, tuple[str, date, Decimal, OptionType]] = {}
 
+        # Mapping: instrument_token -> tradingsymbol (from instrument master, not ticks)
+        self._symbol_map: dict[int, str] = {}
+
         # Spot prices for underlyings
         self._spot_prices: dict[str, Decimal] = {}
         self._spot_tokens: dict[int, str] = {}  # spot token -> underlying name
+
+        # OI change tracking — stores previous session's OI per (underlying, expiry, strike, type)
+        self._prev_day_oi: dict[tuple[str, date, float, str], int] = {}
+        self._oi_snapshot_date: date | None = None
 
         # Logging throttling
         self._tick_count = 0
@@ -58,6 +65,8 @@ class OptionChainBuilder:
     ) -> None:
         """Register an option instrument for chain building."""
         self._token_map[instrument_token] = (underlying, expiry, strike, option_type)
+        # Store tradingsymbol from instrument master — ticks don't include it
+        self._symbol_map[instrument_token] = tradingsymbol
 
         if underlying not in self._chains:
             self._chains[underlying] = {}
@@ -95,9 +104,11 @@ class OptionChainBuilder:
             # Throttled spot logging — log on >0.1% move or first tick
             last_logged = self._last_spot_log.get(underlying, 0)
             if last_logged == 0 or abs(float(tick.ltp) - last_logged) / last_logged > 0.001:
+                chains = list(self._chains.get(underlying, {}).values())
+                atm = chains[-1].atm_strike if chains else "N/A"
                 logger.info(
                     f"[SPOT] underlying={underlying} price={tick.ltp} "
-                    f"atm_strike={chain.atm_strike}"
+                    f"atm_strike={atm}"
                 )
                 self._last_spot_log[underlying] = float(tick.ltp)
             return
@@ -130,9 +141,9 @@ class OptionChainBuilder:
             iv = 0.0
             greeks = Greeks()
 
-        # Build option data
+        # Build option data — use registered tradingsymbol (ticks don't include it)
         opt_data = OptionData(
-            tradingsymbol=tick.tradingsymbol,
+            tradingsymbol=self._symbol_map.get(token, tick.tradingsymbol),
             instrument_token=token,
             strike=strike,
             option_type=option_type,
@@ -171,6 +182,55 @@ class OptionChainBuilder:
         # Cache in Redis (throttled, not every tick)
         if self._redis:
             await self._cache_chain(underlying, expiry, chain)
+
+    def snapshot_oi_for_next_day(self) -> None:
+        """Save current OI as previous-day reference. Call at end of trading day."""
+        today = self._clock.today()
+        if self._oi_snapshot_date == today:
+            return  # Already snapshotted today
+
+        self._prev_day_oi.clear()
+        for underlying, expiry_chains in self._chains.items():
+            for expiry, chain in expiry_chains.items():
+                for entry in chain.strikes:
+                    strike = float(entry.strike)
+                    if entry.ce and entry.ce.oi > 0:
+                        self._prev_day_oi[(underlying, expiry, strike, "CE")] = entry.ce.oi
+                    if entry.pe and entry.pe.oi > 0:
+                        self._prev_day_oi[(underlying, expiry, strike, "PE")] = entry.pe.oi
+
+        self._oi_snapshot_date = today
+        logger.info(f"[OI_SNAPSHOT] Saved {len(self._prev_day_oi)} OI entries for next day reference")
+
+    def get_oi_change(self, underlying: str, expiry: date, strike: float, opt_type: str) -> int:
+        """Get OI change from previous day. Positive = new positions added."""
+        prev = self._prev_day_oi.get((underlying, expiry, strike, opt_type), 0)
+        chain = self.get_chain(underlying, expiry)
+        if not chain:
+            return 0
+        for entry in chain.strikes:
+            if float(entry.strike) == strike:
+                opt = entry.ce if opt_type == "CE" else entry.pe
+                if opt:
+                    return opt.oi - prev
+        return 0
+
+    def get_total_oi_changes(self, underlying: str, expiry: date) -> tuple[int, int]:
+        """Get total CE and PE OI changes from previous day."""
+        chain = self.get_chain(underlying, expiry)
+        if not chain:
+            return 0, 0
+        ce_change = 0
+        pe_change = 0
+        for entry in chain.strikes:
+            strike = float(entry.strike)
+            if entry.ce:
+                prev = self._prev_day_oi.get((underlying, expiry, strike, "CE"), 0)
+                ce_change += entry.ce.oi - prev
+            if entry.pe:
+                prev = self._prev_day_oi.get((underlying, expiry, strike, "PE"), 0)
+                pe_change += entry.pe.oi - prev
+        return ce_change, pe_change
 
     def get_chain(self, underlying: str, expiry: date) -> OptionChain | None:
         """Get the current option chain."""

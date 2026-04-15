@@ -139,7 +139,29 @@ class KillSwitch:
             )
         return results
 
+    async def verify_flat(self) -> list[str]:
+        """Check broker for any remaining open positions. Returns list of symbols still open."""
+        try:
+            positions = await self._broker.get_positions()
+            return [
+                f"{pos['tradingsymbol']}({pos.get('quantity', 0)})"
+                for pos in positions.get("net", [])
+                if pos.get("quantity", 0) != 0
+            ]
+        except Exception as e:
+            logger.error(f"Kill switch verify_flat failed: {e}")
+            return [f"UNKNOWN (broker error: {e})"]
+
     def reset(self) -> None:
-        """Reset kill switch (re-enable trading)."""
+        """Reset kill switch (re-enable trading).
+
+        WARNING: Does not verify positions are flat. Call verify_flat() first
+        to confirm all positions are closed before re-enabling trading.
+        """
+        if not self._activated:
+            return
         self._activated = False
-        logger.info("Kill switch deactivated")
+        logger.warning(
+            "Kill switch deactivated — trading re-enabled. "
+            "Ensure all positions are verified flat before resuming."
+        )

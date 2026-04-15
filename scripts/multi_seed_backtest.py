@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.backtest.engine import BacktestEngine, _import_strategies
 
 
-async def run_all(strategies: list[str], num_seeds: int, num_days: int):
+async def run_all(strategies: list[str], num_seeds: int, num_days: int, fat_tails: bool = False):
     _import_strategies()
     engine = BacktestEngine()
 
@@ -32,6 +32,7 @@ async def run_all(strategies: list[str], num_seeds: int, num_days: int):
                 strategy_params={"underlying": "NIFTY", "quantity_lots": 1},
                 num_days=num_days,
                 seed=seed,
+                fat_tails=fat_tails,
             )
             pnl = r["final_pnl"]
             results[strat].append({"seed": seed, "pnl": pnl, "metrics": r["metrics"]})
@@ -62,6 +63,7 @@ def main():
     parser.add_argument("--seeds", type=int, default=10, help="Number of seeds (default: 10)")
     parser.add_argument("--days", type=int, default=30, help="Trading days per seed (default: 30)")
     parser.add_argument("--strategies", nargs="+", default=None, help="Strategies to test")
+    parser.add_argument("--fat-tails", action="store_true", help="Use Student-t(df=5) returns")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.WARNING)
@@ -70,12 +72,13 @@ def main():
         "short_straddle", "short_strangle", "iron_condor", "delta_neutral"
     ]
 
+    tail_label = " [FAT TAILS]" if args.fat_tails else ""
     print("=" * 70)
-    print(f"  Multi-Seed Validation: {args.seeds} seeds x {args.days} days")
+    print(f"  Multi-Seed Validation: {args.seeds} seeds x {args.days} days{tail_label}")
     print(f"  Strategies: {', '.join(strategies)}")
     print("=" * 70)
 
-    asyncio.run(run_all(strategies, args.seeds, args.days))
+    asyncio.run(run_all(strategies, args.seeds, args.days, fat_tails=args.fat_tails))
 
 
 if __name__ == "__main__":

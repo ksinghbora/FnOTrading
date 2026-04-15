@@ -1,0 +1,61 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,choppy,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,choppy,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,choppy,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,choppy,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,choppy,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,choppy,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,choppy,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,choppy,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,choppy,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30
+2025-12-22T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26126.35,9.7,1.0,0.0,0.0,1.035,0.029,0.618,1,9,30,0,0,50,0,50,75,conflicted,24.44,75,,,
+2025-12-22T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,26136.2,9.71,1.0,0.0,0.0,1.035,0.067,0.085,1,10,0,0,0,55,0,55,60,conflicted,19.96,75,,,
+2025-12-22T10:01:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26131.8,9.69,1.0,0.0,0.0,1.035,0.05,0.085,1,10,1,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.7%,233.25,31
+2025-12-22T10:02:00+05:30,portfolio_hist,PREMIUM,ENTER,strangle,26131.4,9.67,1.0,0.0,0.0,1.035,0.049,0.085,1,10,2,0,0,70,0,70,65,conflicted,21.07,75,,,
+2025-12-22T10:27:00+05:30,portfolio_hist,PREMIUM,EXIT,strangle,26126.8,9.68,1.0,0.0,0.0,1.035,0.031,0.077,1,10,27,0,0,0,0,0,0,conflicted,0.0,0,Profit target: premium decayed 12.4%,196.5,25
+2025-12-22T10:30:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,26122.55,9.66,1.0,0.0,0.0,1.035,0.015,0.056,1,10,30,0,0,0,0,0,0,conflicted,0.0,0,Trend stop: lost 21.6%,-323.25,30

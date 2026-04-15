@@ -1,6 +1,7 @@
 """Short Strangle strategy — sells OTM CE + OTM PE based on delta."""
 
 import logging
+import os
 import time as _time
 from datetime import date, time
 from decimal import Decimal
@@ -10,7 +11,9 @@ from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, SignalType
 from src.strategy.base import BaseStrategy
 from src.strategy.params import ShortStrangleParams
+from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
+from src.strategy.scoring import SHORT_STRANGLE_CONFIG, score_strategy
 from src.strategy.signals import adjust_signal, entry_signal, exit_signal, make_leg
 
 logger = logging.getLogger(__name__)
@@ -32,6 +35,8 @@ class ShortStrangleStrategy(BaseStrategy):
         super().__init__(strategy_id, params)
         self._entered = False
         self._stopped_for_day = False
+        self._regime: RegimeDetector | None = None
+        self._paper_mode: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
         self._ce_token: int = 0
         self._pe_token: int = 0
         self._ce_symbol: str = ""
@@ -52,6 +57,7 @@ class ShortStrangleStrategy(BaseStrategy):
 
     async def on_start(self) -> None:
         self._expiry = self.ctx.next_expiry(self.params.underlying)
+        self._regime = RegimeDetector(self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder)
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} call_delta={self.params.call_delta} "
@@ -79,17 +85,81 @@ class ShortStrangleStrategy(BaseStrategy):
 
     async def _try_entry(self) -> Signal | None:
         """Select strikes by delta and enter."""
+        # --- Signal scoring ---
+        vix = self.ctx.get_vix()
+        morning_range_pct = 0.0
+        move_from_open_pct = 0.0
+        if self._regime:
+            regime = self._regime.assess(self.params.underlying)
+            morning_range_pct = regime.morning_range_pct
+            move_from_open_pct = regime.move_from_open_pct
+        pcr_oi = 0.0
+        if self._expiry:
+            chain_for_score = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+            if chain_for_score:
+                pcr_oi = chain_for_score.pcr_oi
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 0
+        is_expiry_day = self._expiry == self.ctx.clock.now().date() if self._expiry else False
+
+        score, reasons = score_strategy(
+            SHORT_STRANGLE_CONFIG, vix, morning_range_pct, move_from_open_pct,
+            pcr_oi, is_expiry_day, dte,
+        )
+        reasons_str = ", ".join(reasons)
+        logger.info(
+            f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
+        )
+        if score < 60:
+            if self._paper_mode:
+                logger.info(
+                    f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
+                    f"< 60 — proceeding anyway (paper mode)"
+                )
+            else:
+                logger.info(
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60"
+                )
+                return None
+
         # VIX filter — skip entry in high-volatility environments
         vix_block = self._check_vix_filter()
         if vix_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
-            return None
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {vix_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+                return None
 
         # Trend filter — skip if market is trending >0.7% from open
         trend_block = self._check_trend_filter(self.params.underlying)
         if trend_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
-            return None
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {trend_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
+                return None
+
+        # PCR filter
+        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+        if pcr_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {pcr_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {pcr_block}")
+                return None
+
+        # Max pain filter
+        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+        if mp_block:
+            if self._paper_mode:
+                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {mp_block}")
+            else:
+                logger.info(f"[{self.strategy_id}] Entry skipped: {mp_block}")
+                return None
+
+        # Log IV skew and OI levels for research
+        self._log_iv_skew(self.params.underlying, self._expiry)
+        self._log_oi_levels(self.params.underlying, self._expiry)
 
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         if not chain or not chain.strikes:
@@ -228,7 +298,7 @@ class ShortStrangleStrategy(BaseStrategy):
             return None
 
         # Cooldown: don't generate adjustment signals more than once per 30s
-        if _time.time() - self._last_adjustment_time < 30:
+        if self.ctx.clock.now().timestamp() - self._last_adjustment_time < 30 * 60:
             return None
 
         # Delta-based adjustment — roll the losing leg to new delta target
@@ -325,7 +395,7 @@ class ShortStrangleStrategy(BaseStrategy):
         self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
         self._peak_premium = self._entry_premium
         self._adjustments_today += 1
-        self._last_adjustment_time = _time.time()
+        self._last_adjustment_time = self.ctx.clock.now().timestamp()
 
         logger.info(
             f"[{self.strategy_id}] Adjustment {self._adjustments_today}/{self.MAX_ADJUSTMENTS_PER_DAY} today"
@@ -351,6 +421,7 @@ class ShortStrangleStrategy(BaseStrategy):
             make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
         ]
         self._entered = False
+        self._stopped_for_day = True
         return exit_signal(self.strategy_id, legs, reason)
 
     async def on_stop(self) -> None:

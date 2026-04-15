@@ -58,6 +58,22 @@ class TelegramNotifier:
             response.raise_for_status()
             return True
         except httpx.HTTPStatusError as e:
+            # If Markdown parsing fails, retry without parse_mode
+            if e.response.status_code == 400 and "parse entities" in e.response.text:
+                try:
+                    plain_text = text.replace("*", "").replace("_", "").replace("`", "")
+                    response = await self._client.post(
+                        f"{self._base_url}/sendMessage",
+                        json={
+                            "chat_id": self._chat_id,
+                            "text": plain_text,
+                            "disable_web_page_preview": True,
+                        },
+                    )
+                    response.raise_for_status()
+                    return True
+                except Exception:
+                    pass
             logger.error(f"Telegram API error {e.response.status_code}: {e.response.text}")
             return False
         except httpx.RequestError as e:

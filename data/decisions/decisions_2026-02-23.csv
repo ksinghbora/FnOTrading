@@ -1,0 +1,47 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.854,1,9,30,0,0,70,0,70,75,pre_market,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,pre_market,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,pre_market,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,pre_market,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_replay,PREMIUM,ENTER,strangle,25768.8,14.2,1.0,0.0,0.0,1.306,0.114,0.853,1,9,30,0,0,70,0,70,75,normal_range,1521.63,75,,,
+2026-02-23T15:15:00+05:30,portfolio_replay,PREMIUM,EXIT,strangle,25720.55,14.13,1.0,0.0,0.0,1.305,0.073,0.212,1,15,15,0,0,0,0,0,0,normal_range,0.0,0,Time exit,-57.0,345
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,choppy,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,choppy,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116
+2026-02-23T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25768.8,14.2,1.0,0.0,0.0,1.035,0.114,0.853,1,9,30,0,0,70,0,70,75,conflicted,28.74,75,,,
+2026-02-23T10:44:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25656.95,14.2,1.0,0.0,0.0,1.036,0.32,0.169,1,10,44,0,0,0,0,0,0,normal_range,0.0,0,Trail stop: bounced 23.5% after 28% decay,105.0,74
+2026-02-23T10:45:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,25652.35,14.17,1.0,0.0,0.0,1.036,0.338,0.288,1,10,45,0,0,75,0,75,65,normal_range,25.09,75,,,
+2026-02-23T12:41:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,25670.45,14.16,1.0,0.0,0.0,1.036,0.268,0.142,1,12,41,0,0,0,0,0,0,normal_range,0.0,0,Profit target: premium decayed 60.9%,1146.0,116

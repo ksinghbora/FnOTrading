@@ -6,6 +6,8 @@ kill switch) and routes them through the Telegram notifier.
 
 import asyncio
 import logging
+import time as _time
+from datetime import datetime
 from decimal import Decimal
 
 from src.core.events import Event, EventBus, EventType
@@ -22,9 +24,13 @@ class NotificationManager:
     through the Telegram channel.
     """
 
+    # Suppress repeated connection lost alerts — one per 5-minute window is enough
+    _CONN_LOST_DEBOUNCE_SECS = 300
+
     def __init__(self, event_bus: EventBus, telegram: TelegramNotifier):
         self._event_bus = event_bus
         self._telegram = telegram
+        self._last_conn_lost_alert: float = 0.0
 
         # Subscribe to events
         self._event_bus.subscribe(EventType.ORDER_FILLED, self._on_order_filled)
@@ -117,7 +123,25 @@ class NotificationManager:
         await self._send(text)
 
     async def _on_connection_lost(self, event: Event) -> None:
-        """Send connection lost notification."""
+        """Send connection lost notification — suppressed pre-market and debounced during market hours."""
+        now = datetime.now()
+        hour, minute = now.hour, now.minute
+        is_market_hours = (
+            now.weekday() < 5
+            and ((hour == 9 and minute >= 15) or (9 < hour < 15) or (hour == 15 and minute <= 30))
+        )
+        if not is_market_hours:
+            # Pre/post market disconnects are expected — log only, no Telegram spam
+            logger.info(f"[CONNECTION_LOST] pre/post-market — suppressing Telegram (source={event.source})")
+            return
+
+        # During market hours: debounce to one alert per 5 minutes
+        now_ts = _time.monotonic()
+        if now_ts - self._last_conn_lost_alert < self._CONN_LOST_DEBOUNCE_SECS:
+            logger.warning(f"[CONNECTION_LOST] debounced — last alert was <5 min ago (source={event.source})")
+            return
+
+        self._last_conn_lost_alert = now_ts
         text = templates.connection_lost(source=event.source)
         await self._send(text)
 

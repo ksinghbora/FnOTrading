@@ -7,6 +7,7 @@ from datetime import datetime
 from src.broker.base import BrokerClient
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Order
+from src.core.structured_logger import get_structured_logger
 from src.core.types import OrderStatus
 from src.utils.rate_limiter import RateLimiter
 
@@ -142,6 +143,14 @@ class OrderTracker:
                     order.fill_quantity = int(fill_qty)
                     order.filled_at = datetime.now()
 
+                    # Detect partial fills — warn so strategies can react
+                    if order.fill_quantity < order.quantity:
+                        logger.warning(
+                            f"[PARTIAL_FILL] order_id={broker_id} symbol={order.tradingsymbol} "
+                            f"requested={order.quantity} filled={order.fill_quantity} "
+                            f"shortfall={order.quantity - order.fill_quantity}"
+                        )
+
                     slippage = float(order.fill_price - order.price) if order.price > 0 else 0.0
                     slippage_pct = (slippage / float(order.price) * 100) if order.price > 0 else 0.0
                     ttf_ms = (
@@ -153,6 +162,23 @@ class OrderTracker:
                         f"side={order.order_side.value} qty={order.fill_quantity} "
                         f"fill_price={order.fill_price} slippage={slippage:.2f} "
                         f"slippage_pct={slippage_pct:.2f}% ttf_ms={ttf_ms:.0f}"
+                    )
+
+                    slog = get_structured_logger()
+                    slog.log(
+                        "FILL",
+                        broker_order_id=broker_id,
+                        strategy_id=order.strategy_id,
+                        symbol=order.tradingsymbol,
+                        side=order.order_side.value,
+                        qty=order.fill_quantity,
+                        requested_qty=order.quantity,
+                        expected_price=float(order.price),
+                        fill_price=float(order.fill_price),
+                        slippage=round(slippage, 2),
+                        slippage_pct=round(slippage_pct, 4),
+                        ttf_ms=round(ttf_ms, 1),
+                        partial=(order.fill_quantity < order.quantity),
                     )
 
                     event_type = EventType.ORDER_FILLED

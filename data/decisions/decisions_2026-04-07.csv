@@ -1,0 +1,5 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-04-07T09:30:00.364057+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,22887.8,25.5,1.2749179308923588,22800.0,0.38,1.04,0.308,1.232,0,9,30,1,1,15,0,15,75,trending,37.25,75,,,
+2026-04-07T10:41:59.324073+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,22953.3,25.35,1.191236918972309,22900.0,0.23,1.0,0.595,0.346,0,10,41,1,1,0,0,0,0,choppy,0.0,0,Trail stop: bounced 20.3% after 47% decay,757.5,71
+2026-04-07T10:41:59.346401+05:30,portfolio_1,PREMIUM,ENTER,iron_condor,22953.3,25.35,1.191236918972309,22900.0,0.23,1.0,0.595,0.346,0,10,41,1,1,32,0,32,65,choppy,26.75,75,,,
+2026-04-07T10:59:11.929941+05:30,portfolio_1,PREMIUM,EXIT,iron_condor,22841.25,25.53,1.1499254652495992,22900.0,0.26,1.042,0.104,0.449,0,10,59,1,1,0,0,0,0,conflicted,0.0,0,Stop loss: premium up 33.1% (gamma-tightened),-663.75,17

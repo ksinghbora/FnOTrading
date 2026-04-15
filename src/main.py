@@ -18,6 +18,7 @@ from src.db.session import create_db_engine, create_session_factory
 from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
+from src.market_data.chain_recorder import ChainSnapshotRecorder
 from src.market_data.store import MarketDataStore
 from src.oms.dedup import OrderDeduplicator
 from src.oms.executor import OrderExecutor
@@ -61,13 +62,24 @@ async def create_app(settings: Settings):
         broker = PaperBrokerClient(initial_capital=1_000_000)
         logger.info("Using PAPER TRADING broker")
 
-        # Feed simulated tick LTPs into paper broker for realistic fills
+        # Feed tick LTPs into paper broker — use chain builder's symbol map
+        # since WebSocket ticks don't include tradingsymbol
         from src.core.events import Event as _Event
 
         async def _feed_paper_ltp(event: _Event) -> None:
             tick = event.payload.get("tick")
-            if tick and tick.get("tradingsymbol") and tick.get("ltp"):
-                broker.set_ltp(tick["tradingsymbol"], float(tick["ltp"]))
+            if not tick or not tick.get("ltp"):
+                return
+            ltp = float(tick["ltp"])
+            if ltp <= 0:
+                return
+            token = tick.get("instrument_token", 0)
+            # Resolve tradingsymbol from chain builder's symbol map (registered from instrument master)
+            symbol = tick.get("tradingsymbol") or ""
+            if not symbol and token:
+                symbol = chain_builder._symbol_map.get(token, "")
+            if symbol:
+                broker.set_ltp(symbol, ltp)
 
         event_bus.subscribe(EventType.TICK, _feed_paper_ltp)
     else:
@@ -81,7 +93,11 @@ async def create_app(settings: Settings):
     try:
         await instrument_manager.load_from_db()
     except Exception:
-        logger.warning("Could not load instruments from DB. Run download_instruments.py first.")
+        logger.warning("Could not load instruments from DB — trying Kite API fallback")
+        try:
+            await instrument_manager.load_from_kite_api(settings.kite_api_key, settings.kite_access_token)
+        except Exception as e:
+            logger.error(f"Kite API instrument fallback also failed: {e}")
 
     # ─── Market Data Pipeline ────────────────────────────────────
     feed = TickFeedManager(event_bus, redis_client)
@@ -89,15 +105,133 @@ async def create_app(settings: Settings):
     chain_builder = OptionChainBuilder(event_bus, clock, redis_client)
     data_store = MarketDataStore(session_factory, event_bus)
 
+    # Register known spot tokens so strategies can auto-subscribe
+    from src.market_data.simulator import NIFTY_SPOT_TOKEN, BANKNIFTY_SPOT_TOKEN
+    chain_builder.register_spot(NIFTY_SPOT_TOKEN, "NIFTY")
+    chain_builder.register_spot(BANKNIFTY_SPOT_TOKEN, "BANKNIFTY")
+
+    # Register option instruments for live chain building (±30 strikes around ATM)
+    # Wider range ensures IC wing strikes are always available
+    from src.core.types import OptionType
+    option_tokens_to_subscribe: list[int] = []
+    for underlying, step, num_strikes in [("NIFTY", 50, 30), ("BANKNIFTY", 100, 20)]:
+        try:
+            expiry = clock.next_expiry(underlying)
+            options = instrument_manager.get_option_chain_instruments(underlying, expiry)
+            if not options:
+                logger.warning(f"No option instruments found for {underlying} expiry={expiry}")
+                continue
+            # Get spot price from Kite LTP API for accurate ATM
+            # Always use real Kite API — paper broker has no prices at startup
+            spot_price = 0
+            if settings.kite_api_key and settings.kite_access_token:
+                try:
+                    from kiteconnect import KiteConnect as _KC
+                    _kc = _KC(api_key=settings.kite_api_key)
+                    _kc.set_access_token(settings.kite_access_token)
+                    ltp_data = _kc.ltp([f"NSE:{underlying} 50"])
+                    spot_price = ltp_data.get(f"NSE:{underlying} 50", {}).get("last_price", 0)
+                    logger.info(f"Kite LTP for {underlying}: {spot_price}")
+                except Exception as e:
+                    logger.warning(f"Kite LTP fetch failed for {underlying}: {e}")
+            if spot_price <= 0:
+                # Fallback: use middle strike weighted toward lower end (markets spend more time below median)
+                all_strikes = sorted(set(float(o.strike) for o in options))
+                spot_price = all_strikes[len(all_strikes) // 3]
+            atm_estimate = round(spot_price / step) * step
+            lo = atm_estimate - num_strikes * step
+            hi = atm_estimate + num_strikes * step
+            registered = 0
+            for inst in options:
+                if lo <= float(inst.strike) <= hi:
+                    chain_builder.register_option(
+                        instrument_token=inst.instrument_token,
+                        underlying=underlying,
+                        expiry=expiry,
+                        strike=inst.strike,
+                        option_type=OptionType(inst.instrument_type.value),
+                        tradingsymbol=inst.tradingsymbol,
+                    )
+                    option_tokens_to_subscribe.append(inst.instrument_token)
+                    registered += 1
+            logger.info(
+                f"Registered {registered} option instruments for {underlying} "
+                f"expiry={expiry} ATM~{atm_estimate:.0f} strikes={lo:.0f}-{hi:.0f}"
+            )
+
+            # Seed paper broker with option LTPs from Kite HTTP API
+            # This allows fills before WebSocket ticks arrive
+            if settings.paper_trading and settings.kite_api_key:
+                try:
+                    seed_symbols = []
+                    token_to_symbol = {}
+                    for inst in options:
+                        if lo <= float(inst.strike) <= hi:
+                            key = f"NFO:{inst.tradingsymbol}"
+                            seed_symbols.append(key)
+                            token_to_symbol[key] = inst.tradingsymbol
+                    # Kite LTP API accepts max 1000 instruments per call
+                    for i in range(0, len(seed_symbols), 500):
+                        batch = seed_symbols[i:i+500]
+                        ltp_batch = _kc.ltp(batch)
+                        for key, data in ltp_batch.items():
+                            sym = token_to_symbol.get(key, "")
+                            if sym and data.get("last_price", 0) > 0:
+                                broker.set_ltp(sym, float(data["last_price"]))
+                    logger.info(f"Seeded paper broker with {len(seed_symbols)} option LTPs")
+                except Exception as e:
+                    logger.warning(f"Failed to seed option LTPs: {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to register options for {underlying}: {e}")
+
+    # ─── Seed VIX + NIFTY spot into feed + chain builder ──
+    # WebSocket may not send ticks immediately; seed from HTTP API so strategy can evaluate
+    if settings.kite_api_key and settings.kite_access_token:
+        try:
+            from src.core.constants import INDIA_VIX_TOKEN
+            from src.core.models import Tick
+            from decimal import Decimal as D
+            from datetime import datetime
+            from kiteconnect import KiteConnect as _KC
+            _kc = _KC(api_key=settings.kite_api_key)
+            _kc.set_access_token(settings.kite_access_token)
+            seed_ltps = _kc.ltp(["NSE:INDIA VIX", "NSE:NIFTY 50", "NSE:NIFTY BANK"])
+            for key, data in seed_ltps.items():
+                ltp = data.get("last_price", 0)
+                token = data.get("instrument_token", 0)
+                if ltp > 0 and token > 0:
+                    seed_tick = Tick(
+                        instrument_token=token, tradingsymbol=key.split(":")[-1],
+                        timestamp=datetime.now(), ltp=D(str(ltp)),
+                        volume=0, oi=0, bid_price=D("0"), ask_price=D("0"),
+                        bid_qty=0, ask_qty=0, high=D("0"), low=D("0"),
+                        open=D("0"), close=D("0"),
+                    )
+                    feed._latest_ticks[token] = seed_tick
+                    # Also seed into chain builder for spot price
+                    if token in chain_builder._spot_tokens:
+                        underlying = chain_builder._spot_tokens[token]
+                        chain_builder._spot_prices[underlying] = D(str(ltp))
+                    logger.info(f"Seeded feed: {key} = {ltp}")
+        except Exception as e:
+            logger.warning(f"Failed to seed feed LTPs: {e}")
+
+    # ─── Chain Snapshot Recorder ──────────────────────────────────
+    chain_recorder = ChainSnapshotRecorder(chain_builder, clock, interval_seconds=60)
+
     # ─── Ticker / Simulator ───────────────────────────────────────
+    # Paper trading uses live Kite data (real prices, no real orders).
+    # Simulator is fallback only when Kite credentials are unavailable.
     ticker = None
     simulator = None
-    if settings.paper_trading:
+    if settings.kite_api_key and settings.kite_access_token:
+        ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
+        logger.info("Live market data via Kite WebSocket" + (" (paper trading)" if settings.paper_trading else ""))
+    else:
         from src.market_data.simulator import SimulationEngine
         simulator = SimulationEngine(event_bus, chain_builder, tick_interval=1.0)
-        logger.info("Simulation engine created for paper trading mode")
-    else:
-        ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
+        logger.info("Simulator mode — no Kite credentials available")
 
     # ─── Portfolio ───────────────────────────────────────────────
     portfolio = PortfolioManager(event_bus, broker, chain_builder)
@@ -181,6 +315,7 @@ async def create_app(settings: Settings):
             logger.warning("Notification module not available")
 
     return {
+        "clock": clock,
         "event_bus": event_bus,
         "broker": broker,
         "feed": feed,
@@ -188,6 +323,7 @@ async def create_app(settings: Settings):
         "simulator": simulator,
         "aggregator": aggregator,
         "chain_builder": chain_builder,
+        "chain_recorder": chain_recorder,
         "data_store": data_store,
         "order_manager": order_manager,
         "portfolio": portfolio,
@@ -198,6 +334,7 @@ async def create_app(settings: Settings):
         "redis": redis_client,
         "settings": settings,
         "instrument_manager": instrument_manager,
+        "option_tokens": option_tokens_to_subscribe,
     }
 
 
@@ -212,6 +349,71 @@ async def run():
     logger.info(f"Paper Trading: {settings.paper_trading}")
     logger.info("=" * 60)
 
+    # Auto-authenticate helper — used at startup and scheduled daily
+    async def do_auto_auth(reason: str = "startup") -> bool:
+        """Authenticate with Kite and update token. Returns True on success."""
+        import os
+        try:
+            from scripts.auto_auth import get_request_token, exchange_token, save_token, load_env
+            load_env()  # Ensure .env vars are in os.environ
+            user_id = os.environ.get("KITE_USER_ID", "")
+            password = os.environ.get("KITE_PASSWORD", "")
+            totp_secret = os.environ.get("KITE_TOTP_SECRET", "")
+            if not (user_id and password and totp_secret):
+                logger.warning("Auto-auth skipped — set KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET in .env")
+                return False
+            request_token = get_request_token(settings.kite_api_key, user_id, password, totp_secret)
+            access_token = exchange_token(settings.kite_api_key, settings.kite_api_secret, request_token)
+            save_token(access_token)
+            settings.kite_access_token = access_token
+            logger.info(f"Auto-auth successful ({reason}) — new token saved")
+
+            # Send Telegram notification
+            if settings.telegram_bot_token:
+                try:
+                    from src.notifications.telegram import TelegramNotifier
+                    tg = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
+                    await tg.send_message(
+                        f"Kite auto-login successful ({reason})\n"
+                        f"User: {user_id}\n"
+                        f"Token: {access_token[:8]}...",
+                        parse_mode="",
+                    )
+                except Exception:
+                    pass
+            return True
+        except Exception as e:
+            logger.error(f"Auto-auth failed ({reason}): {e}")
+            if settings.telegram_bot_token:
+                try:
+                    from src.notifications.telegram import TelegramNotifier
+                    tg = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
+                    await tg.send_message(f"Kite auto-login FAILED ({reason}): {e}", parse_mode="")
+                except Exception:
+                    pass
+            return False
+
+    def is_token_valid() -> bool:
+        """Check if current Kite access token is valid."""
+        if not settings.kite_access_token:
+            return False
+        try:
+            from kiteconnect import KiteConnect as _KC
+            _kc = _KC(api_key=settings.kite_api_key)
+            _kc.set_access_token(settings.kite_access_token)
+            _kc.profile()
+            return True
+        except Exception:
+            return False
+
+    # Authenticate at startup
+    if settings.kite_api_key:
+        if is_token_valid():
+            logger.info("Kite token valid")
+        else:
+            logger.warning("Kite token expired — attempting auto-auth...")
+            await do_auto_auth("startup")
+
     app = await create_app(settings)
 
     # Start services
@@ -220,6 +422,9 @@ async def run():
 
     # Subscribe option chain builder to tick events
     app["event_bus"].subscribe(EventType.TICK, app["chain_builder"].on_tick)
+
+    # Start chain snapshot recorder (captures real option data for future replay)
+    await app["chain_recorder"].start()
 
     # Schedule daily P&L reset at market open
     async def daily_reset_task():
@@ -242,6 +447,85 @@ async def run():
             await asyncio.sleep(30)
 
     asyncio.create_task(daily_reset_task())
+
+    # Scheduled daily re-auth at 8:55 AM + token health monitor
+    async def auth_refresh_task():
+        """Re-authenticate with Kite every morning and monitor token health."""
+        from datetime import datetime, time as _time
+        from src.core.clock import MarketClock
+
+        _clock = MarketClock()
+        last_auth_date = None
+        ticker_restarted_today = False
+
+        while True:
+            try:
+                now = datetime.now()
+                today = now.date()
+
+                # Skip holidays and weekends
+                if _clock.is_trading_holiday(today) or today.weekday() >= 5:
+                    await asyncio.sleep(300)
+                    continue
+
+                # Daily re-auth at 8:55 AM (before market open)
+                if (
+                    now.time() >= _time(8, 55)
+                    and now.time() < _time(9, 0)
+                    and last_auth_date != today
+                ):
+                    last_auth_date = today
+                    ticker_restarted_today = False
+                    logger.info("Scheduled daily re-auth starting...")
+                    success = await do_auto_auth("scheduled_daily")
+                    if success and app.get("ticker"):
+                        # Update token on existing ticker — it will use it on next reconnect
+                        app["ticker"].update_token(settings.kite_access_token)
+                        logger.info("Ticker token updated, will reconnect at market open")
+
+                # At 9:16 AM — force ticker restart with fresh token to ensure ticks flow
+                if (
+                    now.time() >= _time(9, 16)
+                    and now.time() < _time(9, 18)
+                    and last_auth_date == today
+                    and not ticker_restarted_today
+                ):
+                    ticker_restarted_today = True
+                    ticker = app.get("ticker")
+                    if ticker and not ticker._last_tick_time:
+                        # No ticks received yet — full restart
+                        logger.info("Market open but no ticks — full ticker restart")
+                        old_ticker = ticker
+                        await old_ticker.stop()
+                        new_ticker = TickerManager(
+                            settings.kite_api_key, settings.kite_access_token, app["event_bus"]
+                        )
+                        tokens = list(old_ticker._subscribed_tokens)
+                        if tokens:
+                            new_ticker.subscribe(tokens)
+                        await new_ticker.start()
+                        app["ticker"] = new_ticker
+                        logger.info("Ticker fully restarted at market open")
+                    elif ticker and ticker._last_tick_time:
+                        logger.info("Ticks already flowing — no restart needed")
+
+                # Token health check every 5 minutes during market hours
+                if _clock.is_market_open() and now.minute % 5 == 0:
+                    if not is_token_valid():
+                        logger.warning("Token expired mid-session — re-authenticating...")
+                        success = await do_auto_auth("token_expired")
+                        if success and app.get("ticker"):
+                            # Update token and force reconnect
+                            app["ticker"].update_token(settings.kite_access_token)
+                            await app["ticker"]._force_reconnect()
+                            logger.info("Ticker reconnected after mid-session re-auth")
+
+            except Exception:
+                logger.exception("Error in auth refresh task")
+
+            await asyncio.sleep(30)
+
+    asyncio.create_task(auth_refresh_task())
 
     # Periodic operational summary
     async def operational_summary_task():
@@ -290,15 +574,129 @@ async def run():
                 # Take P&L snapshot for intraday curve
                 portfolio.snapshot_pnl()
 
+                # Snapshot OI at end of day for next-day change tracking
+                from datetime import datetime as _dt
+                now_t = _dt.now()
+                if now_t.hour == 15 and 25 <= now_t.minute <= 29:
+                    app["chain_builder"].snapshot_oi_for_next_day()
+
             except Exception:
                 logger.exception("Error in operational summary")
 
     asyncio.create_task(operational_summary_task())
 
-    if app["ticker"]:
-        await app["ticker"].start()
-    elif app["simulator"]:
-        await app["simulator"].start()
+    # AI Advisor — morning advisory + nightly audit
+    async def advisor_task():
+        """Run morning advisor at 9:00 AM and nightly audit at 4:00 PM on trading days."""
+        from datetime import date as _date, datetime, time as _time
+        from pathlib import Path
+        from src.core.clock import MarketClock
+
+        _clock = MarketClock()
+        last_advisory_date = None
+        last_audit_date = None
+
+        while True:
+            now = datetime.now()
+            today = now.date()
+
+            if _clock.is_trading_holiday(today):
+                await asyncio.sleep(300)
+                continue
+
+            # Morning advisor: 9:00-9:05 AM
+            if (
+                now.time() >= _time(9, 0)
+                and now.time() < _time(9, 5)
+                and last_advisory_date != today
+            ):
+                last_advisory_date = today
+                try:
+                    from src.advisor.analyzer import analyze_with_claude
+                    from src.advisor.collector import collect_today_data
+                    from src.advisor.context import fetch_external_context
+                    from src.advisor.store import save_advisory_json, save_day_bias_json
+
+                    yesterday = today
+                    log_dir = Path("logs")
+                    today_data = await collect_today_data(
+                        target_date=yesterday,
+                        log_dir=log_dir if log_dir.exists() else None,
+                        settings=settings,
+                    )
+                    # Get NIFTY prev close for GIFT Nifty change calculation
+                    nifty_close = today_data.closing_spot
+                    if nifty_close <= 0:
+                        ltp = app["feed"].get_ltp(256265)  # NIFTY spot token
+                        nifty_close = float(ltp) if ltp else 0
+
+                    context = await fetch_external_context(
+                        target_date=today,
+                        calendar_path=Path("data/economic_calendar.json"),
+                        nifty_prev_close=nifty_close,
+                    )
+                    advisory = await analyze_with_claude(today_data, context, settings)
+                    save_day_bias_json(advisory)
+                    save_advisory_json(advisory)
+                    logger.info(
+                        f"[ADVISOR] Morning advisory generated: "
+                        f"risk={advisory.day_bias.risk_level} "
+                        f"conf={advisory.day_bias.confidence:.2f}"
+                    )
+
+                    # Send to Telegram
+                    if settings.telegram_bot_token:
+                        from src.advisor.formatter import format_advisory_telegram
+                        from src.notifications.telegram import TelegramNotifier
+                        tg = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
+                        await tg.send_message(format_advisory_telegram(advisory), parse_mode="")
+
+                except Exception:
+                    logger.exception("[ADVISOR] Morning advisory failed")
+
+            # Nightly audit: 4:00-4:05 PM
+            if (
+                now.time() >= _time(16, 0)
+                and now.time() < _time(16, 5)
+                and last_audit_date != today
+            ):
+                last_audit_date = today
+                try:
+                    from src.advisor.collector import collect_today_data
+                    from src.advisor.formatter import format_audit_telegram
+                    from src.advisor.shadow import build_audit
+                    from src.advisor.store import save_audit_json
+
+                    log_dir = Path("logs")
+                    today_data = await collect_today_data(
+                        target_date=today,
+                        log_dir=log_dir if log_dir.exists() else None,
+                        settings=settings,
+                    )
+                    audit = build_audit(
+                        target_date=today,
+                        log_dir=log_dir if log_dir.exists() else None,
+                        actual_pnl=today_data.total_pnl,
+                    )
+                    save_audit_json(audit)
+                    logger.info(
+                        f"[ADVISOR] Nightly audit: {len(audit.decisions)} decisions "
+                        f"agree={audit.agree_count} disagree={audit.disagree_count} "
+                        f"ai_alpha={audit.ai_alpha:+,.0f}"
+                    )
+
+                    # Send to Telegram if configured
+                    if settings.telegram_bot_token:
+                        from src.notifications.telegram import TelegramNotifier
+                        tg = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
+                        await tg.send_message(format_audit_telegram(audit), parse_mode="")
+
+                except Exception:
+                    logger.exception("[ADVISOR] Nightly audit failed")
+
+            await asyncio.sleep(30)
+
+    asyncio.create_task(advisor_task())
 
     # Import strategy implementations to trigger registration
     import src.strategy.implementations.short_straddle  # noqa: F401
@@ -307,9 +705,36 @@ async def run():
     try:
         import src.strategy.implementations.iron_condor  # noqa: F401
         import src.strategy.implementations.delta_neutral  # noqa: F401
+        import src.strategy.implementations.portfolio_strategy  # noqa: F401
+        import src.strategy.implementations.trend_debit_spread  # noqa: F401
         import src.strategy.adaptive  # noqa: F401
     except ImportError:
         pass
+
+    # ─── Holiday Guard ──────────────────────────────────────────
+    clock = app["clock"] if "clock" in app else MarketClock()
+    if clock.is_trading_holiday(clock.today()) or clock.today().weekday() >= 5:
+        logger.warning(
+            f"TODAY IS NOT A TRADING DAY ({clock.today()}). "
+            f"Strategies will NOT be loaded. Only chain recorder and API will run."
+        )
+        # Still start ticker for chain recording, but skip strategies
+        if app["ticker"]:
+            all_tokens = list(set(app["feed"].get_subscribed_tokens()) | set(app.get("option_tokens", [])))
+            if all_tokens:
+                app["ticker"].subscribe(all_tokens)
+            await app["ticker"].start()
+
+        # Start API server (for monitoring)
+        try:
+            from src.api.app import create_api_app
+            api_app = create_api_app(app)
+            config = uvicorn.Config(api_app, host="0.0.0.0", port=settings.api_port, log_level="info")
+            server = uvicorn.Server(config)
+            await server.serve()
+        except Exception:
+            logger.exception("API server error on holiday")
+        return
 
     # Auto-load strategies from config
     import json
@@ -331,6 +756,18 @@ async def run():
                 logger.exception(f"Failed to load strategy {cfg}: {e}")
     else:
         logger.info(f"No strategies configured. Available: {list_strategies()}")
+
+    # Forward all feed subscriptions + option tokens to the WebSocket ticker, then start it
+    if app["ticker"]:
+        all_tokens = app["feed"].get_subscribed_tokens()
+        # Add option tokens for live chain building
+        all_tokens = list(set(all_tokens) | set(app.get("option_tokens", [])))
+        if all_tokens:
+            app["ticker"].subscribe(all_tokens)
+            logger.info(f"Ticker will subscribe to {len(all_tokens)} tokens on connect")
+        await app["ticker"].start()
+    elif app["simulator"]:
+        await app["simulator"].start()
 
     # Start API server
     try:
@@ -380,7 +817,13 @@ async def run():
     except Exception:
         logger.exception("Error stopping order tracker")
 
-    # 4. Flush market data before closing connections
+    # 4. Stop chain recorder
+    try:
+        await app["chain_recorder"].stop()
+    except Exception:
+        logger.exception("Error stopping chain recorder")
+
+    # 5. Flush market data before closing connections
     try:
         await app["data_store"].flush()
     except Exception:

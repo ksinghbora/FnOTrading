@@ -1,0 +1,41 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,normal_range,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,choppy,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,normal_range,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,normal_range,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,choppy,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,normal_range,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,normal_range,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345
+2025-09-26T09:30:00+05:30,portfolio_hist,PREMIUM,ENTER,iron_condor,24776.65,14.5,1.0,0.0,0.0,1.037,0.164,0.427,4,9,30,4,0,74,0,74,75,conflicted,43.25,75,,,
+2025-09-26T10:00:00+05:30,portfolio_hist,TREND,ENTER,debit_spread,24803.95,14.5,1.0,0.0,0.0,1.037,0.054,0.24,4,10,0,4,0,75,0,75,60,conflicted,35.89,75,,,
+2025-09-26T14:54:00+05:30,portfolio_hist,TREND,EXIT,debit_spread,24630.35,14.5,1.0,0.0,0.0,1.037,0.754,0.132,4,14,54,4,0,0,0,0,0,trending,0.0,0,Trend profit: spread at 55.0% of max,1433.25,294
+2025-09-26T15:15:00+05:30,portfolio_hist,PREMIUM,EXIT,iron_condor,24645.25,14.5,1.0,0.0,0.0,1.037,0.694,0.163,4,15,15,4,0,0,0,0,0,trending,0.0,0,Time exit,318.75,345

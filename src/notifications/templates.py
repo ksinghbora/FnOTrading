@@ -126,9 +126,10 @@ def system_stopped(reason: str = "Normal shutdown") -> str:
 
 
 def connection_lost(source: str) -> str:
+    safe_source = source.replace("_", " ")
     return (
         f"\u26a0\ufe0f *Connection Lost*\n"
-        f"Source: {source}\n"
+        f"Source: {safe_source}\n"
         f"Time: {datetime.now().strftime('%H:%M:%S')}"
     )
 

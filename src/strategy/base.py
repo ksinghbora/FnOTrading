@@ -111,11 +111,121 @@ class BaseStrategy(ABC):
             )
         return lots
 
+    def _check_pcr_filter(self, underlying: str, expiry: "date | None") -> str | None:
+        """Check if Put-Call Ratio (OI) is within healthy range for premium selling.
+
+        Returns None if OK to enter, or a reason string if entry should be skipped.
+        When pcr_filter_enabled=False, always returns None but still logs.
+        """
+        if not expiry:
+            return None
+        chain = self.ctx.get_option_chain(underlying, expiry)
+        if not chain or not chain.strikes:
+            return None
+        pcr = chain.pcr_oi
+        if pcr <= 0:
+            return None  # Not enough OI data yet
+
+        in_range = self.params.pcr_oi_min <= pcr <= self.params.pcr_oi_max
+        action = "PASS" if in_range else "WOULD_BLOCK"
+        if self.params.pcr_filter_enabled and not in_range:
+            action = "BLOCK"
+
+        logger.info(
+            f"[FILTER] strategy={self.strategy_id} filter=pcr_oi "
+            f"value={pcr:.2f} range=[{self.params.pcr_oi_min}-{self.params.pcr_oi_max}] "
+            f"action={action}"
+        )
+
+        if self.params.pcr_filter_enabled and not in_range:
+            return f"PCR_OI {pcr:.2f} outside range [{self.params.pcr_oi_min}-{self.params.pcr_oi_max}]"
+        return None
+
+    def _check_max_pain_filter(self, underlying: str, expiry: "date | None") -> str | None:
+        """Check if spot is near max pain (favorable for premium sellers).
+
+        Returns None if OK to enter, or a reason string if entry should be skipped.
+        When max_pain_filter_enabled=False, always returns None but still logs.
+        """
+        if not expiry:
+            return None
+        chain = self.ctx.get_option_chain(underlying, expiry)
+        if not chain or not chain.strikes:
+            return None
+        max_pain = chain.max_pain
+        spot = chain.spot_price
+        if max_pain <= 0 or spot <= 0:
+            return None
+
+        distance_pct = abs(float(spot) - float(max_pain)) / float(spot) * 100
+        in_range = distance_pct <= self.params.max_pain_proximity_pct
+        action = "PASS" if in_range else "WOULD_BLOCK"
+        if self.params.max_pain_filter_enabled and not in_range:
+            action = "BLOCK"
+
+        logger.info(
+            f"[FILTER] strategy={self.strategy_id} filter=max_pain "
+            f"max_pain={max_pain} spot={spot} distance={distance_pct:.2f}% "
+            f"threshold={self.params.max_pain_proximity_pct}% action={action}"
+        )
+
+        if self.params.max_pain_filter_enabled and not in_range:
+            return (
+                f"Spot {spot} is {distance_pct:.2f}% from max pain {max_pain} "
+                f"(threshold: {self.params.max_pain_proximity_pct}%)"
+            )
+        return None
+
+    def _log_iv_skew(self, underlying: str, expiry: "date | None") -> None:
+        """Log IV skew data at entry time for research/analysis."""
+        if not expiry:
+            return
+        chain = self.ctx.get_option_chain(underlying, expiry)
+        if not chain or not chain.strikes:
+            return
+        from src.options.chain_analyzer import get_iv_skew
+        skew = get_iv_skew(chain)
+        atm_ce_iv = skew.get("atm_iv_ce", 0)
+        atm_pe_iv = skew.get("atm_iv_pe", 0)
+
+        otm_puts = skew.get("otm_puts", [])
+        otm_calls = skew.get("otm_calls", [])
+        avg_put_iv = sum(p["iv"] for p in otm_puts) / len(otm_puts) if otm_puts else 0
+        avg_call_iv = sum(c["iv"] for c in otm_calls) / len(otm_calls) if otm_calls else 0
+
+        ratio = avg_put_iv / avg_call_iv if avg_call_iv > 0 else 0
+        bias = "PUT_HEAVY" if ratio > 1.15 else ("CALL_HEAVY" if ratio < 0.85 else "NEUTRAL")
+
+        logger.info(
+            f"[FILTER] strategy={self.strategy_id} filter=iv_skew "
+            f"atm_ce_iv={atm_ce_iv:.3f} atm_pe_iv={atm_pe_iv:.3f} "
+            f"avg_otm_put_iv={avg_put_iv:.3f} avg_otm_call_iv={avg_call_iv:.3f} "
+            f"ratio={ratio:.2f} bias={bias}"
+        )
+
+    def _log_oi_levels(self, underlying: str, expiry: "date | None") -> None:
+        """Log high-OI levels (support/resistance) at entry time for research."""
+        if not expiry:
+            return
+        chain = self.ctx.get_option_chain(underlying, expiry)
+        if not chain or not chain.strikes:
+            return
+        from src.options.chain_analyzer import get_high_oi_strikes
+        oi_data = get_high_oi_strikes(chain, top_n=3)
+        ce_levels = [f"{s['strike']}({s['oi']})" for s in oi_data.get("ce_high_oi", [])]
+        pe_levels = [f"{s['strike']}({s['oi']})" for s in oi_data.get("pe_high_oi", [])]
+
+        logger.info(
+            f"[FILTER] strategy={self.strategy_id} filter=oi_levels "
+            f"ce_resistance=[{','.join(ce_levels)}] "
+            f"pe_support=[{','.join(pe_levels)}]"
+        )
+
     def _check_trend_filter(self, underlying: str) -> str | None:
         """Check if market is trending too strongly for premium selling.
 
         Uses morning range (9:15-9:30 open/close) vs current spot.
-        If spot has moved > 0.7% from open, market is trending — skip entry.
+        If spot has moved > 0.5% from open, market is trending — skip entry.
         Returns None if OK, or a reason string to skip.
         """
         from src.core.types import Timeframe
@@ -145,13 +255,14 @@ class BaseStrategy(ABC):
             return None
 
         move_pct = abs(float(spot) - session_open) / session_open * 100
+        threshold = 0.5  # Tightened from 0.7% — real data shows 0.5%+ moves lead to losses
         logger.debug(
             f"[FILTER] strategy={self.strategy_id} filter=trend "
             f"session_open={session_open:.0f} spot={float(spot):.0f} "
-            f"move_pct={move_pct:.2f} threshold=0.7 "
-            f"result={'block' if move_pct > 0.7 else 'pass'}"
+            f"move_pct={move_pct:.2f} threshold={threshold} "
+            f"result={'block' if move_pct > threshold else 'pass'}"
         )
-        if move_pct > 0.7:
+        if move_pct > threshold:
             direction = "up" if float(spot) > session_open else "down"
             return (
                 f"Market trending {direction} {move_pct:.2f}% from open "
