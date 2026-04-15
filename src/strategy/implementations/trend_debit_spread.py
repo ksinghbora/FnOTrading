@@ -97,6 +97,14 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
+        # Hard block: DTE ≤ 2 — debit spreads need time to reach max value
+        if self._expiry and not self._entered:
+            dte = (self._expiry - now.date()).days
+            if dte <= 2:
+                if now.minute == 0:
+                    logger.info(f"[{self.strategy_id}] TREND hard-blocked: DTE={dte} ≤ 2")
+                return None
+
         # Entry window
         if (
             not self._entered
@@ -240,13 +248,13 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         atm = float(chain.atm_strike)
 
         if breakout.direction == "UP":
-            # Bull Call Spread: Buy CE at ATM+1, Sell CE at ATM+1+width
-            buy_strike = atm + strike_interval
+            # Bull Call Spread: Buy CE at ATM (50Δ), Sell CE at ATM+width
+            buy_strike = atm
             sell_strike = buy_strike + width
             option_type = "ce"
         else:
-            # Bear Put Spread: Buy PE at ATM-1, Sell PE at ATM-1-width
-            buy_strike = atm - strike_interval
+            # Bear Put Spread: Buy PE at ATM (50Δ), Sell PE at ATM-width
+            buy_strike = atm
             sell_strike = buy_strike - width
             option_type = "pe"
 

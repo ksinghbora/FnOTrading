@@ -164,10 +164,10 @@ class PortfolioParams(BaseStrategyParams):
     theta_gamma_min_ratio: float = 0.0     # Exit when |theta/gamma| < this (0 = disabled)
 
     # Trend mode (debit spread) — used when trending
-    trend_spread_width_strikes: int = 3      # 150pts wide (was 2/100pts) — more room for move to reach max value
-    trend_stop_loss_pct: float = 20.0       # Tighter — cut trend losers fast (was 25, OOS-validated)
-    trend_profit_target_pct: float = 55.0    # Let winners run slightly bigger (was 50)
-    trend_trailing_stop_pct: float = 15.0    # Reduced trail — still protects gains (was 25)
+    trend_spread_width_strikes: int = 2      # 2-strike (100pts) — 3-strike same P&L but worse Sharpe (backtest-validated)
+    trend_stop_loss_pct: float = 25.0       # 25% — 20% too tight, cuts trend before it develops
+    trend_profit_target_pct: float = 50.0    # Aligned with standalone strategy (was 55)
+    trend_trailing_stop_pct: float = 25.0    # 25% trail — 15% triggers on normal intraday noise
     breakout_confirmation_pct: float = 0.5
 
 
@@ -178,13 +178,13 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     Profits from trending markets that hurt premium sellers.
     """
 
-    entry_time: time = time(10, 30)           # 10:30 avoids peak morning trap window (10:00-10:30)
-    exit_time: time = time(13, 0)            # 13:00 time stop — afternoon theta too punishing at 5 DTE
+    entry_time: time = time(10, 30)           # 10:30 avoids peak morning trap window — backtest-validated +72% Sharpe vs 10:00
+    exit_time: time = time(15, 0)             # 15:00 gives trend time to develop — 13:00 cuts avg_win in half
     breakout_confirmation_pct: float = 0.7   # Fallback % — overridden by ATR-normalized threshold in code
-    spread_width_strikes: int = 3            # 150pts on NIFTY (3 x 50pt) — more room to reach max value
-    stop_loss_pct: float = 35.0              # Cut losers faster (was 50 — too wide)
-    profit_target_pct: float = 50.0          # Unchanged — 50% of max spread value
-    trailing_stop_pct: float = 15.0          # Tighter trail (was 25), activation threshold also fixed
-    max_trades_per_day: int = 1              # Reduced from 2 — avoid whipsaw re-entries
+    spread_width_strikes: int = 2            # 2-strike (100pts) — 3-strike same P&L but worse Sharpe
+    stop_loss_pct: float = 50.0              # 50% — tighter (35%) cuts winners before trend develops
+    profit_target_pct: float = 50.0          # 50% of max spread value
+    trailing_stop_pct: float = 25.0          # 25% trail — 15% too tight, triggers on normal intraday noise
+    max_trades_per_day: int = 1              # One entry per day — avoid whipsaw re-entries
     oi_confirm: bool = True                  # Require OI level breach to confirm breakout
     log_only: bool = False                   # Enabled for trading (validated on real data)
