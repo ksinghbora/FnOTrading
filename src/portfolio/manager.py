@@ -1,17 +1,25 @@
 """Portfolio Manager — central hub for position tracking and P&L."""
 
 import logging
+from datetime import time
 from decimal import Decimal
 
 from src.broker.base import BrokerClient
+from src.core.clock import MarketClock
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Order, PnL, Position
+from src.core.types import OptionType
 from src.portfolio.charges import calculate_charges
 from src.portfolio.pnl import PnLCalculator
 from src.portfolio.positions import PositionTracker
 from src.portfolio.reconciliation import Reconciler
 
 logger = logging.getLogger(__name__)
+
+# Auto-square-off / settlement window: NSE MIS cutoff is 15:15-15:25 IST and
+# F&O closing is 15:30. Fills at/after this time on expiry day are treated as
+# expiry-driven settlement rather than discretionary square-offs.
+EXPIRY_SETTLEMENT_CUTOFF = time(15, 25)
 
 
 class PortfolioManager:
@@ -21,10 +29,17 @@ class PortfolioManager:
     Listens to TICK events to update mark-to-market P&L.
     """
 
-    def __init__(self, event_bus: EventBus, broker: BrokerClient, chain_builder=None):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        broker: BrokerClient,
+        chain_builder=None,
+        clock: MarketClock | None = None,
+    ):
         self._event_bus = event_bus
         self._broker = broker
         self._chain_builder = chain_builder  # OptionChainBuilder for Greeks lookup
+        self._clock = clock or MarketClock()
         self._positions = PositionTracker()
         self._pnl = PnLCalculator(self._positions)
         self._reconciler = Reconciler(self._positions, broker)
@@ -57,9 +72,29 @@ class PortfolioManager:
         inst_type = "CE" if "CE" in order.tradingsymbol else (
             "PE" if "PE" in order.tradingsymbol else "FUT"
         )
-        charges = calculate_charges(
-            order.fill_price, order.fill_quantity, order.order_side, inst_type
+
+        # Detect expiry-day auto-exercise: ITM option, closing fill on expiry
+        # day at/after 15:25 IST. The 0.125% STT applies to intrinsic value.
+        is_exercise, exercise_intrinsic = self._detect_expiry_exercise(
+            order, inst_type, position
         )
+        if is_exercise:
+            charges = calculate_charges(
+                exercise_intrinsic, order.fill_quantity, order.order_side,
+                inst_type, is_expiry_exercise=True,
+            )
+            logger.info(
+                f"[EXPIRY_EXERCISE] symbol={order.tradingsymbol} "
+                f"strategy={order.strategy_id} side={order.order_side.value} "
+                f"qty={order.fill_quantity} fill_price={order.fill_price} "
+                f"intrinsic={exercise_intrinsic} stt={charges.stt} "
+                f"total_charges={charges.total}"
+            )
+        else:
+            charges = calculate_charges(
+                order.fill_price, order.fill_quantity, order.order_side, inst_type
+            )
+
         self._pnl.add_charges(order.strategy_id, charges.total)
 
         logger.info(
@@ -67,7 +102,7 @@ class PortfolioManager:
             f"strategy={order.strategy_id} side={order.order_side.value} "
             f"qty={order.fill_quantity} fill_price={order.fill_price} "
             f"position_qty={position.quantity} position_avg={position.average_price} "
-            f"charges={charges.total}"
+            f"charges={charges.total} exercise={is_exercise}"
         )
 
         # Publish position update
@@ -79,6 +114,50 @@ class PortfolioManager:
                 charges=charges.model_dump(mode="json"),
             )
         )
+
+    def _detect_expiry_exercise(
+        self, order: Order, inst_type: str, position: Position
+    ) -> tuple[bool, Decimal]:
+        """Determine whether a fill should be charged as an expiry-day exercise.
+
+        Returns (is_exercise, intrinsic_per_unit). Conservative — must satisfy
+        ALL of: option (CE/PE), fill at/after 15:25 IST on expiry day, position
+        flat after fill (closing leg), option ITM (intrinsic > 0).
+        """
+        if inst_type not in ("CE", "PE"):
+            return False, Decimal("0")
+        if self._chain_builder is None:
+            return False, Decimal("0")
+        if order.filled_at is None:
+            return False, Decimal("0")
+        if position.quantity != 0:
+            # Partial close or opening fill — don't classify as exercise.
+            return False, Decimal("0")
+        if order.filled_at.time() < EXPIRY_SETTLEMENT_CUTOFF:
+            return False, Decimal("0")
+
+        token_info = self._chain_builder._token_map.get(order.instrument_token)
+        if not token_info:
+            return False, Decimal("0")
+        underlying, expiry, strike, option_type = token_info
+
+        if not self._clock.is_expiry_day(underlying, order.filled_at.date()):
+            return False, Decimal("0")
+
+        spot = self._chain_builder.get_spot_price(underlying)
+        if spot <= 0:
+            return False, Decimal("0")
+
+        if option_type == OptionType.CE:
+            intrinsic = max(Decimal("0"), spot - strike)
+        else:
+            intrinsic = max(Decimal("0"), strike - spot)
+
+        if intrinsic <= 0:
+            # OTM at expiry — expires worthless, no exercise STT.
+            return False, Decimal("0")
+
+        return True, intrinsic
 
     async def _on_tick(self, event: Event) -> None:
         """Update LTP and Greeks for open positions on each tick."""

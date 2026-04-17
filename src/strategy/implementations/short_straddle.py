@@ -131,6 +131,12 @@ class ShortStraddleStrategy(BaseStrategy):
                 )
                 return None
 
+        # Expiry-day 0DTE block — straddle is ATM, gets crushed worst by gamma vertical
+        expiry_block = self._check_expiry_day_block(self.params.underlying)
+        if expiry_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {expiry_block}")
+            return None
+
         # VIX filter — skip entry in high-volatility environments
         vix_block = self._check_vix_filter()
         if vix_block:
@@ -275,22 +281,23 @@ class ShortStraddleStrategy(BaseStrategy):
             # Premium is decaying (good for us) — track the low
             self._peak_premium = min(self._peak_premium, current_premium)
         elif trail_pct > 0 and current_premium > self._peak_premium:
-            # Premium bouncing back — check if we should trail-exit
-            bounce_pct = float(
-                (current_premium - self._peak_premium) / self._entry_premium * 100
+            # Premium bouncing back — check time + decay gates first
+            profit_locked = float(
+                (self._entry_premium - self._peak_premium) / self._entry_premium * 100
             )
-            if bounce_pct > trail_pct:
-                profit_locked = float(
-                    (self._entry_premium - self._peak_premium) / self._entry_premium * 100
+            if self._can_activate_trail_stop(profit_locked):
+                bounce_pct = float(
+                    (current_premium - self._peak_premium) / self._entry_premium * 100
                 )
-                logger.info(
-                    f"[{self.strategy_id}] TRAIL STOP: premium bounced {bounce_pct:.1f}% "
-                    f"from low, locking {profit_locked:.1f}% profit"
-                )
-                self._stopped_for_day = True
-                return self._create_exit_signal(
-                    f"Trailing stop: bounced {bounce_pct:.1f}% from {self._peak_premium}"
-                )
+                if bounce_pct > trail_pct:
+                    logger.info(
+                        f"[{self.strategy_id}] TRAIL STOP: premium bounced {bounce_pct:.1f}% "
+                        f"from low, locking {profit_locked:.1f}% profit"
+                    )
+                    self._stopped_for_day = True
+                    return self._create_exit_signal(
+                        f"Trailing stop: bounced {bounce_pct:.1f}% from {self._peak_premium}"
+                    )
 
         # Adjustment: shift the losing leg to the new ATM strike
         if premium_change_pct > self.params.adjustment_threshold_pct:

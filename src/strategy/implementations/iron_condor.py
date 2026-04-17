@@ -142,6 +142,12 @@ class IronCondorStrategy(BaseStrategy):
                 )
                 return None
 
+        # Expiry-day 0DTE block — wings go illiquid + STT trap if ITM at close
+        expiry_block = self._check_expiry_day_block(self.params.underlying)
+        if expiry_block:
+            logger.info(f"[{self.strategy_id}] Entry skipped: {expiry_block}")
+            return None
+
         # VIX filter
         vix_block = self._check_vix_filter()
         if vix_block:

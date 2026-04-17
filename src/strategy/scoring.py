@@ -60,36 +60,36 @@ class ScoreConfig:
 
 IRON_CONDOR_CONFIG = ScoreConfig(
     name="iron_condor",
+    # Indian VIX bands: 16-20 ideal, 20-22 stressed (wings still protect), >25 no trade
     vix_bands=[
-        (14, 20, 25, "ideal(IC)"),
-        (20, 28, 20, "rich premiums(IC)"),
-        (11, 14, 8, "thin premiums(IC)"),
-        (28, 50, 5, "elevated(IC-protected)"),
-        (0, 11, 0, "too low(IC)"),
+        (16, 20, 25, "ideal(IC)"),
+        (20, 22, 15, "stressed(IC-wings hold)"),
+        (13, 16, 10, "thin premium(IC)"),
+        (22, 25, 5, "high stress(IC)"),
+        (25, 50, 0, "no_trade(event)"),
+        (0, 13, 0, "complacency(IC)"),
     ],
 )
 
 SHORT_STRANGLE_CONFIG = ScoreConfig(
     name="short_strangle",
+    # Indian VIX bands: 13-16 ideal, 16-18 marginal, >18 naked premium too dangerous
     vix_bands=[
-        (12, 16, 25, "ideal"),
-        (11, 20, 12, "acceptable"),
-        (20, 25, 8, "high(risky naked)"),
-        (25, 50, 0, "too high(naked)"),
-        (0, 11, 5, "very low"),
+        (13, 16, 25, "ideal"),
+        (16, 18, 8, "marginal(strangle)"),
+        (18, 50, 0, "too_high(naked)"),
+        (0, 13, 0, "complacency(thin)"),
     ],
 )
 
 SHORT_STRADDLE_CONFIG = ScoreConfig(
     name="short_straddle",
-    # Straddle is ATM — very sensitive to moves, needs calm market
+    # Straddle is ATM — most gamma-fragile; tight Indian band 13-15 only
     vix_bands=[
-        (11, 15, 25, "ideal(ATM)"),
-        (15, 18, 15, "ok(ATM)"),
-        (8, 11, 10, "low premium(ATM)"),
-        (18, 22, 5, "risky(ATM)"),
-        (22, 50, 0, "dangerous(ATM)"),
-        (0, 8, 0, "dead market"),
+        (13, 15, 25, "ideal(ATM)"),
+        (15, 17, 12, "ok(ATM)"),
+        (17, 50, 0, "dangerous(ATM)"),
+        (0, 13, 0, "thin(ATM)"),
     ],
     # Straddle needs very tight range
     range_tight_max=0.2,

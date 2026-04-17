@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 
 from src.broker.base import BrokerClient
+from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Order
 from src.core.structured_logger import get_structured_logger
@@ -141,7 +142,7 @@ class OrderTracker:
                     from decimal import Decimal
                     order.fill_price = Decimal(str(fill_price))
                     order.fill_quantity = int(fill_qty)
-                    order.filled_at = datetime.now()
+                    order.filled_at = now_ist()
 
                     # Detect partial fills — warn so strategies can react
                     if order.fill_quantity < order.quantity:

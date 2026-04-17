@@ -621,6 +621,10 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
       <div class="value" id="dayPnl">--</div>
     </div>
     <div class="pnl-card">
+      <div class="label">Gross (pre-charges)</div>
+      <div class="value" id="grossPnl">--</div>
+    </div>
+    <div class="pnl-card">
       <div class="label">Realized</div>
       <div class="value" id="realized">--</div>
     </div>
@@ -1029,6 +1033,7 @@ async function fetchRisk() {
 // ── Rendering ───────────────────────────────────────────────────
 function updatePnl(pnl) {
   setPnlValue('dayPnl', pnl.day_pnl);
+  setPnlValue('grossPnl', pnl.gross);
   setPnlValue('realized', pnl.realized);
   setPnlValue('unrealized', pnl.unrealized);
   document.getElementById('charges').textContent = formatCurrency(pnl.charges);

@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from src.core.constants import RISK_FREE_RATE
-from src.core.clock import MarketClock
+from src.core.clock import MarketClock, now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Greeks, OptionChain, OptionChainEntry, OptionData, Tick
 from src.core.types import OptionType
@@ -162,7 +162,7 @@ class OptionChainBuilder:
             entry.pe = opt_data
 
         # Update chain aggregates
-        chain.updated_at = datetime.now()
+        chain.updated_at = now_ist()
         chain.pcr_oi = compute_pcr_oi(chain)
         chain.pcr_volume = compute_pcr_volume(chain)
         chain.max_pain = compute_max_pain(chain)

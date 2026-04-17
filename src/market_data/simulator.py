@@ -13,6 +13,7 @@ import random
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from src.core.clock import now_ist
 from src.core.constants import INDIA_VIX_TOKEN, LOT_SIZES
 from src.core.events import Event, EventBus, EventType
 from src.core.types import OptionType
@@ -176,7 +177,7 @@ class SimulationEngine:
 
     async def _generate_tick_batch(self) -> None:
         """Generate one batch of ticks for all instruments."""
-        now = datetime.now()
+        now = now_ist()
 
         # Only generate ticks during market hours (9:15-15:30 IST) + weekdays
         if now.weekday() >= 5:  # Saturday/Sunday

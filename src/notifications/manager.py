@@ -10,6 +10,7 @@ import time as _time
 from datetime import datetime
 from decimal import Decimal
 
+from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.notifications.telegram import TelegramNotifier
 from src.notifications import templates
@@ -124,7 +125,7 @@ class NotificationManager:
 
     async def _on_connection_lost(self, event: Event) -> None:
         """Send connection lost notification — suppressed pre-market and debounced during market hours."""
-        now = datetime.now()
+        now = now_ist()
         hour, minute = now.hour, now.minute
         is_market_hours = (
             now.weekday() < 5

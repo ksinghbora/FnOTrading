@@ -12,6 +12,8 @@ from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime
 from pathlib import Path
 
+from src.core.clock import now_ist
+
 logger = logging.getLogger(__name__)
 
 DECISIONS_DIR = Path("data/decisions")
@@ -138,7 +140,7 @@ class DecisionLogger:
     def log(self, snap: DecisionSnapshot) -> None:
         """Write one decision row to today's CSV."""
         try:
-            today = snap.timestamp[:10] if snap.timestamp else datetime.now().strftime("%Y-%m-%d")
+            today = snap.timestamp[:10] if snap.timestamp else now_ist().strftime("%Y-%m-%d")
             self._ensure_file(today)
             row = asdict(snap)
             self._writer.writerow([row.get(c, "") for c in COLUMNS])

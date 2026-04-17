@@ -7,6 +7,8 @@ risk alerts, and system status messages.
 from datetime import datetime
 from decimal import Decimal
 
+from src.core.clock import now_ist
+
 
 # ─── Trade Execution Templates ──────────────────────────────────────
 
@@ -113,7 +115,7 @@ def system_started(environment: str, paper_trading: bool) -> str:
         f"\u2705 *System Started*\n"
         f"Environment: `{environment}`\n"
         f"Mode: *{mode}*\n"
-        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        f"Time: {now_ist().strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
 
@@ -121,7 +123,7 @@ def system_stopped(reason: str = "Normal shutdown") -> str:
     return (
         f"\u23f9 *System Stopped*\n"
         f"Reason: {reason}\n"
-        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        f"Time: {now_ist().strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
 
@@ -130,7 +132,7 @@ def connection_lost(source: str) -> str:
     return (
         f"\u26a0\ufe0f *Connection Lost*\n"
         f"Source: {safe_source}\n"
-        f"Time: {datetime.now().strftime('%H:%M:%S')}"
+        f"Time: {now_ist().strftime('%H:%M:%S')}"
     )
 
 
@@ -138,7 +140,7 @@ def connection_restored(source: str) -> str:
     return (
         f"\u2705 *Connection Restored*\n"
         f"Source: {source}\n"
-        f"Time: {datetime.now().strftime('%H:%M:%S')}"
+        f"Time: {now_ist().strftime('%H:%M:%S')}"
     )
 
 

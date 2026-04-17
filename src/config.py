@@ -1,12 +1,15 @@
 """Application configuration using Pydantic Settings.
 
-Reads from .env file and environment variables.
+Reads from .env file and environment variables. Secret fields (Kite, Telegram,
+Anthropic, API key) prefer the OS keychain — see src/core/secrets.py.
 """
 
 from decimal import Decimal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.core.secrets import get_secret
 
 
 class Settings(BaseSettings):
@@ -58,6 +61,30 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @model_validator(mode="after")
+    def _resolve_secrets_from_keychain(self) -> "Settings":
+        """Override empty/default secret fields with values from the OS keychain.
+
+        Env values still win when present (already loaded by pydantic-settings);
+        the keychain only fills in blanks. This lets a deploy keep .env free of
+        secrets while CI/Docker can still inject via environment.
+        """
+        # (env_key_name, attr_name, default_sentinel)
+        _SECRET_ATTRS = (
+            ("KITE_API_SECRET", "kite_api_secret", ""),
+            ("KITE_ACCESS_TOKEN", "kite_access_token", ""),
+            ("TELEGRAM_BOT_TOKEN", "telegram_bot_token", ""),
+            ("ANTHROPIC_API_KEY", "anthropic_api_key", ""),
+            ("API_SECRET_KEY", "api_secret_key", "change-me-in-production"),
+        )
+        for env_key, attr, sentinel in _SECRET_ATTRS:
+            current = getattr(self, attr)
+            if current == sentinel or not current:
+                resolved = get_secret(env_key)
+                if resolved:
+                    object.__setattr__(self, attr, resolved)
+        return self
 
     @model_validator(mode="after")
     def _validate_settings(self) -> "Settings":

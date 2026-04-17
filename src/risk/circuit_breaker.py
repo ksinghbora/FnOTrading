@@ -5,6 +5,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.types import CircuitBreakerState
 
@@ -66,7 +67,7 @@ class CircuitBreaker:
 
     def check_pnl(self, current_day_pnl: Decimal) -> None:
         """Check P&L-based triggers."""
-        now = datetime.now()
+        now = now_ist()
         self._pnl_snapshots.append((now, current_day_pnl))
 
         # Auto-reset after configured interval
@@ -107,7 +108,7 @@ class CircuitBreaker:
             return  # Already tripped
 
         self._state = CircuitBreakerState.OPEN
-        self._triggered_at = datetime.now()
+        self._triggered_at = now_ist()
         self._trigger_reason = reason
         logger.critical(f"CIRCUIT BREAKER TRIPPED: {reason}")
 
@@ -145,13 +146,13 @@ class CircuitBreaker:
 
     async def _on_disconnect(self, event: Event) -> None:
         """Track WebSocket disconnection duration."""
-        self._disconnect_since = datetime.now()
+        self._disconnect_since = now_ist()
         logger.warning("Tracking disconnection for circuit breaker")
 
     async def _on_reconnect(self, event: Event) -> None:
         """Reset disconnection tracking."""
         if self._disconnect_since:
-            duration = datetime.now() - self._disconnect_since
+            duration = now_ist() - self._disconnect_since
             if duration > self._disconnect_threshold:
                 self._trip(f"Network disconnection lasted {duration.seconds}s")
             self._disconnect_since = None

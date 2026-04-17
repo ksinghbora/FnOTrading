@@ -14,6 +14,8 @@ from typing import Any, Callable, Coroutine
 
 from pydantic import BaseModel
 
+from src.core.clock import now_ist
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +63,7 @@ class Event(BaseModel):
 
     @classmethod
     def create(cls, event_type: EventType, source: str, **payload: Any) -> "Event":
-        return cls(type=event_type, timestamp=datetime.now(), source=source, payload=payload)
+        return cls(type=event_type, timestamp=now_ist(), source=source, payload=payload)
 
 
 # Type alias for event handlers

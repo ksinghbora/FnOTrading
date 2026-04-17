@@ -16,6 +16,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 
+from src.core.clock import now_ist
 from src.core.constants import INDIA_VIX_TOKEN, VIX_EXTREME, VIX_HIGH, VIX_LOW, VIX_NORMAL
 from src.core.types import Timeframe
 from src.market_data.aggregator import OHLCAggregator
@@ -28,11 +29,11 @@ logger = logging.getLogger(__name__)
 # ─── Enums ──────────────────────────────────────────────────────
 
 class VolRegime(str, Enum):
-    """Volatility regime from VIX."""
-    LOW = "low"             # VIX < 14
-    NORMAL = "normal"       # VIX 14-18
-    HIGH = "high"           # VIX 18-22
-    EXTREME = "extreme"     # VIX > 22
+    """Volatility regime from VIX (Indian-calibrated bands)."""
+    LOW = "low"             # VIX <= 13 — complacency, no premium selling
+    NORMAL = "normal"       # VIX 13-16 — strangle ideal
+    HIGH = "high"           # VIX 16-20 — iron condor ideal
+    EXTREME = "extreme"     # VIX > 20 — stressed; >25 = no trade
 
 
 class ActionRegime(str, Enum):
@@ -131,19 +132,23 @@ def _recommend(vol: VolRegime, action: ActionRegime, confidence: float, conflict
 
     lookup = {
         # (vol, action): (strategy, lots_mult)
-        (VolRegime.LOW, ActionRegime.RANGE_BOUND): ("short_strangle", 1.5),
-        (VolRegime.LOW, ActionRegime.CHOPPY): ("short_strangle", 0.5),
-        (VolRegime.LOW, ActionRegime.TRENDING): ("trend_debit_spread", 1.0),
+        # LOW (VIX <13): complacency — premium too cheap, naked sellers stop working
+        (VolRegime.LOW, ActionRegime.RANGE_BOUND): ("sit_out", 0.0),
+        (VolRegime.LOW, ActionRegime.CHOPPY): ("sit_out", 0.0),
+        (VolRegime.LOW, ActionRegime.TRENDING): ("trend_debit_spread", 0.5),
 
+        # NORMAL (VIX 13-16): strangle ideal band
         (VolRegime.NORMAL, ActionRegime.RANGE_BOUND): ("short_strangle", 1.0),
         (VolRegime.NORMAL, ActionRegime.CHOPPY): ("iron_condor", 0.5),
         (VolRegime.NORMAL, ActionRegime.TRENDING): ("trend_debit_spread", 1.0),
 
-        (VolRegime.HIGH, ActionRegime.RANGE_BOUND): ("iron_condor", 0.5),
-        (VolRegime.HIGH, ActionRegime.CHOPPY): ("sit_out", 0.0),
-        (VolRegime.HIGH, ActionRegime.TRENDING): ("trend_debit_spread", 0.5),
+        # HIGH (VIX 16-20): iron condor ideal — wings protect against expansion
+        (VolRegime.HIGH, ActionRegime.RANGE_BOUND): ("iron_condor", 1.0),
+        (VolRegime.HIGH, ActionRegime.CHOPPY): ("iron_condor", 0.5),
+        (VolRegime.HIGH, ActionRegime.TRENDING): ("trend_debit_spread", 1.0),
 
-        (VolRegime.EXTREME, ActionRegime.RANGE_BOUND): ("iron_condor", 0.25),
+        # EXTREME (VIX >20): stressed — IC only, sized down; vix_entry_max blocks >25
+        (VolRegime.EXTREME, ActionRegime.RANGE_BOUND): ("iron_condor", 0.5),
         (VolRegime.EXTREME, ActionRegime.CHOPPY): ("sit_out", 0.0),
         (VolRegime.EXTREME, ActionRegime.TRENDING): ("trend_debit_spread", 0.5),
     }
@@ -194,7 +199,7 @@ class RegimeDetector:
 
         Returns RegimeSnapshot with both legacy regime and new 2D decomposition.
         """
-        now = datetime.now()
+        now = now_ist()
         today = now.date()
         if self._last_session_date and self._last_session_date != today:
             logger.info("[RegimeDetector] New trading day — resetting session data")

@@ -54,9 +54,11 @@ class PnLCalculator:
         else:
             charges = sum(self._total_charges.values(), Decimal("0"))
 
-        net = realized + unrealized - charges
+        gross = realized + unrealized
+        net = gross - charges
 
         return PnL(
+            gross=gross.quantize(Decimal("0.01")),
             realized=realized.quantize(Decimal("0.01")),
             unrealized=unrealized.quantize(Decimal("0.01")),
             charges=charges.quantize(Decimal("0.01")),
@@ -74,8 +76,10 @@ class PnLCalculator:
         pnl = self.get_pnl()
         self._pnl_curve.append({
             "timestamp": datetime.now(IST).isoformat(),
+            "gross": float(pnl.gross),
             "realized": float(pnl.realized),
             "unrealized": float(pnl.unrealized),
+            "charges": float(pnl.charges),
             "net": float(pnl.net),
         })
         if len(self._pnl_curve) > self.MAX_PNL_CURVE_POINTS:

@@ -63,6 +63,7 @@ async def get_dashboard_summary(
 
     return {
         "pnl": {
+            "gross": str(pnl.gross),
             "realized": str(pnl.realized),
             "unrealized": str(pnl.unrealized),
             "charges": str(pnl.charges),

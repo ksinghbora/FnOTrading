@@ -18,6 +18,16 @@ from src.core.constants import (
 IST = pytz.timezone("Asia/Kolkata")
 
 
+def now_ist() -> datetime:
+    """IST-aware current time. Use everywhere instead of datetime.now().
+
+    Apr 17 fix: naive datetimes from datetime.now() pick up the host TZ,
+    which caused expiry-day comparisons to silently shift +/- 5h30m
+    when the box was in UTC vs IST.
+    """
+    return datetime.now(IST)
+
+
 class MarketClock:
     """Provides market time awareness for the trading system."""
 

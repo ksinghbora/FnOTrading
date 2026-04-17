@@ -80,11 +80,12 @@ CHARGES = {
 # Kite instrument token for India VIX index
 INDIA_VIX_TOKEN = 264969
 
-# VIX regime thresholds
-VIX_LOW = 13.0       # Low vol — aggressive premium selling
-VIX_NORMAL = 18.0    # Normal — standard position sizing
-VIX_HIGH = 22.0      # High — reduce size or skip entry
-VIX_EXTREME = 30.0   # Extreme — no new short premium positions
+# VIX regime thresholds — calibrated to Indian VIX (2024-2026), not US/SPX bands.
+# Boundaries: <13 complacency / 13-16 normal / 16-20 elevated / 20-25 stressed / >25 event.
+VIX_LOW = 13.0       # Below: complacency — premium too cheap, naked sellers stop working
+VIX_NORMAL = 16.0    # 13-16 = strangle ideal band
+VIX_HIGH = 20.0      # 16-20 = iron condor ideal band
+VIX_EXTREME = 25.0   # Above: event/crash — no new short premium positions
 
 # ─── Risk Defaults ──────────────────────────────────────────────────
 

@@ -27,151 +27,14 @@ from src.strategy.registry import register_strategy
 from src.advisor.confluence import apply_confluence, load_day_bias
 from src.advisor.models import DayBias
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+from src.strategy.implementations import portfolio_strikes as _strikes
+from src.strategy.implementations.portfolio_scoring import (
+    score_premium_selling,
+    score_trend_following,
+)
 from src.strategy.signals import entry_signal, exit_signal, make_leg
 
 logger = logging.getLogger(__name__)
-
-
-# ─── Signal Scoring ──────────────────────────────────────────────────
-
-def score_premium_selling(
-    vix: float,
-    morning_range_pct: float,
-    move_from_open_pct: float,
-    pcr_oi: float,
-    is_expiry_day: bool,
-    dte: int,
-    ic_mode: bool = False,
-) -> tuple[int, list[str]]:
-    """Score conditions for premium selling (0-100).
-
-    When ic_mode=True, VIX scoring is more generous because iron condor
-    wings cap max loss — higher VIX means richer premiums with defined risk.
-    """
-    score = 0
-    reasons: list[str] = []
-
-    # 1. VIX sweet spot (+25)
-    if ic_mode:
-        # IC has wings — VIX 14-28 is the productive zone (fatter premiums, capped risk)
-        if 14 <= vix <= 20:
-            score += 25
-            reasons.append(f"VIX={vix:.1f} ideal(IC)")
-        elif 20 < vix <= 28:
-            score += 20
-            reasons.append(f"VIX={vix:.1f} rich premiums(IC)")
-        elif 11 <= vix < 14:
-            score += 8
-            reasons.append(f"VIX={vix:.1f} thin premiums(IC)")
-        elif vix > 28:
-            score += 5
-            reasons.append(f"VIX={vix:.1f} elevated(IC-protected)")
-    else:
-        # Naked selling — conservative VIX scoring
-        if 12 <= vix <= 16:
-            score += 25
-            reasons.append(f"VIX={vix:.1f} ideal")
-        elif 11 <= vix <= 20:
-            score += 12
-            reasons.append(f"VIX={vix:.1f} acceptable")
-        elif 20 < vix <= 25:
-            score += 8
-            reasons.append(f"VIX={vix:.1f} high(risky naked)")
-        elif vix > 25:
-            reasons.append(f"VIX={vix:.1f} too high")
-
-    # 2. Tight morning range (+25)
-    if morning_range_pct <= 0.3:
-        score += 25
-        reasons.append(f"range={morning_range_pct:.2f}% very tight")
-    elif morning_range_pct <= 0.5:
-        score += 12
-        reasons.append(f"range={morning_range_pct:.2f}% moderate")
-    elif morning_range_pct <= 0.8:
-        score += 5
-        reasons.append(f"range={morning_range_pct:.2f}% wide")
-
-    # 3. No trend (+25)
-    if move_from_open_pct <= 0.15:
-        score += 25
-        reasons.append(f"move={move_from_open_pct:.2f}% flat")
-    elif move_from_open_pct <= 0.3:
-        score += 12
-        reasons.append(f"move={move_from_open_pct:.2f}% mild")
-    elif move_from_open_pct <= 0.5:
-        score += 5
-        reasons.append(f"move={move_from_open_pct:.2f}% drifting")
-
-    # 4. PCR healthy (+15) / extreme (-10)
-    if 0.8 <= pcr_oi <= 1.2:
-        score += 15
-        reasons.append(f"PCR={pcr_oi:.2f} neutral")
-    elif 0.6 <= pcr_oi <= 1.5:
-        score += 5
-        reasons.append(f"PCR={pcr_oi:.2f} acceptable")
-    elif pcr_oi > 0:
-        score -= 10
-        reasons.append(f"PCR={pcr_oi:.2f} extreme")
-
-    # 5. DTE (+10)
-    if not is_expiry_day and dte >= 3:
-        score += 10
-        reasons.append(f"DTE={dte} safe")
-    elif not is_expiry_day and dte >= 1:
-        score += 5
-        reasons.append(f"DTE={dte}")
-
-    # 6. Expiry day penalty (-10)
-    if is_expiry_day:
-        score -= 10
-        reasons.append("expiry_day_penalty=-10")
-
-    return score, reasons
-
-
-def score_trend_following(
-    breakout: BreakoutSignal,
-    oi_confirmed: bool,
-    trend_duration_minutes: int,
-    vix: float,
-) -> tuple[int, list[str]]:
-    """Score conditions for trend following (0-100)."""
-    score = 0
-    reasons: list[str] = []
-
-    if not breakout.direction:
-        return 0, ["no breakout"]
-
-    # 1. Breakout strength (+30)
-    if breakout.strength >= 0.5:
-        score += 30
-        reasons.append(f"breakout={breakout.strength:.2f}% strong")
-    elif breakout.strength >= 0.3:
-        score += 15
-        reasons.append(f"breakout={breakout.strength:.2f}% moderate")
-
-    # 2. OI confirmation (+25)
-    if oi_confirmed:
-        score += 25
-        reasons.append("OI confirmed")
-
-    # 3. Trend sustained (+25)
-    if trend_duration_minutes >= 30:
-        score += 25
-        reasons.append(f"sustained={trend_duration_minutes}min")
-    elif trend_duration_minutes >= 15:
-        score += 12
-        reasons.append(f"sustained={trend_duration_minutes}min early")
-
-    # 4. VIX adequate (+20)
-    if vix >= 14:
-        score += 20
-        reasons.append(f"VIX={vix:.1f} supports trend")
-    elif vix >= 11:
-        score += 8
-        reasons.append(f"VIX={vix:.1f} low for trend")
-
-    return score, reasons
 
 
 # ─── Portfolio Strategy ───────────────────────────────────────────────
@@ -508,9 +371,27 @@ class PortfolioStrategy(BaseStrategy):
         return None
 
     def _enter_premium(self, vix: float) -> Signal | None:
-        """Enter IC by default, strangle only when very calm."""
+        """Route by Indian VIX band: no-trade <13, strangle 13-16, IC 16-22, no-trade >22."""
+        # Expiry-day 0DTE block — premium leg never enters when today == expiry
+        expiry_block = self._check_expiry_day_block(self.params.underlying)
+        if expiry_block:
+            logger.info(f"[{self.strategy_id}] PREMIUM skipped: {expiry_block}")
+            return None
+        if vix < self.params.strangle_vix_min:
+            logger.info(
+                f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
+                f"< strangle_vix_min={self.params.strangle_vix_min} (complacency)"
+            )
+            return None
+        if vix > self.params.ic_vix_max:
+            logger.info(
+                f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
+                f"> ic_vix_max={self.params.ic_vix_max} (event/crash zone)"
+            )
+            return None
         if vix < self.params.strangle_vix_max:
             return self._enter_strangle(vix)
+        # VIX in IC band 16-22 — wings handle expansion; fall back to strangle if IC unavailable
         result = self._enter_iron_condor(vix)
         if result:
             return result
@@ -1013,7 +894,11 @@ class PortfolioStrategy(BaseStrategy):
                 min_decay_to_trail = 10.0
                 trail_bounce = trail_pct_base * sl_multiplier
 
-            if decay_pct >= min_decay_to_trail and self._peak_premium > 0:
+            if (
+                decay_pct >= min_decay_to_trail
+                and self._peak_premium > 0
+                and self._can_activate_trail_stop(decay_pct)
+            ):
                 bounce = float((current_cost - self._peak_premium) / self._entry_premium * 100)
                 if bounce > trail_bounce:
                     tag = " (gamma-tightened)" if gamma_tightened else ""
@@ -1528,142 +1413,28 @@ class PortfolioStrategy(BaseStrategy):
         return net_gamma * self._lot_size * spot * 0.01
 
     def _find_delta_strikes(self, chain, target_ce_delta, target_pe_delta):
-        """Find CE and PE strikes closest to target deltas."""
-        best_ce = best_pe = None
-        best_ce_diff = best_pe_diff = float("inf")
-
-        for entry in chain.strikes:
-            if entry.ce and entry.ce.greeks.delta > 0:
-                diff = abs(entry.ce.greeks.delta - target_ce_delta)
-                if diff < best_ce_diff:
-                    best_ce_diff = diff
-                    best_ce = entry
-            if entry.pe and entry.pe.greeks.delta < 0:
-                diff = abs(entry.pe.greeks.delta - target_pe_delta)
-                if diff < best_pe_diff:
-                    best_pe_diff = diff
-                    best_pe = entry
-
-        return best_ce, best_pe
+        """Thin wrapper around portfolio_strikes.find_delta_strikes."""
+        return _strikes.find_delta_strikes(chain, target_ce_delta, target_pe_delta)
 
     def _find_oi_validated_strikes(self, chain, target_ce_delta, target_pe_delta):
-        """Find strikes using OI walls + delta validation + VIX range.
+        """Thin wrapper around portfolio_strikes.find_oi_validated_strikes.
 
-        Strategy (from Anant Ladha's methodology):
-        1. Find highest Call OI strike (resistance) → sell CE at or above
-        2. Find highest Put OI strike (support) → sell PE at or below
-        3. Validate with VIX range formula (sell outside 1 SD range)
-        4. Cross-check delta is in 0.10-0.30 range (safety)
-        5. Fall back to pure delta if OI data is insufficient
-
-        Returns (ce_entry, pe_entry, selection_method)
+        The class method form is kept so callers (and any unit tests that
+        patch it) keep working. All real logic lives in the module function.
         """
-        import math
-
-        spot = float(chain.spot_price)
-        vix = self.ctx.get_vix()
-
-        # Step 1: Find OI walls
-        max_ce_oi = 0
-        max_ce_oi_entry = None
-        max_pe_oi = 0
-        max_pe_oi_entry = None
-
-        for entry in chain.strikes:
-            if entry.ce and entry.ce.oi > max_ce_oi and float(entry.strike) > spot:
-                max_ce_oi = entry.ce.oi
-                max_ce_oi_entry = entry
-            if entry.pe and entry.pe.oi > max_pe_oi and float(entry.strike) < spot:
-                max_pe_oi = entry.pe.oi
-                max_pe_oi_entry = entry
-
-        # Step 2: VIX-based expected range (1 SD)
-        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 7
-        dte = max(1, dte)
-        if vix > 0 and spot > 0:
-            expected_range = spot * vix / 100 * math.sqrt(dte / 365)
-            vix_ce_boundary = spot + expected_range
-            vix_pe_boundary = spot - expected_range
-        else:
-            vix_ce_boundary = 0
-            vix_pe_boundary = 0
-
-        # Step 3: Select CE strike — prefer OI wall if valid
-        ce_entry = None
-        pe_entry = None
-        method = "delta"
-
-        if max_ce_oi_entry and max_ce_oi > 0:
-            ce_delta = max_ce_oi_entry.ce.greeks.delta if max_ce_oi_entry.ce else 0
-            oi_strike = float(max_ce_oi_entry.strike)
-
-            # OI wall must be:
-            # - Above spot (OTM for CE)
-            # - Delta in acceptable range (0.05-0.30)
-            # - At or beyond VIX range boundary
-            if 0.05 <= ce_delta <= 0.30:
-                if vix_ce_boundary <= 0 or oi_strike >= vix_ce_boundary * 0.95:
-                    ce_entry = max_ce_oi_entry
-                    method = "oi_wall"
-
-        if max_pe_oi_entry and max_pe_oi > 0:
-            pe_delta = max_pe_oi_entry.pe.greeks.delta if max_pe_oi_entry.pe else 0
-            oi_strike = float(max_pe_oi_entry.strike)
-
-            if -0.30 <= pe_delta <= -0.05:
-                if vix_pe_boundary <= 0 or oi_strike <= vix_pe_boundary * 1.05:
-                    pe_entry = max_pe_oi_entry
-                    if method == "oi_wall":
-                        method = "oi_wall"
-                    else:
-                        method = "oi_wall+delta"
-
-        # Step 4: Fall back to delta for any missing side
-        if not ce_entry or not pe_entry:
-            delta_ce, delta_pe = self._find_delta_strikes(chain, target_ce_delta, target_pe_delta)
-            if not ce_entry:
-                ce_entry = delta_ce
-            if not pe_entry:
-                pe_entry = delta_pe
-            if method == "delta":
-                method = "delta"
-            else:
-                method = method + "+delta_fallback"
-
-        # Step 5: Minimum premium check (0.5% of spot)
-        if ce_entry and pe_entry and ce_entry.ce and pe_entry.pe:
-            total_prem = float(ce_entry.ce.ltp + pe_entry.pe.ltp)
-            min_prem = spot * 0.005  # 0.5% of spot
-            if total_prem < min_prem:
-                logger.info(
-                    f"[{self.strategy_id}] OI strikes premium {total_prem:.1f} < min {min_prem:.0f} "
-                    f"(0.5% of spot) — falling back to delta"
-                )
-                ce_entry, pe_entry = self._find_delta_strikes(chain, target_ce_delta, target_pe_delta)
-                method = "delta(min_prem)"
-
-        # Log selection details
-        ce_strike = float(ce_entry.strike) if ce_entry else 0
-        pe_strike = float(pe_entry.strike) if pe_entry else 0
-        ce_oi = max_ce_oi_entry.ce.oi if max_ce_oi_entry and max_ce_oi_entry.ce else 0
-        pe_oi = max_pe_oi_entry.pe.oi if max_pe_oi_entry and max_pe_oi_entry.pe else 0
-        logger.info(
-            f"[{self.strategy_id}] STRIKE SELECTION: method={method} "
-            f"CE@{ce_strike:.0f} PE@{pe_strike:.0f} "
-            f"OI_wall_CE@{float(max_ce_oi_entry.strike) if max_ce_oi_entry else 0:.0f}(oi={ce_oi:,}) "
-            f"OI_wall_PE@{float(max_pe_oi_entry.strike) if max_pe_oi_entry else 0:.0f}(oi={pe_oi:,}) "
-            f"VIX_range=[{vix_pe_boundary:.0f}-{vix_ce_boundary:.0f}] "
-            f"spot={spot:.0f}"
+        return _strikes.find_oi_validated_strikes(
+            chain,
+            target_ce_delta,
+            target_pe_delta,
+            vix=self.ctx.get_vix(),
+            expiry=self._expiry,
+            today=self.ctx.clock.now().date(),
+            log_prefix=f"[{self.strategy_id}] ",
         )
 
-        return ce_entry, pe_entry
-
     def _find_spot_token(self) -> int | None:
-        """Find spot instrument token for the underlying."""
-        for token, name in self.ctx._chain_builder._spot_tokens.items():
-            if name == self.params.underlying:
-                return token
-        return None
+        """Thin wrapper around portfolio_strikes.find_spot_token."""
+        return _strikes.find_spot_token(self.ctx._chain_builder, self.params.underlying)
 
     # ─── Lifecycle ────────────────────────────────────────────
 

@@ -76,24 +76,136 @@ class BaseStrategy(ABC):
         """Called on strategy shutdown. Save state, optionally close positions."""
 
     async def on_error(self, error: Exception) -> None:
-        """Called on unhandled error. Default: log."""
+        """Called on unhandled error.
+
+        Default: log, disable further entries today, and emergency-close all
+        open positions. Without this, an exception in `_check_adjustments` or
+        similar would leave a half-built IC unmanaged until exchange
+        auto-square-off (Apr 13: 5,321 wing-strike-missing warnings on IC).
+        """
         logger.exception(f"Strategy {self.strategy_id} error: {error}")
+        # Disable further entries today (subclasses use this flag)
+        if hasattr(self, "_stopped_for_day"):
+            self._stopped_for_day = True
+        try:
+            await self._emergency_close_positions(reason=type(error).__name__)
+        except Exception as close_err:
+            # Emergency close itself failing is a critical alert — log loudly,
+            # don't re-raise (would mask the original error).
+            logger.exception(
+                f"[EMERGENCY_CLOSE] {self.strategy_id} close failed: {close_err}"
+            )
+
+    async def _emergency_close_positions(self, reason: str) -> None:
+        """Force-exit all open positions for this strategy with MARKET orders."""
+        from src.core.models import Signal, SignalLeg
+        from src.core.types import OrderSide, OrderType, SignalType
+
+        positions = self.ctx.get_open_positions()
+        legs = []
+        for pos in positions:
+            if pos.quantity == 0:
+                continue
+            # Reverse side to flatten: long → SELL, short → BUY
+            side = OrderSide.SELL if pos.quantity > 0 else OrderSide.BUY
+            legs.append(SignalLeg(
+                tradingsymbol=pos.tradingsymbol,
+                instrument_token=pos.instrument_token,
+                order_side=side,
+                quantity=abs(pos.quantity),
+                order_type=OrderType.MARKET,
+            ))
+        if not legs:
+            logger.info(
+                f"[EMERGENCY_CLOSE] {self.strategy_id} no open positions "
+                f"(reason={reason})"
+            )
+            return
+        signal = Signal(
+            strategy_id=self.strategy_id,
+            signal_type=SignalType.EXIT,
+            legs=legs,
+            reason=f"emergency_close:{reason}",
+        )
+        logger.warning(
+            f"[EMERGENCY_CLOSE] {self.strategy_id} closing {len(legs)} positions "
+            f"(reason={reason})"
+        )
+        await self.ctx.place_signal(signal)
+
+    def _check_expiry_day_block(self, underlying: str) -> str | None:
+        """Block new premium-leg entries on weekly expiry day (NIFTY: Tuesday).
+
+        Entering new IC/strangle/straddle on the same day they expire is 0DTE
+        selling — the 14:30-15:15 gamma vertical can move ATM 100% in minutes,
+        and ITM auto-exercise STT eats any "win". Default is conservative skip.
+
+        Returns None if OK, or a reason string to skip.
+        """
+        if not getattr(self.params, "skip_entry_on_expiry_day", True):
+            return None
+        if not self.ctx.clock.is_expiry_day(underlying):
+            return None
+        logger.info(
+            f"[FILTER] strategy={self.strategy_id} filter=expiry_day_0dte "
+            f"underlying={underlying} action=BLOCK"
+        )
+        return f"Skipping entry — {underlying} expiry today (0DTE risk)"
+
+    def _can_activate_trail_stop(self, decay_pct: float) -> bool:
+        """Two-gate guard before trailing-stop logic fires (Apr 17 fix).
+
+        Without these gates the trail can lock losses on opening auction
+        whipsaws (premium swings 10-20% intraday on directionless days).
+
+        Gate 1 (time): now must be at/after `trail_stop_activate_after_time`.
+            Default 10:15 — past the 9:15-10:15 auction-imbalance window.
+        Gate 2 (move):  premium must have decayed at least
+            `trail_stop_min_decay_pct` from entry. Decay is a volatility-
+            normalised proxy until intraday ATR tracking lands.
+
+        decay_pct: positive number = premium decayed (winner). Pass the
+        already-computed decay percentage from the caller; this method
+        does not look at premiums itself.
+        """
+        # Gate 1 — time of day
+        activate_after = getattr(
+            self.params, "trail_stop_activate_after_time", None
+        )
+        if activate_after is not None:
+            now_t = self.ctx.clock.now().time()
+            if now_t < activate_after:
+                return False
+        # Gate 2 — minimum decay
+        min_decay = float(getattr(self.params, "trail_stop_min_decay_pct", 0.0))
+        if decay_pct < min_decay:
+            return False
+        return True
 
     def _check_vix_filter(self) -> str | None:
-        """Check if VIX is too high for entry.
+        """Check if VIX is within the strategy's allowed band.
 
-        Returns None if OK to enter, or a reason string if entry should be skipped.
+        Blocks entry when VIX < vix_entry_min (complacency, premium too cheap)
+        or VIX > vix_entry_max (event/stress beyond strategy tolerance).
+        Returns None if OK, or a reason string to skip.
         """
         vix = self.ctx.get_vix()
         if vix <= 0:
             return None  # VIX data unavailable, allow entry
-        result = "block" if vix > self.params.vix_entry_max else "pass"
-        logger.debug(
-            f"[FILTER] strategy={self.strategy_id} filter=vix "
-            f"value={vix:.1f} threshold={self.params.vix_entry_max} result={result}"
-        )
-        if vix > self.params.vix_entry_max:
-            return f"VIX {vix:.1f} exceeds max {self.params.vix_entry_max}"
+        vix_min = getattr(self.params, "vix_entry_min", 0.0)
+        vix_max = self.params.vix_entry_max
+        if vix < vix_min:
+            logger.debug(
+                f"[FILTER] strategy={self.strategy_id} filter=vix "
+                f"value={vix:.1f} min={vix_min} result=block"
+            )
+            return f"VIX {vix:.1f} below min {vix_min} (complacency)"
+        if vix > vix_max:
+            logger.debug(
+                f"[FILTER] strategy={self.strategy_id} filter=vix "
+                f"value={vix:.1f} max={vix_max} result=block"
+            )
+            return f"VIX {vix:.1f} exceeds max {vix_max}"
         return None
 
     def _get_vix_adjusted_lots(self) -> int:

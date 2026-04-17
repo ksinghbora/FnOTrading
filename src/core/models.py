@@ -205,10 +205,11 @@ class Position(BaseModel):
 class PnL(BaseModel):
     """Profit and Loss summary."""
 
+    gross: Decimal = Decimal("0")  # realized + unrealized, before charges
     realized: Decimal = Decimal("0")
     unrealized: Decimal = Decimal("0")
     charges: Decimal = Decimal("0")
-    net: Decimal = Decimal("0")
+    net: Decimal = Decimal("0")  # gross - charges
 
 
 class TradeCharges(BaseModel):

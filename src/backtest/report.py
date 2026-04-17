@@ -4,6 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from src.core.clock import now_ist
+
 
 def generate_report(results: dict, output_dir: str = "reports") -> str:
     """Generate a JSON backtest report.
@@ -17,12 +19,12 @@ def generate_report(results: dict, output_dir: str = "reports") -> str:
     """
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = now_ist().strftime("%Y%m%d_%H%M%S")
     strategy_id = results.get("strategy_id", "unknown")
     filename = f"{output_dir}/backtest_{strategy_id}_{timestamp}.json"
 
     report = {
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": now_ist().isoformat(),
         "strategy_id": strategy_id,
         "params": results.get("params", {}),
         "metrics": results.get("metrics", {}),

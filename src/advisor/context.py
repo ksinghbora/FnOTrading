@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import xml.etree.ElementTree as ET
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -25,6 +25,7 @@ from src.advisor.models import (
     FiiDiiData,
     GlobalMarketData,
 )
+from src.core.clock import now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ async def _fetch_news_headlines(max_headlines: int = 10) -> list[str]:
 
         root = ET.fromstring(resp.text)
         headlines: list[str] = []
-        now = datetime.now()
+        now = now_ist()
 
         for item in root.iter("item"):
             title = item.findtext("title", "")
@@ -60,9 +61,13 @@ async def _fetch_news_headlines(max_headlines: int = 10) -> list[str]:
             if not title:
                 continue
 
-            # Filter for last 72 hours (wider window for weekends)
+            # Filter for last 72 hours (wider window for weekends).
+            # RSS pubDate is GMT by convention — attach UTC so subtraction
+            # against IST-aware `now` doesn't raise TypeError.
             try:
-                pub = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S")
+                pub = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S").replace(
+                    tzinfo=timezone.utc
+                )
                 if (now - pub).total_seconds() > 72 * 3600:
                     continue
             except (ValueError, TypeError):
@@ -97,17 +102,19 @@ async def _fetch_global_headlines(max_headlines: int = 8) -> list[str]:
                 resp.raise_for_status()
 
             root = ET.fromstring(resp.text)
-            now = datetime.now()
+            now = now_ist()
 
             for item in root.iter("item"):
                 title = item.findtext("title", "")
                 if not title:
                     continue
 
-                # Filter recent only
+                # Filter recent only — pubDate is GMT, attach UTC tz.
                 pub_date = item.findtext("pubDate", "")
                 try:
-                    pub = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S")
+                    pub = datetime.strptime(pub_date[:25], "%a, %d %b %Y %H:%M:%S").replace(
+                        tzinfo=timezone.utc
+                    )
                     if (now - pub).total_seconds() > 24 * 3600:
                         continue
                 except (ValueError, TypeError):

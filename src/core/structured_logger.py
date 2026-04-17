@@ -12,6 +12,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from src.core.clock import now_ist
+
 logger = logging.getLogger(__name__)
 
 STRUCTURED_LOG_DIR = Path("logs/structured")
@@ -51,7 +53,7 @@ class StructuredLogger:
             **fields: Arbitrary key-value pairs for the event.
         """
         try:
-            now = datetime.now()
+            now = now_ist()
             today = now.strftime("%Y-%m-%d")
             self._ensure_file(today)
 

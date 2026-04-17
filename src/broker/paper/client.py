@@ -10,6 +10,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from src.broker.base import BrokerClient
+from src.broker.paper.slippage import SlippageModel
+from src.core.clock import now_ist
 from src.core.types import OrderSide, OrderType, ProductType
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,11 @@ class PaperBrokerClient(BrokerClient):
     MAX_ORDER_HISTORY = 5000
     MAX_TRADE_HISTORY = 5000
 
-    def __init__(self, initial_capital: float = 1_000_000):
+    def __init__(
+        self,
+        initial_capital: float = 1_000_000,
+        slippage: SlippageModel | None = None,
+    ):
         self._connected = False
         self._capital = initial_capital
         self._available_margin = initial_capital
@@ -45,6 +51,9 @@ class PaperBrokerClient(BrokerClient):
         self._trades: list[dict] = []
         self._positions: dict[str, PaperPosition] = {}
         self._ltp_cache: dict[str, float] = {}
+        # Pass slippage=None explicitly to disable (e.g., legacy backtest tests).
+        self.slippage = slippage if slippage is not None else SlippageModel()
+        self._vix: float = 0.0  # Updated by data feed via set_vix()
 
     async def connect(self) -> None:
         self._connected = True
@@ -61,6 +70,10 @@ class PaperBrokerClient(BrokerClient):
         """Set LTP for an instrument (called by market data feed during paper trading)."""
         self._ltp_cache[tradingsymbol] = price
 
+    def set_vix(self, vix: float) -> None:
+        """Set current VIX (called by data feed). Drives slippage regime multiplier."""
+        self._vix = vix
+
     async def place_order(
         self,
         tradingsymbol: str,
@@ -74,14 +87,21 @@ class PaperBrokerClient(BrokerClient):
         tag: str = "",
     ) -> str:
         order_id = str(uuid.uuid4())[:8]
-        fill_price = price if price > 0 else self._ltp_cache.get(tradingsymbol, 0)
+        ltp = price if price > 0 else self._ltp_cache.get(tradingsymbol, 0)
 
-        if fill_price <= 0:
+        if ltp <= 0:
             logger.warning(f"[PAPER] No LTP for {tradingsymbol}, cannot fill order")
             raise ValueError(f"No LTP available for {tradingsymbol}")
 
-        # No artificial slippage — fill at exact LTP
-        # Strategy decisions and fills use the same price source (chain builder via tick feed)
+        # Tiered slippage — closes paper-to-live P&L gap.
+        # Slippage dimensions: liquidity (premium proxy) × time × VIX × size.
+        now = now_ist()
+        if self.slippage is not None:
+            fill_price, slip_bps = self.slippage.apply(
+                ltp, side, self._vix, quantity, now.time()
+            )
+        else:
+            fill_price, slip_bps = ltp, 0.0
 
         order = {
             "order_id": order_id,
@@ -98,8 +118,10 @@ class PaperBrokerClient(BrokerClient):
             "status": "COMPLETE",
             "status_message": "Paper trade filled",
             "tag": tag,
-            "order_timestamp": datetime.now().isoformat(),
-            "exchange_timestamp": datetime.now().isoformat(),
+            "order_timestamp": now.isoformat(),
+            "exchange_timestamp": now.isoformat(),
+            "ltp": ltp,
+            "slippage_bps": slip_bps,
         }
 
         self._orders.append(order)
@@ -113,7 +135,7 @@ class PaperBrokerClient(BrokerClient):
             "transaction_type": side.value,
             "quantity": quantity,
             "average_price": fill_price,
-            "fill_timestamp": datetime.now().isoformat(),
+            "fill_timestamp": now.isoformat(),
         })
         if len(self._trades) > self.MAX_TRADE_HISTORY:
             self._trades = self._trades[-self.MAX_TRADE_HISTORY:]
@@ -123,7 +145,7 @@ class PaperBrokerClient(BrokerClient):
 
         logger.info(
             f"[PAPER] {side.value} {quantity} {tradingsymbol} @ {fill_price:.2f} "
-            f"(order: {order_id})"
+            f"(ltp={ltp:.2f}, slip={slip_bps:.0f}bps, order={order_id})"
         )
         return order_id
 

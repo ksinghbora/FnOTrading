@@ -8,7 +8,7 @@ import sys
 import uvicorn
 
 from src.config import Settings
-from src.core.clock import MarketClock
+from src.core.clock import MarketClock, now_ist
 from src.core.events import EventBus, EventType
 from src.broker.zerodha.client import ZerodhaClient
 from src.broker.zerodha.instruments import InstrumentManager
@@ -64,6 +64,7 @@ async def create_app(settings: Settings):
 
         # Feed tick LTPs into paper broker — use chain builder's symbol map
         # since WebSocket ticks don't include tradingsymbol
+        from src.core.constants import INDIA_VIX_TOKEN
         from src.core.events import Event as _Event
 
         async def _feed_paper_ltp(event: _Event) -> None:
@@ -74,6 +75,10 @@ async def create_app(settings: Settings):
             if ltp <= 0:
                 return
             token = tick.get("instrument_token", 0)
+            # VIX feeds the paper broker's slippage regime multiplier
+            if token == INDIA_VIX_TOKEN:
+                broker.set_vix(ltp)
+                return
             # Resolve tradingsymbol from chain builder's symbol map (registered from instrument master)
             symbol = tick.get("tradingsymbol") or ""
             if not symbol and token:
@@ -203,7 +208,7 @@ async def create_app(settings: Settings):
                 if ltp > 0 and token > 0:
                     seed_tick = Tick(
                         instrument_token=token, tradingsymbol=key.split(":")[-1],
-                        timestamp=datetime.now(), ltp=D(str(ltp)),
+                        timestamp=now_ist(), ltp=D(str(ltp)),
                         volume=0, oi=0, bid_price=D("0"), ask_price=D("0"),
                         bid_qty=0, ask_qty=0, high=D("0"), low=D("0"),
                         open=D("0"), close=D("0"),
@@ -289,9 +294,12 @@ async def create_app(settings: Settings):
             return portfolio.get_pnl(strategy_id)
         return None
 
+    from src.strategy.state_store import StrategyStateStore
+    state_store = StrategyStateStore(session_factory)
     strategy_runner = StrategyRunner(
         event_bus, feed, chain_builder, aggregator, clock,
-        order_callback, portfolio_getter
+        order_callback, portfolio_getter,
+        state_store=state_store,
     )
     kill_switch.set_strategy_runner(strategy_runner)
 
@@ -355,12 +363,16 @@ async def run():
         import os
         try:
             from scripts.auto_auth import get_request_token, exchange_token, save_token, load_env
+            from src.core.secrets import get_secret
             load_env()  # Ensure .env vars are in os.environ
             user_id = os.environ.get("KITE_USER_ID", "")
-            password = os.environ.get("KITE_PASSWORD", "")
-            totp_secret = os.environ.get("KITE_TOTP_SECRET", "")
+            password = get_secret("KITE_PASSWORD")
+            totp_secret = get_secret("KITE_TOTP_SECRET")
             if not (user_id and password and totp_secret):
-                logger.warning("Auto-auth skipped — set KITE_USER_ID, KITE_PASSWORD, KITE_TOTP_SECRET in .env")
+                logger.warning(
+                    "Auto-auth skipped — set KITE_USER_ID in .env and KITE_PASSWORD/KITE_TOTP_SECRET "
+                    "in the OS keychain (run: python -m src.core.secrets migrate)"
+                )
                 return False
             request_token = get_request_token(settings.kite_api_key, user_id, password, totp_secret)
             access_token = exchange_token(settings.kite_api_key, settings.kite_api_secret, request_token)
@@ -432,7 +444,7 @@ async def run():
         from datetime import datetime, time as _time
         last_reset_date = None
         while True:
-            now = datetime.now()
+            now = now_ist()
             if (
                 now.time() >= _time(9, 10)
                 and now.time() < _time(9, 15)
@@ -460,7 +472,7 @@ async def run():
 
         while True:
             try:
-                now = datetime.now()
+                now = now_ist()
                 today = now.date()
 
                 # Skip holidays and weekends
@@ -597,7 +609,7 @@ async def run():
         last_audit_date = None
 
         while True:
-            now = datetime.now()
+            now = now_ist()
             today = now.date()
 
             if _clock.is_trading_holiday(today):

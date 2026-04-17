@@ -13,6 +13,7 @@ from src.market_data.option_chain import OptionChainBuilder
 from src.core.clock import MarketClock
 from src.strategy.base import BaseStrategy
 from src.strategy.context import StrategyContext
+from src.strategy.state_store import StrategyStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class StrategyRunner:
         clock: MarketClock,
         order_callback,    # async callable: Signal -> list[Order]
         portfolio_getter,  # callable: (what, strategy_id) -> data
+        state_store: StrategyStateStore | None = None,
     ):
         self._event_bus = event_bus
         self._feed = feed
@@ -43,6 +45,8 @@ class StrategyRunner:
         self._clock = clock
         self._order_callback = order_callback
         self._portfolio_getter = portfolio_getter
+        # state_store may be None in tests/backtests; runner falls back to no-op
+        self._state_store = state_store or StrategyStateStore(None)
 
         self._strategies: dict[str, BaseStrategy] = {}
         self._strategy_tokens: dict[str, set[int]] = {}  # strategy_id -> subscribed tokens
@@ -89,6 +93,20 @@ class StrategyRunner:
         new_tokens = self._feed.subscribe(tokens, sid)
         self._strategy_tokens[sid] = set(tokens)
 
+        # Restore today's state BEFORE on_start so flags like _entered survive restart.
+        # Loading by today's date guarantees yesterday's stale state can't leak forward.
+        today = self._clock.now().date()
+        saved = await self._state_store.load_state(sid, today)
+        if saved:
+            try:
+                strategy.load_state_data(saved)
+                logger.info(
+                    f"[STATE_STORE] {sid} restored state for {today}: "
+                    f"keys={list(saved.keys())}"
+                )
+            except Exception as e:
+                logger.warning(f"[STATE_STORE] {sid} load_state_data failed: {e}")
+
         # Start strategy
         strategy.state = StrategyState.STARTING
         try:
@@ -111,6 +129,8 @@ class StrategyRunner:
             return
 
         strategy.state = StrategyState.STOPPING
+        # Persist final state on stop so the next restart can resume.
+        await self._persist_state(strategy)
         try:
             await strategy.on_stop()
         except Exception:
@@ -203,6 +223,9 @@ class StrategyRunner:
                 await strategy.on_order_update(order)
             except Exception as e:
                 logger.exception(f"Strategy {order.strategy_id} on_order_update error: {e}")
+            # Order updates change day flags (entered, trades_today, stopped_for_day).
+            # Persist after every update so a crash between fills can't lose state.
+            await self._persist_state(strategy)
 
     async def _process_signal(self, signal: Signal) -> None:
         """Convert signal to order requests and route through OMS."""
@@ -212,6 +235,11 @@ class StrategyRunner:
             return
         try:
             await self._order_callback(signal)
+            # Persist state after a signal-driven entry/exit lands. Catches
+            # the gap where a strategy flipped its flags but no fill arrives yet.
+            strategy = self._strategies.get(signal.strategy_id)
+            if strategy:
+                await self._persist_state(strategy)
         except Exception as e:
             logger.exception(f"Failed to process signal from {signal.strategy_id}: {e}")
             # Notify the strategy so it can react (e.g., revert state changes)
@@ -221,3 +249,18 @@ class StrategyRunner:
                     await strategy.on_error(e)
                 except Exception:
                     logger.exception(f"Strategy {signal.strategy_id} on_error also failed")
+
+    async def _persist_state(self, strategy: BaseStrategy) -> None:
+        """Snapshot the strategy's day state into the store. No-op if disabled."""
+        if not self._state_store.enabled:
+            return
+        try:
+            data = strategy.get_state_data()
+            if not data:
+                return
+            today = self._clock.now().date()
+            await self._state_store.save_state(strategy.strategy_id, today, data)
+        except Exception as e:
+            logger.warning(
+                f"[STATE_STORE] persist failed for {strategy.strategy_id}: {e}"
+            )

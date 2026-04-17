@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from kiteconnect import KiteTicker
 
+from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Tick
 
@@ -100,7 +101,7 @@ class TickerManager:
             logger.warning(f"Dropping {len(ticks)} ticks: loop={self._loop is not None} running={self._running}")
             return
 
-        self._last_tick_time = datetime.now()
+        self._last_tick_time = now_ist()
         if self._tick_log_count < 3:
             self._tick_log_count += 1
             logger.info(f"[TICKER] Received {len(ticks)} ticks (batch #{self._tick_log_count})")
@@ -169,7 +170,7 @@ class TickerManager:
 
         while self._running:
             try:
-                now = datetime.now()
+                now = now_ist()
                 hour, minute = now.hour, now.minute
                 is_weekday = now.weekday() < 5
                 is_market_hours = (
@@ -199,7 +200,7 @@ class TickerManager:
                     continue
 
                 if self._last_tick_time:
-                    elapsed = (datetime.now() - self._last_tick_time).total_seconds()
+                    elapsed = (now_ist() - self._last_tick_time).total_seconds()
                 else:
                     elapsed = 999
 
@@ -264,7 +265,7 @@ class TickerManager:
         return Tick(
             instrument_token=tick_data["instrument_token"],
             tradingsymbol=tick_data.get("tradingsymbol", ""),
-            timestamp=tick_data.get("exchange_timestamp", datetime.now()),
+            timestamp=tick_data.get("exchange_timestamp", now_ist()),
             ltp=Decimal(str(tick_data.get("last_price", 0))),
             volume=tick_data.get("volume_traded", 0),
             oi=tick_data.get("oi", 0),

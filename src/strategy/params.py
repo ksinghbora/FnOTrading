@@ -16,9 +16,11 @@ class BaseStrategyParams(BaseModel):
     max_loss: Decimal = Decimal("5000")
     product: str = "NRML"
     use_weekly_expiry: bool = True
-    # VIX filter — skip entry when VIX exceeds threshold
-    vix_entry_max: float = 18.0       # Don't enter if VIX > this (tightened from 22 after real data)
-    vix_reduce_above: float = 15.0    # Halve position size if VIX > this
+    # VIX filter — Indian-calibrated bands (see src/core/constants.py).
+    # Strategy subclasses override these with band-appropriate values.
+    vix_entry_min: float = 0.0        # Skip entry if VIX < this (e.g., 13 = no premium below complacency)
+    vix_entry_max: float = 22.0       # Skip entry if VIX > this (default = IC stressed boundary)
+    vix_reduce_above: float = 18.0    # Halve position size if VIX > this
 
     # PCR filter — skip entry when PCR_OI is outside healthy range
     pcr_filter_enabled: bool = True    # Enabled — blocks entries in dangerous OI regimes
@@ -29,10 +31,30 @@ class BaseStrategyParams(BaseModel):
     max_pain_filter_enabled: bool = True   # Enabled — skip when spot drifts from max pain
     max_pain_proximity_pct: float = 3.0    # Skip if spot > X% from max pain
 
+    # Expiry-day 0DTE safety (Tuesday on NIFTY weekly per SEBI Nov 2024).
+    # Entering naked premium with same-day expiry = 0DTE gamma trap (14:30-15:15
+    # gamma vertical can move ATM 100% in minutes; STT on auto-exercise eats wins).
+    skip_entry_on_expiry_day: bool = True   # Block new entries when today == expiry
+    expiry_day_force_exit_at: time = time(14, 30)  # Exit ALL legs before gamma vertical
+
+    # Trail-stop activation gates (Apr 17 trader-analysis fix).
+    # First 30 min of session is auction-imbalance noise — premium can swing
+    # 10-20% on a directionless day. Trailing during that window locks losses
+    # on whipsaws. Two gates must both pass before trail-stop can fire:
+    #   1. Time gate: now >= trail_stop_activate_after_time
+    #   2. Move gate: premium has decayed at least trail_stop_min_decay_pct
+    #      from entry (proxy for "real move > N x ATR" until intraday ATR
+    #      tracker lands).
+    trail_stop_activate_after_time: time = time(10, 15)
+    trail_stop_min_decay_pct: float = 5.0
+
 
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""
 
+    # ATM exposure — most gamma-fragile of all premium strategies
+    vix_entry_min: float = 13.0              # Skip below complacency (premium too thin)
+    vix_entry_max: float = 15.0              # Tight upper bound — straddle blows up above this
     adjustment_threshold_pct: float = 40.0  # Adjust when premium moves X% against (tightened)
     stop_loss_pct: float = 30.0             # Exit at X% of total premium collected (tightened from 50)
     trail_stop_pct: float = 15.0            # Trail stop by X% of peak premium (tightened from 20)
@@ -44,6 +66,9 @@ class ShortStraddleParams(BaseStrategyParams):
 class ShortStrangleParams(BaseStrategyParams):
     """Parameters for Short Strangle strategy."""
 
+    # Strangle ideal band on Indian VIX: 13-16 only
+    vix_entry_min: float = 13.0              # Skip below — premium too cheap
+    vix_entry_max: float = 16.0              # Skip above — naked short premium blows up
     call_delta: float = 0.15                 # Sell CE at this delta (wider OTM = less gamma)
     put_delta: float = -0.15                 # Sell PE at this delta
     adjustment_delta_threshold: float = 0.25 # Adjust when delta exceeds this
@@ -57,12 +82,14 @@ class ShortStrangleParams(BaseStrategyParams):
 class IronCondorParams(BaseStrategyParams):
     """Parameters for Iron Condor strategy."""
 
-    # Iron condor has defined risk (wings cap max loss), so it tolerates higher VIX
-    vix_entry_max: float = 25.0              # Higher than base 18 — wings protect against VIX spikes
-    vix_reduce_above: float = 20.0           # Halve lots above this
+    # IC ideal band on Indian VIX: 16-22 (16-20 ideal, 20-22 stressed but tradable, >25 no trade).
+    # Defined risk via wings tolerates more VIX than naked strangle.
+    vix_entry_min: float = 16.0              # Below: premium too thin — strangle wins
+    vix_entry_max: float = 22.0              # Above: stressed beyond IC discipline
+    vix_reduce_above: float = 20.0           # Halve lots in stressed band (20-22)
     short_call_delta: float = 0.15
     short_put_delta: float = -0.15
-    wing_width_strikes: int = 5              # Distance between short and long strikes
+    wing_width_strikes: int = 8              # Distance between short and long strikes (8 = ~400pt wing on NIFTY, ~1:2 risk/reward vs 1:4 at 5)
     adjustment_threshold_pct: float = 60.0   # Tightened from 70 — adjust earlier
     stop_loss_pct: float = 40.0              # Tightened from 60 — faster exit on losers
     profit_target_pct: float = 25.0          # Tightened from 30 — lock profits earlier
@@ -135,8 +162,10 @@ class PortfolioParams(BaseStrategyParams):
     entry_time: time = time(9, 30)       # Wait for morning range to form
     exit_time: time = time(15, 15)
 
-    # Mode selection — IC is default (defined risk), strangle only when very calm
-    strangle_vix_max: float = 14.0       # Use strangle below this VIX; above = IC (better in high-vol)
+    # Mode selection — Indian VIX bands: strangle 13-16, IC 16-22, no trade outside.
+    strangle_vix_min: float = 13.0       # Below: complacency — premium too cheap, no premium leg
+    strangle_vix_max: float = 16.0       # Above: switch to IC (defined risk handles 16-22)
+    ic_vix_max: float = 22.0             # Above: no premium leg at all (event risk)
     trend_switch_threshold: int = 70     # Close IC and switch to trend if trend score >= this mid-day
     trend_switch_enabled: bool = True    # Allow closing IC to enter trend on strong breakout
 
@@ -152,7 +181,7 @@ class PortfolioParams(BaseStrategyParams):
     # Iron condor mode — used when VIX 18-25
     ic_short_call_delta: float = 0.15
     ic_short_put_delta: float = -0.15
-    ic_wing_width_strikes: int = 5
+    ic_wing_width_strikes: int = 8           # Widened from 5: improves 1:4 → 1:2 risk/reward on weekly NIFTY (Apr 17 trader analysis)
     ic_stop_loss_pct: float = 40.0
     ic_profit_target_pct: float = 60.0     # Let IC decay more — defined risk (was 50, OOS-validated)
 
@@ -178,6 +207,10 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     Profits from trending markets that hurt premium sellers.
     """
 
+    # Trend benefits from elevated vol (16-25) — debit spreads cheaper as IV rises.
+    # Override base 22 cap because trend works through stressed regimes too.
+    vix_entry_min: float = 12.0              # Below 12: too calm for breakouts
+    vix_entry_max: float = 25.0              # Above 25: event risk overwhelms direction
     entry_time: time = time(10, 0)            # Wait for morning range to fully form (was 9:45)
     exit_time: time = time(15, 0)            # Exit before close
     breakout_confirmation_pct: float = 0.7   # Stronger breakout required (was 0.5 — too many false signals)

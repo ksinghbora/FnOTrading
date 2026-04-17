@@ -197,11 +197,18 @@ def verify_token(api_key: str, access_token: str) -> bool:
 def main():
     load_env()
 
+    # Secrets prefer the OS keychain; KITE_USER_ID is identifier-only and stays in env.
+    try:
+        from src.core.secrets import get_secret
+    except ImportError:
+        def get_secret(key: str, default: str = "") -> str:
+            return os.environ.get(key, default)
+
     api_key = os.environ.get("KITE_API_KEY", "")
-    api_secret = os.environ.get("KITE_API_SECRET", "")
+    api_secret = get_secret("KITE_API_SECRET")
     user_id = os.environ.get("KITE_USER_ID", "")
-    password = os.environ.get("KITE_PASSWORD", "")
-    totp_secret = os.environ.get("KITE_TOTP_SECRET", "")
+    password = get_secret("KITE_PASSWORD")
+    totp_secret = get_secret("KITE_TOTP_SECRET")
 
     missing = []
     if not api_key:

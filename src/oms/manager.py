@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.exceptions import OrderValidationError, RiskLimitBreachError
 from src.core.models import Order, OrderRequest
@@ -103,7 +104,7 @@ class OrderManager:
 
         # Step 4: Execute
         order.status = OrderStatus.SUBMITTED
-        order.placed_at = datetime.now()
+        order.placed_at = now_ist()
         await self._publish_order_event(order, EventType.ORDER_PLACED)
 
         result = await self._executor.execute(request)
