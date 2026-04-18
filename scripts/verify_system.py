@@ -5,7 +5,7 @@ Usage: uv run python scripts/verify_system.py
 
 import asyncio
 import sys
-from datetime import date, time
+from datetime import date, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -252,6 +252,72 @@ async def main():
                 fail(f"API returned {resp.status_code}")
     except Exception:
         warn("Server not running (expected if running verify before startup)")
+
+    # ─── 10a. Heartbeat freshness (recorder + trader) ─────────────
+    # In split mode (recorder_split_mode=True) the recorder and trader each
+    # own a heartbeat file. In legacy single-process mode only the recorder
+    # one is written. Check whichever exists; warn separately for each
+    # process so a half-down system shows up clearly.
+    print("\n10a. Process heartbeats")
+    try:
+        from src.observability.heartbeat import heartbeat_age_seconds, read_heartbeat
+
+        def _check(name: str, path: str) -> None:
+            hb = read_heartbeat(path)
+            if hb is None:
+                # Trader heartbeat is only written in split mode; missing in
+                # legacy mode is expected.
+                if name == "trader" and not settings.recorder_split_mode:
+                    return
+                warn(f"{name}: {path} missing — process hasn't run yet today")
+                return
+            age = heartbeat_age_seconds(path)
+            streams = hb.get("streams", {}) or {}
+            stream_summary = ", ".join(
+                f"{s}: last={info.get('last_update_ts','?')[-8:]}"
+                for s, info in streams.items()
+            ) or "no streams reported"
+            if age is None:
+                warn(f"{name}: heartbeat present but timestamp unreadable; {stream_summary}")
+            elif age < 90:
+                ok(f"{name}: fresh ({age:.0f}s ago, pid={hb.get('pid')}); {stream_summary}")
+            elif age < 600:
+                warn(f"{name}: stale ({age:.0f}s ago) — may be paused; {stream_summary}")
+            else:
+                warn(f"{name}: very stale ({age/60:.0f} min ago) — appears down")
+
+        _check("recorder", "data/heartbeat/recorder.json")
+        _check("trader", "data/heartbeat/trader.json")
+    except Exception as e:
+        warn(f"Heartbeat check error: {e}")
+
+    # ─── 10b. Config snapshot freshness ───────────────────────────
+    # We run at 06:30 IST, before the 09:00 IST snapshotter cron, so checking
+    # *today's* snapshot would always warn and train operators to ignore the
+    # message. Instead check the most recent weekday before today — if THAT
+    # snapshot is missing or partial, the cron is genuinely broken and the
+    # silent-fallback failure mode the counterfactual warns about is real.
+    print("\n10b. Config snapshot freshness (yesterday)")
+    try:
+        from src.observability.snapshot_freshness import check_snapshot_freshness
+
+        # Walk back to the most recent weekday. Holidays are best-effort —
+        # they'll show as a one-off warn the morning after a holiday and
+        # operators can ignore that day. Worth that cost vs. importing
+        # the holiday calendar here.
+        target = date.today() - timedelta(days=1)
+        while target.weekday() >= 5:  # 5=Sat, 6=Sun
+            target -= timedelta(days=1)
+
+        rep = check_snapshot_freshness(target)
+        if rep.level == "ok":
+            ok(rep.message)
+        elif rep.level == "warn":
+            warn(rep.message)
+        else:
+            fail(rep.message)
+    except Exception as e:
+        warn(f"Snapshot freshness check error: {e}")
 
     # ─── 10. Telegram Test ────────────────────────────────────────
     print("\n10. Telegram")
