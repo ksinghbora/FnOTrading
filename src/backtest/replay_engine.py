@@ -662,6 +662,56 @@ def _apply_snapshot(
         )
         broker.set_ltp(symbol, round(data["ltp"], 2))
 
+    # ─── Recompute chain aggregates strictly over THIS MINUTE'S data ────────
+    # Two separate sources of pollution would otherwise leak into pcr_oi:
+    #   (1) _update_market (called above) sets pcr_oi from BS-baseline OI
+    #       (CE==PE per strike → PCR=1.0). Real recorded OI overwrites
+    #       individual entries below, but the aggregate stays stale.
+    #   (2) chain.strikes accumulates entries across minutes. Strikes that
+    #       were recorded in a prior minute but NOT in the current snap_data
+    #       still carry their stale real-OI values (in the millions). Naïve
+    #       sum-over-all-strikes mixes current real OI with historical real
+    #       OI plus current BS OI → produces PCR in the 4-17 range (Apr 18
+    #       audit: 805/950 portfolio_replay decisions).
+    # Fix: compute PCR strictly over strikes that appear in *this minute's*
+    # snapshot. Those entries hold the freshly-overwritten real OI; everything
+    # else is residue from other minutes and must be excluded.
+    recorded_strikes = {s for s, _ in snap_data.keys()}
+    fresh = [
+        e for e in chain.strikes
+        if (float(e.strike) in recorded_strikes
+            or int(float(e.strike)) in {int(s) for s in recorded_strikes})
+    ]
+    chain.total_ce_oi = sum(e.ce.oi for e in fresh if e.ce)
+    chain.total_pe_oi = sum(e.pe.oi for e in fresh if e.pe)
+    if chain.total_ce_oi > 0:
+        chain.pcr_oi = chain.total_pe_oi / chain.total_ce_oi
+    else:
+        chain.pcr_oi = 0.0
+    # Volume + max_pain use the same restricted set for consistency. We can't
+    # call compute_pcr_volume / compute_max_pain (they iterate chain.strikes
+    # unconditionally) so inline the restricted sums instead.
+    ce_vol = sum(e.ce.volume for e in fresh if e.ce)
+    pe_vol = sum(e.pe.volume for e in fresh if e.pe)
+    chain.pcr_volume = (pe_vol / ce_vol) if ce_vol > 0 else 0.0
+    # Max-pain over fresh strikes only — same logic as compute_max_pain
+    # but iterating the restricted set.
+    if fresh:
+        min_pain = None
+        max_pain_strike = fresh[0].strike
+        for target in fresh:
+            tot = Decimal("0")
+            for e in fresh:
+                if e.ce and target.strike > e.strike:
+                    tot += (target.strike - e.strike) * e.ce.oi
+                if e.pe and target.strike < e.strike:
+                    tot += (e.strike - target.strike) * e.pe.oi
+            if min_pain is None or tot < min_pain:
+                min_pain = tot
+                max_pain_strike = target.strike
+        chain.max_pain = max_pain_strike
+    chain.updated_at = now
+
     # Update portfolio LTPs
     for key, pos in portfolio._positions._positions.items():
         cached = feed._latest_ticks.get(pos.instrument_token)

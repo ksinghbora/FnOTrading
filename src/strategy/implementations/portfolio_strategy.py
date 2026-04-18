@@ -28,11 +28,16 @@ from src.advisor.confluence import apply_confluence, load_day_bias
 from src.advisor.models import DayBias
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
 from src.strategy.implementations import portfolio_strikes as _strikes
+from src.strategy.implementations.portfolio_pricing import (
+    find_available_wing_strike,
+    resolve_option_price,
+)
 from src.strategy.implementations.portfolio_scoring import (
     score_premium_selling,
     score_trend_following,
 )
 from src.strategy.signals import entry_signal, exit_signal, make_leg
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +202,9 @@ class PortfolioStrategy(BaseStrategy):
                 return signal
         elif not self._trend_stopped and now.time() >= time(10, 0):
             # Paper mode: allow until 14:00 for data collection
-            # Live mode: only 10:00-13:00
-            trend_cutoff = time(14, 0) if self._paper_mode else time(13, 0)
+            # Live mode: only 10:00-10:30 — late-morning breakouts in high-VIX
+            # whipsaw too often (validated in 23-day chain replay, Apr 2026)
+            trend_cutoff = time(14, 0) if self._paper_mode else time(10, 30)
             if now.time() < trend_cutoff:
                 # Check every 5 minutes, not every tick
                 cur_min = now.hour * 60 + now.minute
@@ -226,6 +232,29 @@ class PortfolioStrategy(BaseStrategy):
         if spot <= 0 or vix <= 0:
             return None
 
+        # Per-day cap (Apr 18 2026 chain-replay diagnosis): without this,
+        # the premium leg re-entered 14× on 2026-04-17 hour 11 when each
+        # entry hit the -29.9% stop. Trend leg already has the same cap.
+        if self._prem_trades_today >= self.params.premium_max_trades_per_day:
+            if now.minute % 10 == 0:
+                logger.info(
+                    f"[{self.strategy_id}] PREMIUM blocked: per-day cap reached "
+                    f"({self._prem_trades_today}/{self.params.premium_max_trades_per_day})"
+                )
+            return None
+
+        # Hour-of-day gate (Apr 18 2026 chain-replay diagnosis): hours 11-12
+        # win 4-12% with avg -₹415 to -₹531 across 69 trades; hours 13-14
+        # win 100% with avg +₹255 to +₹349 across 23 trades. Block bad hours
+        # rather than tune SL%/PT% (which would be overfitting to 16 days).
+        if now.hour in self.params.premium_blocked_hours:
+            if now.minute % 15 == 0:
+                logger.info(
+                    f"[{self.strategy_id}] PREMIUM blocked: hour={now.hour} "
+                    f"in blocked_hours={self.params.premium_blocked_hours}"
+                )
+            return None
+
         regime = self._regime_detector.assess(self.params.underlying)
 
         if regime.regime == MarketRegime.EXTREME_VOL:
@@ -249,6 +278,29 @@ class PortfolioStrategy(BaseStrategy):
                 self._prem_quantity = max(self._lot_size, self._base_quantity // 2)
             else:
                 logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] CHOP detected — would reduce size: chop_score={regime.chop_score:.2f}")
+
+        # Hard filters (PCR + max-pain) — Apr 18 2026 wiring fix.
+        # Pre-fix portfolio_strategy ignored these even though the params
+        # default to enabled. Now gated behind `portfolio_filters_enabled`
+        # so we can A/B replay before flipping the default. In paper mode
+        # the filters log as [SHADOW_BLOCK] (mirrors iron_condor pattern)
+        # so we still see what they WOULD have blocked.
+        if self.params.portfolio_filters_enabled and self._expiry:
+            pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+            if pcr_block:
+                if self._paper_mode:
+                    logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM {pcr_block}")
+                else:
+                    logger.info(f"[{self.strategy_id}] PREMIUM blocked: {pcr_block}")
+                    return None
+
+            mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+            if mp_block:
+                if self._paper_mode:
+                    logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM {mp_block}")
+                else:
+                    logger.info(f"[{self.strategy_id}] PREMIUM blocked: {mp_block}")
+                    return None
 
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         pcr_oi = chain.pcr_oi if chain else 1.0
@@ -416,6 +468,18 @@ class PortfolioStrategy(BaseStrategy):
 
         breakout, oi_confirmed, trend_duration = self._assess_trend(spot)
 
+        # Hard gate (Apr 2026): require ≥45min sustained — 30min "sustained"
+        # breakouts whipsaw too often in high VIX (4 of 6 trend entries hit
+        # -23% stop in 23-day chain replay). The score was passing them at
+        # 30min via score_trend_following's +25 bonus; this gates that out.
+        if breakout.direction and trend_duration < 45 and not self._paper_mode:
+            if now.minute % 10 == 0:
+                logger.info(
+                    f"[{self.strategy_id}] TREND gated: sustained={trend_duration}min < 45min "
+                    f"(breakout={breakout.direction} {breakout.strength:.2f}%)"
+                )
+            return None
+
         self._trend_score, reasons = score_trend_following(
             breakout=breakout,
             oi_confirmed=oi_confirmed,
@@ -535,6 +599,29 @@ class PortfolioStrategy(BaseStrategy):
         ce_ltp = self.ctx.get_ltp(self._short_ce_token)
         pe_ltp = self.ctx.get_ltp(self._short_pe_token)
         self._entry_premium = ce_ltp + pe_ltp
+
+        # Min-credit guard (Apr 18 2026): on 2026-04-08 a strangle entered
+        # with effective premium ~₹0.30 because one leg's LTP was stale; the
+        # SL math then reported "premium up 26282.1%" (₹76,875 loss on a
+        # ₹10L pool). IC has had this guard since launch (line below at
+        # _enter_iron_condor's "credit too low" check). Anything below
+        # premium_min_entry_credit is treated as a stale tick — refuse entry.
+        min_credit = Decimal(str(self.params.premium_min_entry_credit))
+        if self._entry_premium < min_credit:
+            logger.warning(
+                f"[{self.strategy_id}] STRANGLE BLOCKED: entry premium "
+                f"{self._entry_premium} < min_credit {min_credit} "
+                f"(ce_ltp={ce_ltp} pe_ltp={pe_ltp}) — likely stale tick"
+            )
+            # Roll back the strike-token assignments we just made above so a
+            # subsequent entry attempt this minute starts clean.
+            self._short_ce_token = 0
+            self._short_pe_token = 0
+            self._short_ce_symbol = ""
+            self._short_pe_symbol = ""
+            self._entry_premium = Decimal("0")
+            return None
+
         self._peak_premium = self._entry_premium
         self._prem_entered = True
         self._prem_mode = "strangle"
@@ -554,11 +641,20 @@ class PortfolioStrategy(BaseStrategy):
             f"score={self._prem_score} VIX={vix:.1f}"
         )
         logger.info(
-            f"[ENTRY_QUALITY] strategy={self.strategy_id} leg=PREMIUM mode=STRANGLE "
-            f"net_delta={g.get('delta', 0):+.1f} net_gamma={g.get('gamma', 0):+.4f} "
-            f"net_theta={g.get('theta', 0):+.2f} net_vega={g.get('vega', 0):+.2f} "
-            f"spot={self._prem_entry_spot:.0f} VIX={vix:.1f} "
-            f"premium_per_lot={float(self._entry_premium):.2f}"
+            "premium leg entry: strangle",
+            extra={
+                "tag": Tag.ENTRY_QUALITY,
+                "strategy": self.strategy_id,
+                "leg": "PREMIUM",
+                "mode": "STRANGLE",
+                "net_delta": round(g.get("delta", 0), 2),
+                "net_gamma": round(g.get("gamma", 0), 5),
+                "net_theta": round(g.get("theta", 0), 2),
+                "net_vega": round(g.get("vega", 0), 2),
+                "spot": round(self._prem_entry_spot, 2),
+                "vix": round(vix, 2),
+                "premium_per_lot": round(float(self._entry_premium), 2),
+            },
         )
 
         get_structured_logger().log(
@@ -600,24 +696,36 @@ class PortfolioStrategy(BaseStrategy):
             logger.warning(f"[{self.strategy_id}] IC BLOCKED: no valid strikes (ce={best_ce is not None} pe={best_pe is not None})")
             return None
 
-        wing_offset = self.params.ic_wing_width_strikes * step
-        long_ce_strike = float(best_ce.strike) + wing_offset
-        long_pe_strike = float(best_pe.strike) - wing_offset
+        desired_wing_offset = self.params.ic_wing_width_strikes * step
 
-        long_ce_entry = long_pe_entry = None
-        for entry in chain.strikes:
-            s = float(entry.strike)
-            if s == long_ce_strike and entry.ce:
-                long_ce_entry = entry
-            if s == long_pe_strike and entry.pe:
-                long_pe_entry = entry
+        # Clamp wings inward (Apr 2026 fix): with 8-strike wings (400pts on
+        # NIFTY), the desired wing often lands outside the recorded chain's
+        # strike range. find_available_wing_strike walks inward from the
+        # desired offset until it finds a strike that exists AND has a
+        # priceable leg. A narrower-than-target IC is better than no IC.
+        long_ce_entry, ce_wing_offset = find_available_wing_strike(
+            chain, float(best_ce.strike), desired_wing_offset, direction=+1, opt_attr="ce", strike_step=step,
+        )
+        long_pe_entry, pe_wing_offset = find_available_wing_strike(
+            chain, float(best_pe.strike), desired_wing_offset, direction=-1, opt_attr="pe", strike_step=step,
+        )
 
-        if not long_ce_entry or not long_ce_entry.ce or not long_pe_entry or not long_pe_entry.pe:
+        if not long_ce_entry or not long_pe_entry:
             logger.warning(
-                f"[{self.strategy_id}] IC BLOCKED: wing strikes missing "
-                f"(long_ce@{long_ce_strike}={long_ce_entry is not None} long_pe@{long_pe_strike}={long_pe_entry is not None})"
+                f"[{self.strategy_id}] IC BLOCKED: no available wings within {desired_wing_offset}pts "
+                f"(short CE@{float(best_ce.strike)} found={long_ce_entry is not None}, "
+                f"short PE@{float(best_pe.strike)} found={long_pe_entry is not None})"
             )
             return None  # Don't fallback — caller handles it
+
+        # Use the *narrower* of the two wings for symmetric reporting; keeps
+        # max-loss math conservative (assumes both wings the worst-case width).
+        wing_offset = min(ce_wing_offset, pe_wing_offset)
+        if ce_wing_offset != desired_wing_offset or pe_wing_offset != desired_wing_offset:
+            logger.info(
+                f"[{self.strategy_id}] IC WING CLAMPED: desired={desired_wing_offset}pts "
+                f"actual CE={ce_wing_offset}pts PE={pe_wing_offset}pts"
+            )
 
         self._short_ce_token = best_ce.ce.instrument_token
         self._short_ce_symbol = best_ce.ce.tradingsymbol
@@ -656,11 +764,21 @@ class PortfolioStrategy(BaseStrategy):
             f"score={self._prem_score} VIX={vix:.1f}"
         )
         logger.info(
-            f"[ENTRY_QUALITY] strategy={self.strategy_id} leg=PREMIUM mode=IRON_CONDOR "
-            f"net_delta={g.get('delta', 0):+.1f} net_gamma={g.get('gamma', 0):+.4f} "
-            f"net_theta={g.get('theta', 0):+.2f} net_vega={g.get('vega', 0):+.2f} "
-            f"spot={self._prem_entry_spot:.0f} VIX={vix:.1f} "
-            f"credit_per_lot={float(self._entry_premium):.2f} wing_width={wing_offset}pts"
+            "premium leg entry: iron condor",
+            extra={
+                "tag": Tag.ENTRY_QUALITY,
+                "strategy": self.strategy_id,
+                "leg": "PREMIUM",
+                "mode": "IRON_CONDOR",
+                "net_delta": round(g.get("delta", 0), 2),
+                "net_gamma": round(g.get("gamma", 0), 5),
+                "net_theta": round(g.get("theta", 0), 2),
+                "net_vega": round(g.get("vega", 0), 2),
+                "spot": round(self._prem_entry_spot, 2),
+                "vix": round(vix, 2),
+                "credit_per_lot": round(float(self._entry_premium), 2),
+                "wing_width_pts": wing_offset,
+            },
         )
 
         get_structured_logger().log(
@@ -729,14 +847,33 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_sell_symbol = sell_opt.tradingsymbol
         self._trend_direction = breakout.direction
 
-        buy_ltp = self.ctx.get_ltp(self._trend_buy_token)
-        sell_ltp = self.ctx.get_ltp(self._trend_sell_token)
-        self._entry_debit = buy_ltp - sell_ltp
+        # Resolve fillable prices with bid/ask fallback (Apr 2026 fix):
+        # ITM legs often have stale LTP=0 in recorded chain when no trade
+        # printed in that minute, but real exchanges quote bid/ask continuously.
+        # resolve_option_price tries LTP → mid → side-aware quote.
+        buy_price = resolve_option_price(buy_opt, "BUY")
+        sell_price = resolve_option_price(sell_opt, "SELL")
+
+        if buy_price is None or sell_price is None:
+            logger.warning(
+                f"[{self.strategy_id}] TREND BLOCKED: no quotes "
+                f"(buy@{buy_strike} ltp={buy_opt.ltp} bid={buy_opt.bid_price} ask={buy_opt.ask_price}; "
+                f"sell@{sell_strike} ltp={sell_opt.ltp} bid={sell_opt.bid_price} ask={sell_opt.ask_price})"
+            )
+            return None
+
+        self._entry_debit = buy_price - sell_price
         self._max_spread_value = Decimal(str(abs(width)))
         self._peak_spread_value = self._entry_debit
 
         if self._entry_debit <= 0:
-            logger.warning(f"[{self.strategy_id}] TREND BLOCKED: debit non-positive ({self._entry_debit})")
+            # Genuine inversion (buy leg cheaper than sell leg) — would be
+            # arbitrage. Don't enter; this means our spread direction is wrong
+            # for the breakout, or both quotes are noise.
+            logger.warning(
+                f"[{self.strategy_id}] TREND BLOCKED: debit non-positive "
+                f"(buy={buy_price} sell={sell_price} debit={self._entry_debit})"
+            )
             return None
 
         self._trend_entered = True
@@ -756,11 +893,21 @@ class PortfolioStrategy(BaseStrategy):
             f"qty={self._trend_quantity} score={self._trend_score}"
         )
         logger.info(
-            f"[ENTRY_QUALITY] strategy={self.strategy_id} leg=TREND dir={breakout.direction} "
-            f"net_delta={g.get('delta', 0):+.1f} net_gamma={g.get('gamma', 0):+.4f} "
-            f"net_theta={g.get('theta', 0):+.2f} net_vega={g.get('vega', 0):+.2f} "
-            f"spot={spot:.0f} VIX={self._trend_entry_vix:.1f} "
-            f"debit={float(self._entry_debit):.2f} max_profit={float(self._max_spread_value - self._entry_debit):.2f}"
+            "trend leg entry: debit spread",
+            extra={
+                "tag": Tag.ENTRY_QUALITY,
+                "strategy": self.strategy_id,
+                "leg": "TREND",
+                "direction": breakout.direction,
+                "net_delta": round(g.get("delta", 0), 2),
+                "net_gamma": round(g.get("gamma", 0), 5),
+                "net_theta": round(g.get("theta", 0), 2),
+                "net_vega": round(g.get("vega", 0), 2),
+                "spot": round(spot, 2),
+                "vix": round(self._trend_entry_vix, 2),
+                "debit": round(float(self._entry_debit), 2),
+                "max_profit": round(float(self._max_spread_value - self._entry_debit), 2),
+            },
         )
 
         get_structured_logger().log(
@@ -1113,12 +1260,25 @@ class PortfolioStrategy(BaseStrategy):
             theta_gamma = abs(g["theta"] / g["gamma"]) if abs(g["gamma"]) > 1e-6 else 999
 
             logger.info(
-                f"[MONITOR] strategy={self.strategy_id} leg=PREMIUM mode={self._prem_mode.upper()} "
-                f"held={held_min:.0f}min pnl={unrealized:+,.0f} chg={change_pct:+.1f}% "
-                f"delta={g['delta']:+.1f} gamma={g['gamma']:+.4f} "
-                f"theta={g['theta']:+.2f} vega={g['vega']:+.2f} "
-                f"gamma_exp={gamma_exp:.0f}/{self.params.gamma_exit_threshold:.0f} "
-                f"theta_eff={theta_gamma:.1f} spot={spot:.0f} VIX={vix:.1f}"
+                "premium leg monitor",
+                extra={
+                    "tag": Tag.MONITOR,
+                    "strategy": self.strategy_id,
+                    "leg": "PREMIUM",
+                    "mode": self._prem_mode.upper(),
+                    "held_minutes": round(held_min, 1),
+                    "pnl": round(unrealized, 2),
+                    "change_pct": round(change_pct, 2),
+                    "delta": round(g["delta"], 2),
+                    "gamma": round(g["gamma"], 5),
+                    "theta": round(g["theta"], 2),
+                    "vega": round(g["vega"], 2),
+                    "gamma_exposure": round(gamma_exp, 1),
+                    "gamma_threshold": self.params.gamma_exit_threshold,
+                    "theta_efficiency": round(theta_gamma, 2),
+                    "spot": round(spot, 2),
+                    "vix": round(vix, 2),
+                },
             )
 
             get_structured_logger().log(
@@ -1144,12 +1304,23 @@ class PortfolioStrategy(BaseStrategy):
             unrealized = (current_value - float(self._entry_debit)) * self._trend_quantity
 
             logger.info(
-                f"[MONITOR] strategy={self.strategy_id} leg=TREND dir={self._trend_direction} "
-                f"held={held_min:.0f}min pnl={unrealized:+,.0f} "
-                f"spread={current_value:.2f}/{float(self._max_spread_value):.0f} "
-                f"delta={g['delta']:+.1f} gamma={g['gamma']:+.4f} "
-                f"theta={g['theta']:+.2f} vega={g['vega']:+.2f} "
-                f"spot={spot:.0f} VIX={vix:.1f}"
+                "trend leg monitor",
+                extra={
+                    "tag": Tag.MONITOR,
+                    "strategy": self.strategy_id,
+                    "leg": "TREND",
+                    "direction": self._trend_direction,
+                    "held_minutes": round(held_min, 1),
+                    "pnl": round(unrealized, 2),
+                    "spread_value": round(current_value, 2),
+                    "max_spread": round(float(self._max_spread_value), 2),
+                    "delta": round(g["delta"], 2),
+                    "gamma": round(g["gamma"], 5),
+                    "theta": round(g["theta"], 2),
+                    "vega": round(g["vega"], 2),
+                    "spot": round(spot, 2),
+                    "vix": round(vix, 2),
+                },
             )
 
             get_structured_logger().log(
@@ -1206,11 +1377,24 @@ class PortfolioStrategy(BaseStrategy):
         dominant_pct = abs(components[dominant]) / abs(actual_pnl) * 100 if abs(actual_pnl) > 0.01 else 0
 
         logger.info(
-            f"[ATTRIBUTION] strategy={self.strategy_id} leg={leg} mode={mode} "
-            f"pnl={actual_pnl:+,.0f} spot_chg={ds:+.0f} vix_chg={d_vix:+.1f} held={dt_days * 24:.1f}hrs "
-            f"delta={delta_pnl:+,.0f} gamma={gamma_pnl:+,.0f} "
-            f"theta={theta_pnl:+,.0f} vega={vega_pnl:+,.0f} "
-            f"residual={residual:+,.0f} dominant={dominant}({dominant_pct:.0f}%)"
+            "exit attribution",
+            extra={
+                "tag": Tag.ATTRIBUTION,
+                "strategy": self.strategy_id,
+                "leg": leg,
+                "mode": mode,
+                "actual_pnl": round(actual_pnl, 2),
+                "spot_change": round(ds, 2),
+                "vix_change": round(d_vix, 2),
+                "held_hours": round(dt_days * 24, 2),
+                "delta_pnl": round(delta_pnl, 2),
+                "gamma_pnl": round(gamma_pnl, 2),
+                "theta_pnl": round(theta_pnl, 2),
+                "vega_pnl": round(vega_pnl, 2),
+                "residual": round(residual, 2),
+                "dominant": dominant,
+                "dominant_pct": round(dominant_pct, 1),
+            },
         )
 
         get_structured_logger().log(
@@ -1454,10 +1638,18 @@ class PortfolioStrategy(BaseStrategy):
             prem_pct = (self._prem_realized_pnl / total * 100) if abs(total) > 0.01 else 0
             trend_pct = (self._trend_realized_pnl / total * 100) if abs(total) > 0.01 else 0
             logger.info(
-                f"[DAY_SUMMARY] strategy={self.strategy_id} "
-                f"total_pnl={total:+,.0f} "
-                f"premium={self._prem_realized_pnl:+,.0f}({prem_pct:+.0f}%) trades={self._prem_trades_today} "
-                f"trend={self._trend_realized_pnl:+,.0f}({trend_pct:+.0f}%) trades={self._trend_trades_today}"
+                "day summary",
+                extra={
+                    "tag": Tag.DAY_SUMMARY,
+                    "strategy": self.strategy_id,
+                    "total_pnl": round(total, 2),
+                    "premium_pnl": round(self._prem_realized_pnl, 2),
+                    "premium_pct": round(prem_pct, 1),
+                    "premium_trades": self._prem_trades_today,
+                    "trend_pnl": round(self._trend_realized_pnl, 2),
+                    "trend_pct": round(trend_pct, 1),
+                    "trend_trades": self._trend_trades_today,
+                },
             )
 
             get_structured_logger().log(

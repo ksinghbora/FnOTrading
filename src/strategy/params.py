@@ -178,6 +178,37 @@ class PortfolioParams(BaseStrategyParams):
     premium_hedge: bool = True
     premium_hedge_offset: int = 5
 
+    # Entry guards — calibrated from chain-replay decision logs (Apr 18 2026):
+    #   • premium_min_entry_credit (₹/lot): A 2026-04-08 strangle exited
+    #     with "Stop loss: premium up 26282.1%" (loss = ₹76,875 on a ₹10L
+    #     pool). Root cause: entry-leg LTP captured as ~₹0.30 when one leg's
+    #     last trade was stale, then SL math divided by ~zero. IC already has
+    #     this guard at strategy line 676 (Decimal("10")) — strangle didn't.
+    #   • premium_max_trades_per_day: Apr 17 took 14 strangle entries at
+    #     hour=11 all hitting the same -29.9% stop. Trend leg had a per-day
+    #     cap (TrendDebitSpreadParams.max_trades_per_day=1); premium leg
+    #     incremented _prem_trades_today but never guarded on it. n=1 mirrors
+    #     trend's logic — no whipsaw re-entry on the same day.
+    #   • premium_blocked_hours: 2-week decision-log slice shows hour-11
+    #     entries win 12% of the time (n=48, avg -₹415) and hour-12 win 4%
+    #     (n=21, avg -₹531). Mid-day (13:00-14:00) is the golden window
+    #     (100% win, n=23). Block 11+12 hard until n>40 days lets us tune.
+    premium_min_entry_credit: float = 5.0    # ₹/lot floor; below = stale-leg suspicion
+    premium_max_trades_per_day: int = 1
+    premium_blocked_hours: tuple[int, ...] = (11, 12)
+
+    # Hard filters — Apr 18 2026 audit found that BaseStrategyParams sets
+    # pcr_filter_enabled=True and max_pain_filter_enabled=True by default,
+    # but portfolio_strategy.py never CALLS _check_pcr_filter or
+    # _check_max_pain_filter (only iron_condor / short_strangle /
+    # short_straddle do). PCR and max-pain are only used as soft inputs to
+    # score_premium_selling. This flag is the master switch that wires the
+    # hard filters into the portfolio premium leg, mirroring iron_condor.py
+    # lines 162-177. Default OFF until A/B replay validates the impact —
+    # turning it on risks blocking legitimate entries on bullish days
+    # (PCR < 0.7 was 11/32 of recorded decisions, all on Apr 8/9 mornings).
+    portfolio_filters_enabled: bool = False
+
     # Iron condor mode — used when VIX 18-25
     ic_short_call_delta: float = 0.15
     ic_short_put_delta: float = -0.15
