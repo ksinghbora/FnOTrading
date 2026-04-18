@@ -1,0 +1,21 @@
+timestamp,strategy_id,leg,decision,mode,spot,vix,pcr_oi,max_pain,max_pain_dist_pct,iv_skew_ratio,move_from_open_pct,morning_range_pct,dte,hour,minute,day_of_week,is_expiry,rule_score,ai_adj,final_score,threshold,regime,entry_premium,quantity,exit_reason,outcome_pnl,held_minutes
+2026-04-17T11:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,22505.09,17.91,1.0,22500.0,0.02,1.0,7.056,7.397,4,11,5,4,0,87,0,87,60,trending,37.8,75,,,
+2026-04-17T13:00:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24268.65,17.65,0.8986825613651557,24250.0,0.08,1.165,0.227,0.099,4,13,0,4,0,87,0,87,65,high_vol_range,47.6,75,,,
+2026-04-17T15:22:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24356.4,17.22,0.9113654271454265,24300.0,0.23,1.223,0.59,0.109,4,15,22,4,0,0,0,0,0,trending,0.0,0,Time exit,-153.75,142
+2026-04-17T15:23:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24359.8,17.19,0.9113649518942456,24300.0,0.25,1.218,0.604,0.109,4,15,23,4,0,0,0,0,0,trending,0.0,0,Time exit,116.25,258
+2026-04-17T11:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,22505.09,17.91,1.0,22500.0,0.02,1.0,7.056,7.397,4,11,5,4,0,87,0,87,60,trending,37.8,75,,,
+2026-04-17T13:00:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24268.65,17.65,0.8986825613651557,24250.0,0.08,1.165,0.227,0.099,4,13,0,4,0,87,0,87,65,high_vol_range,47.6,75,,,
+2026-04-17T15:22:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24356.4,17.22,0.9113654271454265,24300.0,0.23,1.223,0.59,0.109,4,15,22,4,0,0,0,0,0,trending,0.0,0,Time exit,-153.75,142
+2026-04-17T15:23:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24359.8,17.19,0.9113649518942456,24300.0,0.25,1.218,0.604,0.109,4,15,23,4,0,0,0,0,0,trending,0.0,0,Time exit,116.25,258
+2026-04-17T11:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,22505.09,17.91,1.0,22500.0,0.02,1.0,7.056,7.397,4,11,5,4,0,87,0,87,60,trending,37.8,75,,,
+2026-04-17T13:00:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24268.65,17.65,0.8986825613651557,24250.0,0.08,1.165,0.227,0.099,4,13,0,4,0,87,0,87,65,high_vol_range,47.6,75,,,
+2026-04-17T15:22:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24356.4,17.22,0.9113654271454265,24300.0,0.23,1.223,0.59,0.109,4,15,22,4,0,0,0,0,0,trending,0.0,0,Time exit,-153.75,142
+2026-04-17T15:23:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24359.8,17.19,0.9113649518942456,24300.0,0.25,1.218,0.604,0.109,4,15,23,4,0,0,0,0,0,trending,0.0,0,Time exit,116.25,258
+2026-04-17T11:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,22505.09,17.91,1.0,22500.0,0.02,1.0,7.056,7.397,4,11,5,4,0,87,0,87,60,trending,37.8,75,,,
+2026-04-17T13:00:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24268.65,17.65,0.8986825613651557,24250.0,0.08,1.165,0.227,0.099,4,13,0,4,0,87,0,87,65,high_vol_range,47.6,75,,,
+2026-04-17T15:22:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24356.4,17.22,0.9113654271454265,24300.0,0.23,1.223,0.59,0.109,4,15,22,4,0,0,0,0,0,trending,0.0,0,Time exit,-153.75,142
+2026-04-17T15:23:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24359.8,17.19,0.9113649518942456,24300.0,0.25,1.218,0.604,0.109,4,15,23,4,0,0,0,0,0,trending,0.0,0,Time exit,116.25,258
+2026-04-17T11:05:00+05:30,portfolio_replay,TREND,ENTER,debit_spread,22505.09,17.91,1.0,22500.0,0.02,1.0,7.056,7.397,4,11,5,4,0,87,0,87,60,trending,37.8,75,,,
+2026-04-17T13:00:00+05:30,portfolio_replay,PREMIUM,ENTER,iron_condor,24268.65,17.65,0.8986825613651557,24250.0,0.08,1.165,0.227,0.099,4,13,0,4,0,87,0,87,65,high_vol_range,47.6,75,,,
+2026-04-17T15:22:00+05:30,portfolio_replay,PREMIUM,EXIT,iron_condor,24356.4,17.22,0.9113654271454265,24300.0,0.23,1.223,0.59,0.109,4,15,22,4,0,0,0,0,0,trending,0.0,0,Time exit,-153.75,142
+2026-04-17T15:23:00+05:30,portfolio_replay,TREND,EXIT,debit_spread,24359.8,17.19,0.9113649518942456,24300.0,0.25,1.218,0.604,0.109,4,15,23,4,0,0,0,0,0,trending,0.0,0,Time exit,116.25,258
