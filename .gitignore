@@ -60,3 +60,7 @@ data/day_bias_backfill/
 # git, but the CSVs themselves are not source-of-truth data.
 data/chain_snapshots/_quarantine/*.csv
 data/chain_snapshots/_quarantine/*.csv.*
+
+# Pre-clean backups from scripts/clean_holiday_minutes.py — kept on disk
+# for one-off forensic inspection; not source-of-truth data.
+data/*.dirty-*.csv
