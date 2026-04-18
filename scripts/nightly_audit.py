@@ -195,6 +195,63 @@ async def run(
         # Don't let the counterfactual block shipping the rest of the audit.
         print(f"\n  Counterfactual: SKIPPED ({type(e).__name__}: {e})")
 
+    # 3f. Trend score shadow metrics — Phase B of memory/score_validation_plan.md.
+    # The Apr 18 trend score rebalance lands in the "needs shadow data" band,
+    # so the operator wants a daily readout of (a) trend entry-rate vs the
+    # historical median and (b) per-factor activation health, with a hard
+    # rollback trigger on 5 consecutive zero-entry days. Wraps in try/except
+    # because the script imports cleanly but the underlying decision-log
+    # readers can fail on schema drift — and the rest of the audit shouldn't
+    # block on a diagnostic.
+    shadow_msg: str | None = None
+    try:
+        # Import lazily so test environments without scripts/ on path don't choke.
+        # The sys.modules registration before exec_module is REQUIRED on
+        # Python 3.14+: dataclass's _is_type reads sys.modules[cls.__module__]
+        # to resolve KW_ONLY context, and a dynamically-loaded module that
+        # isn't registered hits AttributeError on the second @dataclass.
+        import importlib.util
+        import sys as _sys
+        spec = importlib.util.spec_from_file_location(
+            "trend_shadow_metrics",
+            Path(__file__).parent / "trend_shadow_metrics.py",
+        )
+        tsm = importlib.util.module_from_spec(spec)
+        _sys.modules["trend_shadow_metrics"] = tsm
+        spec.loader.exec_module(tsm)
+
+        from datetime import timedelta as _td
+        # 30-day trailing window ending on the audit's target_date so a
+        # backfill run (--date) reflects what the operator would have seen
+        # on that evening, not today's full corpus.
+        since = target_date - _td(days=30)
+        phase_a, pre_a, _skipped = tsm.collect_rows(since, target_date, strategy_id=None)
+        if phase_a or pre_a:
+            metrics = tsm.build_metrics(since, target_date, phase_a, pre_a, _skipped)
+            band_emoji = {"PASS": "✅", "WARN": "🟧", "FAIL": "🟥"}.get(metrics.band, "❓")
+            print(
+                f"\n  Trend shadow ({since}→{target_date}): "
+                f"entries={metrics.total_entries} "
+                f"median/day={metrics.median_entries_per_day} "
+                f"phase_a={metrics.phase_a_entries} "
+                f"band={band_emoji} {metrics.band}"
+            )
+            if metrics.band in ("WARN", "FAIL"):
+                shadow_msg = (
+                    f"{band_emoji} Trend shadow band={metrics.band} for {target_date} "
+                    f"(30d median={metrics.median_entries_per_day}/day, "
+                    f"max consec zero days={metrics.consecutive_fail_days}). "
+                    f"See memory/score_validation_plan.md decision tree."
+                )
+            # Persist the JSON for later trending (one file per month).
+            if not dry_run:
+                output = Path("data") / f"trend_shadow_{since.strftime('%Y-%m')}.json"
+                tsm.write_json(metrics, output)
+        else:
+            print(f"\n  Trend shadow: no decision logs in {since}→{target_date}")
+    except Exception as e:
+        print(f"\n  Trend shadow: SKIPPED ({type(e).__name__}: {e})")
+
     # 4. Save results
     if not dry_run:
         save_audit_json(audit)
@@ -223,6 +280,8 @@ async def run(
                     msg = f"{msg}\n\n{heartbeat_msg}"
                 if counterfactual_msg:
                     msg = f"{msg}\n\n{counterfactual_msg}"
+                if shadow_msg:
+                    msg = f"{msg}\n\n{shadow_msg}"
                 await notifier.send_message(msg)
                 print("  Sent audit to Telegram")
             except Exception as e:
