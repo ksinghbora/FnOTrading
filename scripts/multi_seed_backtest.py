@@ -1,4 +1,11 @@
-"""Run multi-seed backtest for all strategies in a single process.
+"""DEPRECATED: BS-pricing multi-seed backtest. Prefer chain replay for P&L.
+
+Apr 2026: synthetic GBM ticks + BS pricing systematically over-estimates
+P&L by ~60 % vs `scripts/replay_23days.py`. Keep using this script ONLY
+to compare strategies head-to-head on identical synthetic seeds (ranking
+holds even though absolute P&L is wrong).
+
+Run multi-seed backtest for all strategies in a single process.
 
 Avoids per-run Python startup overhead (~1s each).
 

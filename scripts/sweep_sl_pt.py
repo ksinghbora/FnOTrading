@@ -1,4 +1,12 @@
-"""Systematic sweep of Stop Loss / Profit Target / Trail combinations.
+"""DEPRECATED: BS-priced parameter sweep. Re-tune on chain replay instead.
+
+Apr 2026: this sweep uses synthetic ticks + BS option prices, which the
+audit found to be ~60 % too optimistic on P&L. The earlier "optimal" SL/PT
+combos picked here turned out to be overfit to BS-derived noise. Re-run
+the same grid against `ReplayBacktestEngine` once the chain corpus has
+30+ clean days (currently 13/16).
+
+Systematic sweep of Stop Loss / Profit Target / Trail combinations.
 
 Tests all key parameter combinations for premium (IC + strangle) and trend legs.
 Runs against 21 days of real historical data.

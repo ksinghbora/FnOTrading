@@ -1,4 +1,14 @@
-"""Walk-forward validation using real NIFTY + VIX historical data.
+"""DEPRECATED: real spot/VIX but BS-priced options. Use replay for new tuning.
+
+Apr 2026: this script uses the real NIFTY+VIX minute CSVs but still derives
+option prices via Black-Scholes. The chain-replay engine
+(`scripts/replay_23days.py`) uses real recorded option prices and is the
+preferred path. Kept here because the historical spot+VIX series is much
+longer (~123 trading days back to Sep 2025) than the chain corpus, so it
+remains the best option for long-window regime work until we have a full
+year of recorded chains.
+
+Walk-forward validation using real NIFTY + VIX historical data.
 
 Prerequisite: Run download_spot_data.py first to get CSV files.
 

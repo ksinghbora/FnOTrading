@@ -1,4 +1,14 @@
-"""Run a backtest for any registered strategy with synthetic NIFTY data.
+"""DEPRECATED: synthetic-data backtest using Black-Scholes pricing.
+
+Apr 2026 audit: BS-derived P&L runs ~60 % too optimistic vs the chain
+replay (real recorded option prices). Use `scripts/replay_23days.py` for
+any P&L decision; this script is kept only because:
+  - It still works as a smoke test for the strategy plumbing.
+  - It's the only path that runs without recorded chain data, so it's
+    the fallback for brand-new strategies before they have any real
+    chain history.
+
+Run a backtest for any registered strategy with synthetic NIFTY data.
 
 Uses BacktestEngine which wires the same pipeline as live trading
 (TickFeedManager, OptionChainBuilder, PaperBrokerClient, PortfolioManager)

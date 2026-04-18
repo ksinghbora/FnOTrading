@@ -1,4 +1,13 @@
-"""Walk-forward (out-of-sample) validation for all strategies.
+"""DEPRECATED for absolute P&L; OK for relative train/test ranking.
+
+Apr 2026: synthetic-tick + BS pricing inflates absolute P&L by ~60 %, so
+treat the dollar numbers here as illustrative only. The walk-forward
+*shape* (train vs test correlation, overfitting flag) is still useful
+because both windows share the same bias. For real P&L on unseen data,
+once we have 30+ clean chain-replay days, run the same windows against
+`ReplayBacktestEngine`.
+
+Walk-forward (out-of-sample) validation for all strategies.
 
 Splits the simulation into rolling train/test windows to detect overfitting
 and validate that strategy performance holds on unseen data.

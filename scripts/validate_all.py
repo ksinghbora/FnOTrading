@@ -1,4 +1,11 @@
-"""Comprehensive walk-forward validation: filters ON vs OFF + trend debit spread.
+"""DEPRECATED for absolute P&L; useful for relative filter-on/off comparison.
+
+Apr 2026: synthetic-tick + BS pricing inflates absolute P&L by ~60 %.
+The filter ON-vs-OFF *delta* it produces is still informative (both runs
+share the same bias). For absolute filter impact, re-run on chain replay
+once we have enough clean days.
+
+Comprehensive walk-forward validation: filters ON vs OFF + trend debit spread.
 
 Runs 3 comparisons:
 1. Premium sellers with filters OFF (baseline)
