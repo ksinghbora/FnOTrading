@@ -15,6 +15,7 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide
 from src.strategy.base import BaseStrategy
+from src.strategy.implementations.portfolio_pricing import find_available_wing_strike
 from src.strategy.params import IronCondorParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
@@ -215,43 +216,50 @@ class IronCondorStrategy(BaseStrategy):
             logger.warning(f"[{self.strategy_id}] Could not find suitable short strikes")
             return None
 
-        # Determine long (wing) strikes
-        wing_offset = self.params.wing_width_strikes * strike_interval
+        # Determine long (wing) strikes — with inward clamping (Apr 2026 fix).
+        # 8-strike wings (400pts on NIFTY) often land outside the recorded
+        # chain's strike range, blocking entry entirely. Clamping inward gives
+        # us a narrower-than-target IC (smaller defined max loss) instead of
+        # no IC at all.
+        desired_wing_offset = self.params.wing_width_strikes * strike_interval
         self._short_ce_strike = float(best_short_ce.strike)
         self._short_pe_strike = float(best_short_pe.strike)
-        self._long_ce_strike = self._short_ce_strike + wing_offset
-        self._long_pe_strike = self._short_pe_strike - wing_offset
+
+        long_ce_entry, ce_wing_offset = find_available_wing_strike(
+            chain, self._short_ce_strike, desired_wing_offset, direction=+1,
+            opt_attr="ce", strike_step=int(strike_interval),
+        )
+        long_pe_entry, pe_wing_offset = find_available_wing_strike(
+            chain, self._short_pe_strike, desired_wing_offset, direction=-1,
+            opt_attr="pe", strike_step=int(strike_interval),
+        )
+
+        if not long_ce_entry or not long_pe_entry:
+            logger.warning(
+                f"[{self.strategy_id}] Could not find any wing strikes within {desired_wing_offset}pts "
+                f"(short_ce@{self._short_ce_strike} ce_found={long_ce_entry is not None}, "
+                f"short_pe@{self._short_pe_strike} pe_found={long_pe_entry is not None})"
+            )
+            return None
+
+        self._long_ce_strike = float(long_ce_entry.strike)
+        self._long_pe_strike = float(long_pe_entry.strike)
+
+        if ce_wing_offset != desired_wing_offset or pe_wing_offset != desired_wing_offset:
+            logger.info(
+                f"[{self.strategy_id}] IC WING CLAMPED: desired={desired_wing_offset}pts "
+                f"actual CE={ce_wing_offset}pts PE={pe_wing_offset}pts"
+            )
 
         # Find all 4 legs in the chain
         self._short_ce_token = best_short_ce.ce.instrument_token
         self._short_ce_symbol = best_short_ce.ce.tradingsymbol
         self._short_pe_token = best_short_pe.pe.instrument_token
         self._short_pe_symbol = best_short_pe.pe.tradingsymbol
-
-        long_ce_found = False
-        long_pe_found = False
-
-        for entry in chain.strikes:
-            strike = float(entry.strike)
-            if strike == self._long_ce_strike and entry.ce:
-                self._long_ce_token = entry.ce.instrument_token
-                self._long_ce_symbol = entry.ce.tradingsymbol
-                long_ce_found = True
-            elif strike == self._long_pe_strike and entry.pe:
-                self._long_pe_token = entry.pe.instrument_token
-                self._long_pe_symbol = entry.pe.tradingsymbol
-                long_pe_found = True
-
-            if long_ce_found and long_pe_found:
-                break
-
-        if not long_ce_found or not long_pe_found:
-            logger.warning(
-                f"[{self.strategy_id}] Could not find wing strikes: "
-                f"long_ce@{self._long_ce_strike} found={long_ce_found}, "
-                f"long_pe@{self._long_pe_strike} found={long_pe_found}"
-            )
-            return None
+        self._long_ce_token = long_ce_entry.ce.instrument_token
+        self._long_ce_symbol = long_ce_entry.ce.tradingsymbol
+        self._long_pe_token = long_pe_entry.pe.instrument_token
+        self._long_pe_symbol = long_pe_entry.pe.tradingsymbol
 
         # Calculate net credit
         short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)

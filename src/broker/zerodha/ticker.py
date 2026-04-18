@@ -11,6 +11,7 @@ from kiteconnect import KiteTicker
 from src.core.clock import now_ist
 from src.core.events import Event, EventBus, EventType
 from src.core.models import Tick
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,16 @@ class TickerManager:
         self._last_tick_time = now_ist()
         if self._tick_log_count < 3:
             self._tick_log_count += 1
-            logger.info(f"[TICKER] Received {len(ticks)} ticks (batch #{self._tick_log_count})")
+            # Typed tag — JSONL queries filter on tag="TICKER" instead of grepping
+            # for "[TICKER]" in free text (DATA_RELIABILITY_PLAN §8.2).
+            logger.info(
+                "tick batch received",
+                extra={
+                    "tag": Tag.TICKER,
+                    "batch_size": len(ticks),
+                    "batch_number": self._tick_log_count,
+                },
+            )
 
         for tick_data in ticks:
             try:
@@ -122,7 +132,10 @@ class TickerManager:
 
     def _on_connect(self, ws: Any, response: Any) -> None:
         """Callback: WebSocket connected."""
-        logger.info("KiteTicker connected")
+        logger.info(
+            "ticker connected",
+            extra={"tag": Tag.TICKER, "subscribed_tokens": len(self._subscribed_tokens)},
+        )
         # Re-subscribe to all tokens
         if self._subscribed_tokens:
             token_list = list(self._subscribed_tokens)
@@ -147,15 +160,24 @@ class TickerManager:
         Does NOT publish CONNECTION_LOST — the heartbeat loop handles reconnect
         detection and notification to avoid duplicate/spammy Telegram alerts.
         """
-        logger.warning(f"KiteTicker disconnected: {code} - {reason}")
+        logger.warning(
+            "ticker disconnected",
+            extra={"tag": Tag.TICKER, "code": code, "reason": reason},
+        )
 
     def _on_error(self, ws: Any, code: int, reason: str) -> None:
         """Callback: WebSocket error."""
-        logger.error(f"KiteTicker error: {code} - {reason}")
+        logger.error(
+            "ticker error",
+            extra={"tag": Tag.TICKER, "code": code, "reason": reason},
+        )
 
     def _on_reconnect(self, ws: Any, attempts: int) -> None:
         """Callback: WebSocket reconnecting."""
-        logger.info(f"KiteTicker reconnecting (attempt {attempts})")
+        logger.info(
+            "ticker reconnecting",
+            extra={"tag": Tag.WS_RECONNECT, "attempt": attempts, "trigger": "auto"},
+        )
 
     async def _heartbeat_loop(self) -> None:
         """Monitor tick flow — force reconnect if ticks stop arriving.
@@ -206,7 +228,13 @@ class TickerManager:
 
                 if elapsed > self.HEARTBEAT_TIMEOUT:
                     logger.warning(
-                        f"No ticks received for {elapsed:.0f}s — forcing reconnect"
+                        "tick gap exceeded heartbeat — forcing reconnect",
+                        extra={
+                            "tag": Tag.WS_RECONNECT,
+                            "elapsed_seconds": round(elapsed, 1),
+                            "timeout_seconds": self.HEARTBEAT_TIMEOUT,
+                            "trigger": "heartbeat",
+                        },
                     )
                     event = Event.create(
                         EventType.CONNECTION_LOST,

@@ -10,6 +10,7 @@ from anthropic import AsyncAnthropic
 
 from src.advisor.models import Advisory, DayBias, ExternalContext, KeyLevels, TodayData
 from src.config import Settings
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,10 @@ def _parse_response(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    logger.error(f"[ADVISOR] Could not parse Claude response as JSON: {text[:200]}")
+    logger.error(
+        "could not parse Claude response as JSON",
+        extra={"tag": Tag.ADVISOR, "phase": "parse", "preview": text[:200]},
+    )
     return {}
 
 
@@ -221,7 +225,10 @@ async def analyze_with_claude(
     settings = settings or Settings()
 
     if not settings.anthropic_api_key:
-        logger.warning("[ADVISOR] No ANTHROPIC_API_KEY configured, returning empty advisory")
+        logger.warning(
+            "no ANTHROPIC_API_KEY configured, returning empty advisory",
+            extra={"tag": Tag.ADVISOR, "phase": "init", "reason": "missing_api_key"},
+        )
         return Advisory(
             date=today.date,
             day_bias=DayBias(date=today.date),
@@ -231,7 +238,15 @@ async def analyze_with_claude(
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
     user_message = _build_user_message(today, context)
 
-    logger.info(f"[ADVISOR] Calling {settings.advisor_model} with {len(user_message)} chars")
+    logger.info(
+        "calling Claude advisor",
+        extra={
+            "tag": Tag.ADVISOR,
+            "phase": "api_call",
+            "model": settings.advisor_model,
+            "prompt_chars": len(user_message),
+        },
+    )
 
     try:
         response = await client.messages.create(
@@ -241,7 +256,10 @@ async def analyze_with_claude(
             messages=[{"role": "user", "content": user_message}],
         )
     except Exception as e:
-        logger.error(f"[ADVISOR] Claude API call failed: {e}")
+        logger.error(
+            "Claude API call failed",
+            extra={"tag": Tag.ADVISOR, "phase": "api_call", "model": settings.advisor_model, "error": str(e)},
+        )
         return Advisory(
             date=today.date,
             day_bias=DayBias(date=today.date),
@@ -299,11 +317,20 @@ async def analyze_with_claude(
     )
 
     logger.info(
-        f"[ADVISOR] Advisory generated: risk={day_bias.risk_level} "
-        f"confidence={day_bias.confidence:.2f} mode={day_bias.mode_bias} "
-        f"prem_adj={day_bias.premium_score_adj:+d}(conf={day_bias.premium_confidence:.2f}) "
-        f"trend_adj={day_bias.trend_score_adj:+d}(conf={day_bias.trend_confidence:.2f}) "
-        f"tokens={usage}"
+        "advisory generated",
+        extra={
+            "tag": Tag.ADVISOR,
+            "phase": "complete",
+            "risk_level": day_bias.risk_level,
+            "confidence": round(day_bias.confidence, 2),
+            "mode_bias": day_bias.mode_bias,
+            "premium_score_adj": day_bias.premium_score_adj,
+            "premium_confidence": round(day_bias.premium_confidence, 2),
+            "trend_score_adj": day_bias.trend_score_adj,
+            "trend_confidence": round(day_bias.trend_confidence, 2),
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+        },
     )
 
     return advisory

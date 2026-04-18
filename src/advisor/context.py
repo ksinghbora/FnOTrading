@@ -26,6 +26,7 @@ from src.advisor.models import (
     GlobalMarketData,
 )
 from src.core.clock import now_ist
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,10 @@ async def _fetch_news_headlines(max_headlines: int = 10) -> list[str]:
 
         return headlines
     except Exception as e:
-        logger.warning(f"[ADVISOR] News fetch failed: {e}")
+        logger.warning(
+            "news fetch failed",
+            extra={"tag": Tag.ADVISOR, "phase": "context", "source": "india_news", "error": str(e)},
+        )
         return []
 
 
@@ -124,7 +128,10 @@ async def _fetch_global_headlines(max_headlines: int = 8) -> list[str]:
                 if len(headlines) >= max_headlines:
                     break
         except Exception as e:
-            logger.debug(f"[ADVISOR] Global headline feed failed ({url}): {e}")
+            logger.debug(
+                "global headline feed failed",
+                extra={"tag": Tag.ADVISOR, "phase": "context", "source": "global_news", "url": url, "error": str(e)},
+            )
 
     return headlines
 
@@ -160,7 +167,10 @@ async def _fetch_fii_dii() -> FiiDiiData | None:
 
         return FiiDiiData(fii_net=round(fii_net, 2), dii_net=round(dii_net, 2))
     except Exception as e:
-        logger.warning(f"[ADVISOR] FII/DII fetch failed (NSE often blocks): {e}")
+        logger.warning(
+            "FII/DII fetch failed (NSE often blocks)",
+            extra={"tag": Tag.ADVISOR, "phase": "context", "source": "nse_fii_dii", "error": str(e)},
+        )
         return None
 
 
@@ -196,7 +206,10 @@ async def _fetch_yahoo_quote(symbol: str, client: httpx.AsyncClient) -> dict | N
             }
         return None
     except Exception as e:
-        logger.debug(f"[ADVISOR] Yahoo quote failed for {symbol}: {e}")
+        logger.debug(
+            "Yahoo quote failed",
+            extra={"tag": Tag.ADVISOR, "phase": "context", "source": "yahoo", "symbol": symbol, "error": str(e)},
+        )
         return None
 
 
@@ -302,7 +315,10 @@ async def _fetch_gift_nifty(nifty_prev_close: float = 0) -> tuple[float, float]:
 
         return gift_price, change_pct
     except Exception as e:
-        logger.warning(f"[ADVISOR] GIFT Nifty fetch failed: {e}")
+        logger.warning(
+            "GIFT Nifty fetch failed",
+            extra={"tag": Tag.ADVISOR, "phase": "context", "source": "gift_nifty", "error": str(e)},
+        )
         return 0.0, 0.0
 
 
@@ -318,7 +334,10 @@ def _load_economic_calendar(
         with open(calendar_path) as f:
             raw = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning(f"[ADVISOR] Calendar load failed: {e}")
+        logger.warning(
+            "calendar load failed",
+            extra={"tag": Tag.ADVISOR, "phase": "context", "source": "calendar", "path": str(calendar_path), "error": str(e)},
+        )
         return []
 
     events: list[CalendarEvent] = []
@@ -365,19 +384,34 @@ async def fetch_external_context(
         headlines = await _fetch_news_headlines()
         if headlines:
             available.append("google_news")
-            logger.info(f"[ADVISOR] Fetched {len(headlines)} India news headlines")
+            logger.info(
+                "fetched India news headlines",
+                extra={"tag": Tag.ADVISOR, "phase": "context", "source": "google_news", "count": len(headlines)},
+            )
 
         # 2. Global market headlines
         global_headlines = await _fetch_global_headlines()
         if global_headlines:
             available.append("global_headlines")
-            logger.info(f"[ADVISOR] Fetched {len(global_headlines)} global headlines")
+            logger.info(
+                "fetched global headlines",
+                extra={"tag": Tag.ADVISOR, "phase": "context", "source": "global_headlines", "count": len(global_headlines)},
+            )
 
         # 3. FII/DII flows
         fii_dii = await _fetch_fii_dii()
         if fii_dii:
             available.append("nse_fii_dii")
-            logger.info(f"[ADVISOR] FII={fii_dii.fii_net:+,.0f} DII={fii_dii.dii_net:+,.0f}")
+            logger.info(
+                "fetched FII/DII flows",
+                extra={
+                    "tag": Tag.ADVISOR,
+                    "phase": "context",
+                    "source": "nse_fii_dii",
+                    "fii_net": fii_dii.fii_net,
+                    "dii_net": fii_dii.dii_net,
+                },
+            )
 
         # 4. US markets, VIX, crude, DXY (Yahoo Finance)
         global_markets = await _fetch_global_markets()
@@ -391,7 +425,18 @@ async def fetch_external_context(
 
         if fetched_global:
             available.append("yahoo_finance")
-            logger.info(f"[ADVISOR] Global markets: {', '.join(fetched_global)} sentiment={global_markets.global_sentiment}")
+            logger.info(
+                "fetched global markets snapshot",
+                extra={
+                    "tag": Tag.ADVISOR,
+                    "phase": "context",
+                    "source": "yahoo_finance",
+                    "sp500_change_pct": global_markets.sp500_change_pct,
+                    "us_vix": global_markets.us_vix,
+                    "crude_change_pct": global_markets.crude_oil_change_pct,
+                    "sentiment": global_markets.global_sentiment,
+                },
+            )
 
         # 5. GIFT Nifty pre-market
         gift_price, gift_chg = await _fetch_gift_nifty(nifty_prev_close)
@@ -399,14 +444,26 @@ async def fetch_external_context(
             global_markets.gift_nifty = gift_price
             global_markets.gift_nifty_change_pct = gift_chg
             available.append("gift_nifty")
-            logger.info(f"[ADVISOR] GIFT Nifty={gift_price:.0f} ({gift_chg:+.2f}%)")
+            logger.info(
+                "fetched GIFT Nifty",
+                extra={
+                    "tag": Tag.ADVISOR,
+                    "phase": "context",
+                    "source": "gift_nifty",
+                    "price": round(gift_price, 2),
+                    "change_pct": round(gift_chg, 2),
+                },
+            )
 
     # 6. Economic calendar (local file, always available)
     if calendar_path and calendar_path.exists():
         events = _load_economic_calendar(calendar_path, target_date)
         if events:
             available.append("economic_calendar")
-            logger.info(f"[ADVISOR] {len(events)} upcoming events loaded")
+            logger.info(
+                "loaded upcoming economic events",
+                extra={"tag": Tag.ADVISOR, "phase": "context", "source": "economic_calendar", "count": len(events)},
+            )
 
     return ExternalContext(
         is_trading_day=target_date.weekday() < 5,

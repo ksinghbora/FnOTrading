@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from src.advisor.models import ConfluenceAudit, DecisionRecord
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,10 @@ def build_audit(
     if log_dir and log_dir.exists():
         log_lines = _read_confluence_lines(log_dir, target_date)
         decisions = parse_confluence_logs(log_lines)
-        logger.info(f"[ADVISOR] Parsed {len(decisions)} confluence decisions")
+        logger.info(
+            "parsed confluence decisions",
+            extra={"tag": Tag.ADVISOR, "phase": "audit", "decisions": len(decisions)},
+        )
 
     # Count agreements and disagreements
     agree = 0
@@ -148,10 +152,17 @@ def build_audit(
     )
 
     logger.info(
-        f"[ADVISOR] Audit: {len(decisions)} decisions, "
-        f"agree={agree} disagree={disagree} "
-        f"ai_right={ai_right} rule_right={rule_right} "
-        f"ai_alpha={ai_alpha:+,.0f}"
+        "shadow audit complete",
+        extra={
+            "tag": Tag.ADVISOR,
+            "phase": "audit",
+            "decisions": len(decisions),
+            "agree_count": agree,
+            "disagree_count": disagree,
+            "ai_right_count": ai_right,
+            "rule_right_count": rule_right,
+            "ai_alpha": round(ai_alpha, 2),
+        },
     )
 
     return audit

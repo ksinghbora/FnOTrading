@@ -7,6 +7,7 @@ from typing import Any
 from src.core.models import OHLC, Order, Signal, Subscription, Tick
 from src.core.types import StrategyState
 from src.strategy.params import BaseStrategyParams
+from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +148,14 @@ class BaseStrategy(ABC):
         if not self.ctx.clock.is_expiry_day(underlying):
             return None
         logger.info(
-            f"[FILTER] strategy={self.strategy_id} filter=expiry_day_0dte "
-            f"underlying={underlying} action=BLOCK"
+            "filter blocked entry: expiry day 0DTE",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "expiry_day_0dte",
+                "underlying": underlying,
+                "action": "BLOCK",
+            },
         )
         return f"Skipping entry — {underlying} expiry today (0DTE risk)"
 
@@ -196,14 +203,28 @@ class BaseStrategy(ABC):
         vix_max = self.params.vix_entry_max
         if vix < vix_min:
             logger.debug(
-                f"[FILTER] strategy={self.strategy_id} filter=vix "
-                f"value={vix:.1f} min={vix_min} result=block"
+                "filter blocked entry: vix below min",
+                extra={
+                    "tag": Tag.FILTER,
+                    "strategy": self.strategy_id,
+                    "filter": "vix",
+                    "value": round(vix, 2),
+                    "min": vix_min,
+                    "result": "block",
+                },
             )
             return f"VIX {vix:.1f} below min {vix_min} (complacency)"
         if vix > vix_max:
             logger.debug(
-                f"[FILTER] strategy={self.strategy_id} filter=vix "
-                f"value={vix:.1f} max={vix_max} result=block"
+                "filter blocked entry: vix above max",
+                extra={
+                    "tag": Tag.FILTER,
+                    "strategy": self.strategy_id,
+                    "filter": "vix",
+                    "value": round(vix, 2),
+                    "max": vix_max,
+                    "result": "block",
+                },
             )
             return f"VIX {vix:.1f} exceeds max {vix_max}"
         return None
@@ -244,9 +265,16 @@ class BaseStrategy(ABC):
             action = "BLOCK"
 
         logger.info(
-            f"[FILTER] strategy={self.strategy_id} filter=pcr_oi "
-            f"value={pcr:.2f} range=[{self.params.pcr_oi_min}-{self.params.pcr_oi_max}] "
-            f"action={action}"
+            "filter evaluated: pcr_oi",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "pcr_oi",
+                "value": round(pcr, 2),
+                "range_min": self.params.pcr_oi_min,
+                "range_max": self.params.pcr_oi_max,
+                "action": action,
+            },
         )
 
         if self.params.pcr_filter_enabled and not in_range:
@@ -276,9 +304,17 @@ class BaseStrategy(ABC):
             action = "BLOCK"
 
         logger.info(
-            f"[FILTER] strategy={self.strategy_id} filter=max_pain "
-            f"max_pain={max_pain} spot={spot} distance={distance_pct:.2f}% "
-            f"threshold={self.params.max_pain_proximity_pct}% action={action}"
+            "filter evaluated: max_pain",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "max_pain",
+                "max_pain": float(max_pain),
+                "spot": float(spot),
+                "distance_pct": round(distance_pct, 2),
+                "threshold_pct": self.params.max_pain_proximity_pct,
+                "action": action,
+            },
         )
 
         if self.params.max_pain_filter_enabled and not in_range:
@@ -309,10 +345,18 @@ class BaseStrategy(ABC):
         bias = "PUT_HEAVY" if ratio > 1.15 else ("CALL_HEAVY" if ratio < 0.85 else "NEUTRAL")
 
         logger.info(
-            f"[FILTER] strategy={self.strategy_id} filter=iv_skew "
-            f"atm_ce_iv={atm_ce_iv:.3f} atm_pe_iv={atm_pe_iv:.3f} "
-            f"avg_otm_put_iv={avg_put_iv:.3f} avg_otm_call_iv={avg_call_iv:.3f} "
-            f"ratio={ratio:.2f} bias={bias}"
+            "iv skew snapshot at entry",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "iv_skew",
+                "atm_ce_iv": round(atm_ce_iv, 3),
+                "atm_pe_iv": round(atm_pe_iv, 3),
+                "avg_otm_put_iv": round(avg_put_iv, 3),
+                "avg_otm_call_iv": round(avg_call_iv, 3),
+                "ratio": round(ratio, 2),
+                "bias": bias,
+            },
         )
 
     def _log_oi_levels(self, underlying: str, expiry: "date | None") -> None:
@@ -328,9 +372,14 @@ class BaseStrategy(ABC):
         pe_levels = [f"{s['strike']}({s['oi']})" for s in oi_data.get("pe_high_oi", [])]
 
         logger.info(
-            f"[FILTER] strategy={self.strategy_id} filter=oi_levels "
-            f"ce_resistance=[{','.join(ce_levels)}] "
-            f"pe_support=[{','.join(pe_levels)}]"
+            "oi levels snapshot at entry",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "oi_levels",
+                "ce_resistance": ce_levels,
+                "pe_support": pe_levels,
+            },
         )
 
     def _check_trend_filter(self, underlying: str) -> str | None:
@@ -369,10 +418,17 @@ class BaseStrategy(ABC):
         move_pct = abs(float(spot) - session_open) / session_open * 100
         threshold = 0.5  # Tightened from 0.7% — real data shows 0.5%+ moves lead to losses
         logger.debug(
-            f"[FILTER] strategy={self.strategy_id} filter=trend "
-            f"session_open={session_open:.0f} spot={float(spot):.0f} "
-            f"move_pct={move_pct:.2f} threshold={threshold} "
-            f"result={'block' if move_pct > threshold else 'pass'}"
+            "filter evaluated: trend",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "trend",
+                "session_open": round(session_open, 2),
+                "spot": round(float(spot), 2),
+                "move_pct": round(move_pct, 2),
+                "threshold_pct": threshold,
+                "result": "block" if move_pct > threshold else "pass",
+            },
         )
         if move_pct > threshold:
             direction = "up" if float(spot) > session_open else "down"

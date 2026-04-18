@@ -1,0 +1,16 @@
+{
+  "captured_at": "2026-04-18T03:33:11.895393Z",
+  "files": {
+    "constants.json": "a8a357a862d394fd3db61a693b7a35c303341cad0b06d96d79b9a8b44ee9cdae",
+    "env.yaml": "87ae509e563eb0eaf1f3a10c69a4cb7a5b38391cf863c561f7cf051d9955d828",
+    "holidays.json": "d88ef6ab656170608c1cedaeeea3a65cdfc9102713aad5836d48f80d3bded11f",
+    "params.json": "f675e80aef482781e37be9aeff3f94fa837294383be49a03a22ef65eedf0dba1",
+    "params.yaml": "23e9e69c9758fd845853dd14322e688ec120d986a78c5d19ca2d544011ec1621"
+  },
+  "git_sha": "da7eada55fda585598e1dc34a9b855c92e63350f",
+  "skipped": [
+    "instruments.json: --no-instruments flag set"
+  ],
+  "snapshot_date": "2026-04-17",
+  "snapshot_version": 1
+}
