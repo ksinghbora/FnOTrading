@@ -88,6 +88,65 @@ def tmp_recorder(tmp_path: Path):
     return _make
 
 
+# ── _take_snapshot: weekend / holiday gate ─────────────────────────
+
+
+class TestTakeSnapshotWeekendGate:
+    """Defense-in-depth: _take_snapshot refuses to write on non-trading days.
+
+    Regression pin for the Apr 18 2026 incident: a recorder process that
+    had been running since before the loop-level gate was committed wrote
+    chain_2026-04-18.csv on Saturday. The running process was on pre-fix
+    code; the loop never filtered the day. A gate inside _take_snapshot
+    means the contract survives a stale process, a direct caller, or a
+    future refactor that moves the scheduling out of _record_loop.
+    """
+
+    def test_refuses_write_on_weekend(self, tmp_recorder, caplog):
+        spot = 23000.0
+        strikes = [
+            _StrikeEntry(
+                spot,
+                ce=_Opt(ltp=Decimal("100")),
+                pe=_Opt(ltp=Decimal("100")),
+            ),
+        ]
+        builder = _FakeChainBuilder(spot, strikes, date(2026, 4, 21))
+        # Saturday, Apr 18 2026, 09:15 IST — the actual bug's clock.
+        sat_clock = _FakeClock(datetime(2026, 4, 18, 9, 15, 0), holiday=True)
+        rec, outdir = tmp_recorder(builder, sat_clock)
+
+        with caplog.at_level("WARNING"):
+            rec._take_snapshot(sat_clock.now())
+
+        # Nothing written, counter untouched, warning emitted.
+        assert list(outdir.glob("chain_*.csv")) == []
+        assert rec._snapshots_today == 0
+        assert any("non-trading day" in m for m in caplog.messages)
+
+    def test_refuses_write_on_nse_holiday(self, tmp_recorder, caplog):
+        """Weekday NSE holidays also gate (holiday=True, weekday date)."""
+        spot = 23000.0
+        strikes = [
+            _StrikeEntry(
+                spot,
+                ce=_Opt(ltp=Decimal("100")),
+                pe=_Opt(ltp=Decimal("100")),
+            ),
+        ]
+        builder = _FakeChainBuilder(spot, strikes, date(2026, 4, 21))
+        # Thursday Apr 2 2026 (weekday=3) — stand-in for a real NSE holiday.
+        hol_clock = _FakeClock(datetime(2026, 4, 2, 10, 0, 0), holiday=True)
+        rec, outdir = tmp_recorder(builder, hol_clock)
+
+        with caplog.at_level("WARNING"):
+            rec._take_snapshot(hol_clock.now())
+
+        assert list(outdir.glob("chain_*.csv")) == []
+        assert rec._snapshots_today == 0
+        assert any("non-trading day" in m for m in caplog.messages)
+
+
 # ── _take_snapshot: degraded handling ───────────────────────────────
 
 

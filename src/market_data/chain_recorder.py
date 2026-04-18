@@ -224,6 +224,22 @@ class ChainSnapshotRecorder:
           3. Atomic write: temp + fsync + rename instead of append-mode.
              A power loss mid-append used to leave a torn final row.
         """
+        # Defense-in-depth gate. The loop in `_record_loop` already filters
+        # weekends / NSE holidays before calling us, but a recorder process
+        # that was started before commit 921235b (which added the loop gate)
+        # produced chain_2026-04-18.csv on Saturday morning — the live code
+        # in memory was still pre-fix. Checking here means a stale process,
+        # a direct test call, or a future refactor can't silently write a
+        # weekend file.
+        if self._clock.is_trading_holiday(now.date()):
+            logger.warning(
+                "[CHAIN_RECORDER] Refusing snapshot for non-trading day %s "
+                "(weekday=%d) — loop gate should have caught this; "
+                "check whether the process was started on pre-fix code.",
+                now.date().isoformat(), now.weekday(),
+            )
+            return
+
         rows = []
         zero_quote_count = 0
         zero_iv_count = 0
