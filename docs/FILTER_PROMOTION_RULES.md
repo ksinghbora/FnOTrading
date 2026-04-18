@@ -81,7 +81,7 @@ A flag that was promoted to default-ON last quarter must be **re-validated quart
 | `pcr_filter_enabled` (BaseStrategyParams) | True | Production for IC/strangle/straddle | Pre-Apr-18 | Was applied unevenly — portfolio strategy ignored it until Apr 18 |
 | `max_pain_filter_enabled` (BaseStrategyParams) | True | Production for IC/strangle/straddle | Pre-Apr-18 | Same as above |
 | `portfolio_filters_enabled` (PortfolioParams) | False | **Exploration** | 2026-04-18 (16d, n=24, +₹547 delta — inside noise band) | Re-A/B at n≥60 trades before promoting |
-| `advisor_confluence_enabled` (Settings) | False | **Inert** — confidence gate (0.7) above live confidences (0.4-0.6) | Never (no adjustments fired) | Lower gate to 0.5 OR backfill day_bias before A/B |
+| `advisor_confluence_enabled` (Settings) | False | **Inert in production** (live conf 0.4-0.6 < 0.7 gate). Synthetic-bias replay A/B (11d, n=24) showed −₹278 P&L delta, same trade count — wiring confirmed, alpha not | 2026-04-18 (synthetic, plumbing-only) | Need ≥30d of live AI bias above 0.7 conf before a real A/B is meaningful |
 | `shadow_only` (BaseStrategyParams) | False | Infrastructure (per-strategy override, not a global flag) | N/A — mechanism not metric | n/a |
 
 When you flip a flag's default, **update the table**. If the table says "exploration" and the value is "True", you have a process violation.

@@ -51,3 +51,6 @@ coverage.xml
 
 # pytest
 .pytest_cache/
+
+# Backfill artifacts — regeneratable from scripts/backfill_day_bias.py
+data/day_bias_backfill/

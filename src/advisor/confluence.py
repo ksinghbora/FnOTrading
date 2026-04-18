@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from datetime import date
 from pathlib import Path
 
 from src.advisor.models import DayBias
@@ -14,8 +16,29 @@ CONFIDENCE_THRESHOLD = 0.7  # Ignore AI signal below this
 SIGNIFICANCE_THRESHOLD = 5  # Ignore adjustments smaller than ±5 points
 
 
-def load_day_bias(path: Path | None = None) -> DayBias | None:
-    """Load today's DayBias from JSON file. Returns None if unavailable."""
+def load_day_bias(path: Path | None = None, *, as_of: date | None = None) -> DayBias | None:
+    """Load DayBias from JSON file. Returns None if unavailable.
+
+    Production: reads `data/day_bias.json` (single file, written daily by
+    the morning advisor cron).
+
+    Replay/backtest: when `BACKFILL_DAY_BIAS_DIR` env var is set AND `as_of`
+    is provided, reads `<dir>/day_bias_<YYYY-MM-DD>.json` instead. This lets
+    the chain-replay engine swap the bias file per simulated day without
+    code changes to the production hot path. Falls back to the production
+    path if the per-day file is missing — caller can decide whether that's
+    a soft-skip or a hard error.
+    """
+    if as_of is not None:
+        backfill_dir = os.getenv("BACKFILL_DAY_BIAS_DIR")
+        if backfill_dir:
+            per_day = Path(backfill_dir) / f"day_bias_{as_of.isoformat()}.json"
+            if per_day.exists():
+                path = per_day
+            # Else: fall through to default — common in production where
+            # BACKFILL_DAY_BIAS_DIR is unset. We don't warn because that
+            # would spam the live log on every day reset.
+
     path = path or Path("data/day_bias.json")
     if not path.exists():
         return None

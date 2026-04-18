@@ -1421,7 +1421,15 @@ class PortfolioStrategy(BaseStrategy):
             self._confluence_enabled = False
             self._confluence_weight = 1.0
 
-        self._day_bias = load_day_bias()
+        # In replay/backtest with BACKFILL_DAY_BIAS_DIR set, load the
+        # bias for the simulated calendar date so each day in the replay
+        # window gets its own pre-generated bias. Production (no env var)
+        # ignores `as_of` and reads the single live `data/day_bias.json`.
+        try:
+            as_of_date = self.ctx.clock.now().date()
+        except Exception:
+            as_of_date = None
+        self._day_bias = load_day_bias(as_of=as_of_date)
         if self._day_bias:
             mode = "active" if self._confluence_enabled else "shadow"
             logger.info(
