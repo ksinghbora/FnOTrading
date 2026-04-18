@@ -36,8 +36,8 @@ class TrendDebitSpreadStrategy(BaseStrategy):
     1. After 9:45, get M5 candles -> compute morning range (9:15-9:30)
     2. Check if spot broke above morning high (UP) or below morning low (DOWN)
     3. Optionally confirm with OI levels (spot must breach high-OI resistance/support)
-    4. Bullish: Buy CE at ATM+1 strike, Sell CE at ATM+1+width (Bull Call Spread)
-    5. Bearish: Buy PE at ATM-1 strike, Sell PE at ATM-1-width (Bear Put Spread)
+    4. Bullish: Buy CE at ATM (50Δ), Sell CE at ATM+width (Bull Call Spread)
+    5. Bearish: Buy PE at ATM (50Δ), Sell PE at ATM-width (Bear Put Spread)
 
     Exit Logic:
     - Profit target: spread reaches X% of max value
@@ -96,6 +96,14 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         if now.time() >= self.params.exit_time and self._entered:
             self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
+
+        # Hard block: DTE ≤ 2 — debit spreads need time to reach max value
+        if self._expiry and not self._entered:
+            dte = (self._expiry - now.date()).days
+            if dte <= 2:
+                if now.minute == 0:
+                    logger.info(f"[{self.strategy_id}] TREND hard-blocked: DTE={dte} ≤ 2")
+                return None
 
         # Entry window
         if (
@@ -240,13 +248,13 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         atm = float(chain.atm_strike)
 
         if breakout.direction == "UP":
-            # Bull Call Spread: Buy CE at ATM+1, Sell CE at ATM+1+width
-            buy_strike = atm + strike_interval
+            # Bull Call Spread: Buy CE at ATM (50Δ), Sell CE at ATM+width
+            buy_strike = atm
             sell_strike = buy_strike + width
             option_type = "ce"
         else:
-            # Bear Put Spread: Buy PE at ATM-1, Sell PE at ATM-1-width
-            buy_strike = atm - strike_interval
+            # Bear Put Spread: Buy PE at ATM (50Δ), Sell PE at ATM-width
+            buy_strike = atm
             sell_strike = buy_strike - width
             option_type = "pe"
 
