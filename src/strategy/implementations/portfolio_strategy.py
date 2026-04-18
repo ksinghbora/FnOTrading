@@ -149,6 +149,12 @@ class PortfolioStrategy(BaseStrategy):
         # trend entries against sector divergence. Zero = not yet built.
         self._bn_morning_high: float = 0.0
         self._bn_morning_low: float = 0.0
+        # Sticky sentinel — set once when BANKNIFTY isn't subscribed for
+        # this deployment so we stop scanning _spot_tokens on every tick.
+        self._bn_unavailable: bool = False
+        # Throttle for IV_RANK_SHADOW log so it fires once per 5-min
+        # boundary rather than once per tick within the boundary window.
+        self._last_iv_rank_log_minute: int = -1
 
         # ─── Decision snapshot logger (ML data collection) ────
         self._decision_logger = DecisionLogger()
@@ -209,11 +215,13 @@ class PortfolioStrategy(BaseStrategy):
         # Sample VIX every 5 minutes for direction detection at trend entry.
         # Bounded to 12 readings (~60 min lookback). Cheap — VIX is a single
         # ltp lookup. The `second < 10` clamp avoids double-sampling when
-        # multiple ticks arrive in the same wall-clock minute.
+        # multiple ticks arrive in the same wall-clock minute. Dedup uses
+        # full timestamp delta (≥60s gap required) rather than minute
+        # equality — robust if cap or spacing ever changes.
         if now.minute % 5 == 0 and now.second < 10:
             vix_now = self.ctx.get_vix()
             if vix_now > 0:
-                if not self._vix_history or self._vix_history[-1][0].minute != now.minute:
+                if not self._vix_history or (now - self._vix_history[-1][0]).total_seconds() >= 60:
                     self._vix_history.append((now, vix_now))
                     if len(self._vix_history) > 12:
                         self._vix_history.pop(0)
@@ -445,12 +453,14 @@ class PortfolioStrategy(BaseStrategy):
         threshold = self.params.phase1_threshold if is_phase1 else 65
 
         # IV Rank shadow logging — compute hypothetical adj, do NOT apply.
-        # Logged once per 5 min so we can correlate IV-Rank-low entries
-        # with outcomes before promoting to a hard filter.
-        if now.minute % 5 == 0:
+        # Logged once per 5-min boundary (dedup'd via _last_iv_rank_log_minute)
+        # so we can correlate IV-Rank-low entries with outcomes before
+        # promoting to a hard filter. Without dedup this fires every tick
+        # within the 5-min window (dozens to hundreds of identical lines).
+        if now.minute % 5 == 0 and now.minute != self._last_iv_rank_log_minute:
             iv_rank = compute_iv_rank(vix, self._iv_rank_52w_high, self._iv_rank_52w_low)
-            iv_adj, iv_reason = iv_rank_shadow_adj(iv_rank)
             if iv_rank is not None:
+                iv_adj, iv_reason = iv_rank_shadow_adj(iv_rank)
                 shadow_score = max(0, self._prem_score + iv_adj)
                 would_block = shadow_score < threshold and self._prem_score >= threshold
                 logger.info(
@@ -459,6 +469,7 @@ class PortfolioStrategy(BaseStrategy):
                     f"shadow_score={shadow_score} "
                     f"{'WOULD_BLOCK' if would_block else 'no_block'}"
                 )
+            self._last_iv_rank_log_minute = now.minute
 
         if now.minute % 5 == 0:
             phase = "P1" if is_phase1 else "P2"
@@ -1504,10 +1515,12 @@ class PortfolioStrategy(BaseStrategy):
     def _build_banknifty_morning_range(self) -> None:
         """Populate self._bn_morning_high/_low from BN's first 3 M5 candles.
 
-        No-op when BANKNIFTY isn't subscribed (e.g. NIFTY-only deployments)
-        or when fewer than 3 candles have completed yet. Calling repeatedly
-        before 9:30 is harmless — the values stay 0.0 until enough data
-        arrives, at which point _get_banknifty_confirming() takes over.
+        No-op when BANKNIFTY isn't subscribed (e.g. NIFTY-only deployments),
+        when fewer than 3 candles have completed yet, OR when the earliest
+        candle in the in-memory aggregator buffer isn't actually the morning
+        open (the mid-day-restart guard — without this, restarting the
+        process at 13:00 would seed a bogus 13:00-13:15 "morning range"
+        that poisons every subsequent _get_banknifty_confirming() call).
         """
         bn_token = self._find_bn_spot_token()
         if not bn_token:
@@ -1516,6 +1529,20 @@ class PortfolioStrategy(BaseStrategy):
         if len(bn_candles) < 3:
             return
         morning = bn_candles[:3]
+        # Mid-day restart guard: M5 candles bucket on 5-min boundaries
+        # starting 9:15. The first morning candle's timestamp must be ≤ 9:20
+        # (allowing a one-bucket slop). Any later first-candle means the
+        # in-memory buffer doesn't include the real open and we should
+        # skip — better no signal than a bogus afternoon "morning range".
+        first_ts = morning[0].timestamp
+        if first_ts.time() > time(9, 20):
+            if self.ctx.clock.now().minute == 0:  # log once per hour
+                logger.warning(
+                    f"[{self.strategy_id}] BN morning range skipped — earliest "
+                    f"buffered candle is {first_ts.time()}, after 9:20 "
+                    f"(mid-day restart? aggregator buffer doesn't include open)"
+                )
+            return
         self._bn_morning_high = max(float(c.high) for c in morning)
         self._bn_morning_low = min(float(c.low) for c in morning)
         logger.info(
@@ -1526,16 +1553,21 @@ class PortfolioStrategy(BaseStrategy):
     def _find_bn_spot_token(self) -> int | None:
         """Resolve BANKNIFTY's spot token via the chain builder's registry.
 
-        Returns None when BN isn't part of this deployment. Defensive against
-        a chain_builder that doesn't expose `_spot_tokens` (older test mocks).
+        Returns None when BN isn't part of this deployment. Sets a sticky
+        _bn_unavailable sentinel on first failed lookup so on_tick stops
+        scanning the registry every tick in NIFTY-only deployments.
         """
+        if self._bn_unavailable:
+            return None
         cb = getattr(self.ctx, "_chain_builder", None)
         spot_tokens = getattr(cb, "_spot_tokens", None) if cb else None
         if not spot_tokens:
+            self._bn_unavailable = True
             return None
         for token, name in spot_tokens.items():
             if name == "BANKNIFTY":
                 return token
+        self._bn_unavailable = True  # subscribed but no BANKNIFTY
         return None
 
     def _get_banknifty_confirming(self, direction: str) -> bool | None:
@@ -1868,10 +1900,15 @@ class PortfolioStrategy(BaseStrategy):
         # confirmation in score_trend_following — yesterday's tail readings
         # have nothing to say about today's open. Same logic for the
         # BankNifty morning range (built fresh from the first 3 5-min
-        # candles each day).
+        # candles each day). The BN-unavailable sentinel could in theory
+        # stay sticky across sessions, but resetting it keeps the strategy
+        # tolerant of mid-deployment subscription changes. Log throttle
+        # also resets so first 5-min boundary tomorrow logs cleanly.
         self._vix_history.clear()
         self._bn_morning_high = 0.0
         self._bn_morning_low = 0.0
+        self._bn_unavailable = False
+        self._last_iv_rank_log_minute = -1
 
         if self._regime_detector:
             self._regime_detector.reset_session()

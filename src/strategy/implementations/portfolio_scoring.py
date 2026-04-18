@@ -125,18 +125,25 @@ def score_trend_following(
     vix_prev: float = 0.0,
     banknifty_confirming: bool | None = None,
 ) -> tuple[int, list[str]]:
-    """Score conditions for trend following (0-100).
+    """Score conditions for trend following (0-100, clamped at boundaries).
 
-    Optional confirmation factors (ported from trend-improvements branch,
-    Apr 15 2026):
-      - vix_prev: VIX reading from ~20 min ago. Rising VIX (>1%) on UP
-        breakout is a counter-signal (-15) — fear rising while price is
-        rising is fakeout-shaped. Falling VIX on UP confirms the move
-        (+10). Inverted for DOWN breakouts. Set to 0.0 to skip.
-      - banknifty_confirming: True if BankNifty broke its own morning
-        high (UP) or low (DOWN) in the same direction (+10). False if
-        BN is diverging (-15) — sector-only move, not index-wide.
-        None = unknown / not yet built (no penalty).
+    Calibrated for Indian markets (Apr 18 2026 review):
+
+      - VIX-level (factor 4) reduced to +10/+5 to make room for VIX-direction
+        (factor 5) without double-counting the same regime signal.
+      - VIX-direction (factor 5) threshold raised from 1% → 2% — Indian
+        VIX prints ~0.8% intraday jitter on quiet days, so a 1% bar would
+        trip "rising" by random walk on 30-40% of sessions. 2% requires
+        a real fear shift. vix_prev=0.0 skips the branch (back-compat).
+      - BankNifty (factor 6) asymmetry inverted from +10/-15 to +5/-20:
+        BN follows NIFTY ~80% of the time unconditionally (correlation
+        ~0.85 on M5 returns), so confirmation is the common, low-info
+        case; divergence is the rare, high-info case. The new weights
+        match Bayesian information content. None = unknown, no penalty.
+
+    Score is clamped to [0, 100] before return so the value is comparable
+    against a fixed threshold; the docstring "0-100" promise is now real
+    rather than aspirational.
     """
     score = 0
     reasons: list[str] = []
@@ -165,20 +172,24 @@ def score_trend_following(
         score += 12
         reasons.append(f"sustained={trend_duration_minutes}min early")
 
-    # 4. VIX level adequate (+20)
+    # 4. VIX level adequate (+10) — reduced from +20 (Apr 18). Factor 5
+    # below now captures the "regime supports this direction" signal that
+    # was previously bundled in here. Keeping both at +20/+10 each was
+    # double-counting and inflating scores ~30% for trending VIX days.
     if vix >= 14:
-        score += 20
+        score += 10
         reasons.append(f"VIX={vix:.1f} supports trend")
     elif vix >= 11:
-        score += 8
+        score += 5
         reasons.append(f"VIX={vix:.1f} low for trend")
 
     # 5. VIX direction (+10 / -15) — ported from trend-improvements 766df2e.
     # Rising VIX + UP breakout = contradiction (fear rising while buying = fake).
     # Rising VIX + DOWN breakout = confirmation (fear + breakdown = real selling).
-    # Threshold 1% to filter noise — VIX prints sub-percent jitter all session.
+    # Threshold 2% (raised from 1% Apr 18): Indian VIX intraday jitter is
+    # ~0.8%, so 1% tripped on noise; 2% requires a real fear shift.
     if vix_prev > 0:
-        vix_rising = vix > vix_prev * 1.01
+        vix_rising = vix > vix_prev * 1.02
         if breakout.direction == "UP":
             if vix_rising:
                 score -= 15
@@ -194,17 +205,23 @@ def score_trend_following(
                 score -= 15
                 reasons.append("VIX_falling contradicts DOWN(bounce risk)")
 
-    # 6. BankNifty sector confirmation (+10 / -15) — ported from 766df2e.
-    # BankNifty is ~33% of NIFTY weight. Divergence (NIFTY breaks but BN
-    # doesn't) means a sector-specific move that often retraces.
+    # 6. BankNifty sector confirmation (+5 / -20) — ported from 766df2e,
+    # asymmetry recalibrated Apr 18. BN follows NIFTY ~80% unconditionally
+    # (correlation ~0.85 on M5 returns), so confirmation is the common
+    # weak-info case; divergence is the rare high-info case. Old +10/-15
+    # was backward — common case earned more than rare case.
     if banknifty_confirming is True:
-        score += 10
+        score += 5
         reasons.append("BankNifty confirming")
     elif banknifty_confirming is False:
-        score -= 15
+        score -= 20
         reasons.append("BankNifty diverging(sector-only move)")
 
-    return score, reasons
+    # Clamp to 0-100 — keeps the threshold comparison semantically clean.
+    # Without clamp, max possible was ~110 (90 base + 10 VIXdir + 5 BN)
+    # which silently shifted what the 60-threshold "means" relative to
+    # the historical backtest.
+    return max(0, min(100, score)), reasons
 
 
 # ─── IV Rank Baseline (52-week VIX context) ──────────────────────────
@@ -218,7 +235,16 @@ def score_trend_following(
 # IV-Rank-low entries with poor outcomes.
 
 
-def load_iv_rank_baseline(vix_csv: str | Path = "data/india_vix_minute.csv") -> tuple[float, float]:
+# Resolve repo root once at import — this module lives at
+# src/strategy/implementations/portfolio_scoring.py, so parents[3] is the
+# repo root regardless of CWD. Fixes a silent (0,0) failure when the
+# trader process is started from anywhere other than the repo root
+# (systemd, container, `cd scripts && …`).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_DEFAULT_VIX_CSV = _REPO_ROOT / "data" / "india_vix_minute.csv"
+
+
+def load_iv_rank_baseline(vix_csv: str | Path | None = None) -> tuple[float, float]:
     """Compute 52-week VIX high and low from historical minute data.
 
     Uses the last 252 trading days of daily closing VIX values (last tick
@@ -228,7 +254,7 @@ def load_iv_rank_baseline(vix_csv: str | Path = "data/india_vix_minute.csv") -> 
     Side-effect-free apart from a WARNING log on failure.
     """
     try:
-        path = Path(vix_csv)
+        path = Path(vix_csv) if vix_csv is not None else _DEFAULT_VIX_CSV
         if not path.exists():
             return 0.0, 0.0
 

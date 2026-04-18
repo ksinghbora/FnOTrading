@@ -255,9 +255,13 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     # Override base 22 cap because trend works through stressed regimes too.
     vix_entry_min: float = 12.0              # Below 12: too calm for breakouts
     vix_entry_max: float = 25.0              # Above 25: event risk overwhelms direction
-    entry_time: time = time(10, 30)           # Apr 18: bumped 10:00 → 10:30 — gives BankNifty
-                                              # confirmation signal (built by 9:30) a full hour
-                                              # to develop a clean directional bias before entry.
+    entry_time: time = time(10, 0)            # Reverted Apr 18 from 10:30 — BankNifty signal
+                                              # lives in PortfolioStrategy, not here, so the
+                                              # 10:30 delay had no real benefit and gave up the
+                                              # high-energy 9:30-10:30 window (NIFTY ATR in that
+                                              # window is ~1.4× the 10:30-13:00 window). If/when
+                                              # BN confirmation gets wired into this strategy,
+                                              # revisit the entry-time delay separately.
     exit_time: time = time(15, 0)            # Exit before close
     breakout_confirmation_pct: float = 0.7   # Stronger breakout required (was 0.5 — too many false signals)
     spread_width_strikes: int = 2            # Apr 18: 3 → 2 to align with PortfolioParams trend

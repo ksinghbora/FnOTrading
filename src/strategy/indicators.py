@@ -143,18 +143,24 @@ def momentum_breakout(
         return no_signal
 
     # ATR-normalized required clearance (in points).
-    # Use the non-morning candles for ATR to avoid morning range noise.
-    atr_val = atr(candles, period=14)
-    current_price = morning_high  # approximate for pct→pts conversion
-    fallback_pts = confirmation_pct / 100.0 * current_price
-    required_pts = max(fallback_pts, atr_multiplier * atr_val) if atr_val > 0 else fallback_pts
+    # Use the post-morning candles for ATR so the opening-auction wick
+    # doesn't inflate the threshold — the comment used to say this but
+    # the code passed the full buffer. Fixed Apr 18.
+    atr_val = atr(candles[morning_candles:], period=14)
 
     # Current price = close of the latest candle
     last_candle = candles[-1]
     current = float(last_candle.close)
 
+    # Direction-aware fallback (% → pts) — for an UP breakout the % is
+    # measured against morning_high; for a DOWN breakout against morning_low.
+    # Using morning_high for both was a slight bias against DOWN breakouts
+    # (made the threshold marginally larger than intended). Fixed Apr 18.
+
     # Check for upside breakout
     if current > morning_high:
+        fallback_pts = confirmation_pct / 100.0 * morning_high
+        required_pts = max(fallback_pts, atr_multiplier * atr_val) if atr_val > 0 else fallback_pts
         move_pts = current - morning_high
         if move_pts >= required_pts:
             # Body quality gate: candle must close decisively near its high
@@ -172,6 +178,8 @@ def momentum_breakout(
 
     # Check for downside breakout
     if current < morning_low:
+        fallback_pts = confirmation_pct / 100.0 * morning_low
+        required_pts = max(fallback_pts, atr_multiplier * atr_val) if atr_val > 0 else fallback_pts
         move_pts = morning_low - current
         if move_pts >= required_pts:
             bq = candle_body_quality(last_candle, "DOWN")

@@ -130,16 +130,18 @@ class TestScoreTrendFollowing:
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
         )
-        # +30 strong + 25 OI + 25 sustained + 20 VIX = 100
-        assert score == 100
+        # +30 strong + 25 OI + 25 sustained + 10 VIX = 90
+        # (Apr 18 rebalance: VIX-level reduced from +20 to make room for
+        # VIX-direction without double-counting; max base now 90.)
+        assert score == 90
 
     def test_moderate_breakout_no_oi_early(self):
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.35),
             oi_confirmed=False, trend_duration_minutes=20, vix=12.0,
         )
-        # +15 moderate + 12 sustained-early + 8 VIX-low = 35
-        assert score == 35
+        # +15 moderate + 12 sustained-early + 5 VIX-low = 32
+        assert score == 32
         assert any("moderate" in r for r in reasons)
         assert any("early" in r for r in reasons)
 
@@ -148,65 +150,81 @@ class TestScoreTrendFollowing:
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=10.0,
         )
-        # +30 + 25 + 25 + 0 = 80
+        # +30 + 25 + 25 + 0 = 80 (VIX < 11 contributes nothing)
         assert score == 80
         assert not any(r.startswith("VIX=") for r in reasons)
 
 
 class TestScoreTrendFollowingVixDirection:
-    """VIX direction confirmation (factor 5) — ported from trend-improvements."""
+    """VIX direction confirmation (factor 5) — ported from trend-improvements,
+    threshold raised 1% → 2% Apr 18 to filter Indian VIX intraday jitter."""
 
     def test_vix_rising_on_up_breakout_subtracts_fifteen(self):
-        # Same baseline as test_strong_confirmed_sustained_max (=100), then
-        # VIX_prev triggers: 15.0 > 14.0 * 1.01 = 14.14 → rising → -15.
+        # Base 90, then VIX_prev triggers: 15.0 > 14.0 * 1.02 = 14.28 → rising → -15.
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=14.0,
         )
-        assert score == 85  # 100 - 15
+        assert score == 75  # 90 - 15
         assert any("contradicts UP" in r for r in reasons)
 
     def test_vix_stable_on_up_breakout_adds_ten(self):
-        # vix=15.0, vix_prev=14.95 → 14.95 * 1.01 = 15.10 > 15.0 → not rising.
+        # vix=15.0, vix_prev=14.95 → 14.95 * 1.02 = 15.249 > 15.0 → not rising.
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=14.95,
         )
-        # Capped at 100 (would be 110); function doesn't clamp, so check raw
-        assert score == 110  # 100 + 10
+        assert score == 100  # 90 + 10
         assert any("VIX_stable/falling supports UP" in r for r in reasons)
 
     def test_vix_rising_on_down_breakout_adds_ten(self):
-        # DOWN breakout + rising VIX = real selling, +10.
+        # DOWN breakout + rising VIX = real selling, +10. Clamps to 100 max.
         score, reasons = score_trend_following(
             breakout=_bs(direction="DOWN", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=14.0,
         )
-        assert score == 110  # 100 + 10
+        assert score == 100  # 90 + 10
         assert any("confirms DOWN" in r for r in reasons)
 
     def test_vix_falling_on_down_breakout_subtracts_fifteen(self):
         # DOWN breakout + falling VIX = bounce risk, -15.
+        # vix=15, vix_prev=15.5 → not rising → falling branch → -15.
         score, reasons = score_trend_following(
             breakout=_bs(direction="DOWN", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=15.5,
         )
-        assert score == 85  # 100 - 15
+        assert score == 75  # 90 - 15
         assert any("contradicts DOWN" in r for r in reasons)
 
-    def test_vix_prev_below_one_percent_jitter_treated_as_stable(self):
-        # vix=15.0, vix_prev=14.9 → 14.9 * 1.01 = 15.049 > 15.0 → not rising.
-        # The 1% threshold filters intraday VIX jitter.
+    def test_vix_prev_sub_two_percent_jitter_treated_as_stable(self):
+        # vix=15.0, vix_prev=14.9 → 14.9 * 1.02 = 15.198 > 15.0 → not rising.
+        # The 2% threshold filters India-VIX intraday jitter (~0.8% on quiet days).
+        # Old 1% threshold would have ALSO treated this as stable, so this test
+        # only proves the lower bound. See test_vix_prev_one_to_two_percent_now_stable
+        # for the new behavior at the old "rising" range.
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=14.9,
         )
-        assert score == 110  # treated as stable → +10
+        assert score == 100  # 90 + 10 (treated as stable)
+        assert any("supports UP" in r for r in reasons)
+
+    def test_vix_prev_one_to_two_percent_now_stable(self):
+        # NEW Apr 18 behavior: 1.5% jump now treated as stable (was rising).
+        # vix=15.0, vix_prev=14.78 → diff = 0.22/14.78 = 1.49% < 2% threshold.
+        # Old 1% threshold would have flagged this as rising (-15); new
+        # 2% threshold treats it as noise and gives +10.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.78,
+        )
+        assert score == 100  # 90 + 10 — would have been 75 under old threshold
         assert any("supports UP" in r for r in reasons)
 
     def test_vix_prev_zero_skips_branch(self):
@@ -216,29 +234,34 @@ class TestScoreTrendFollowingVixDirection:
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             vix_prev=0.0,
         )
-        assert score == 100
+        assert score == 90  # base only
         assert not any("VIX_rising" in r or "VIX_stable" in r for r in reasons)
 
 
 class TestScoreTrendFollowingBankNifty:
-    """BankNifty sector confirmation (factor 6) — ported from trend-improvements."""
+    """BankNifty sector confirmation (factor 6).
 
-    def test_banknifty_confirming_adds_ten(self):
+    Apr 18 rebalance: asymmetry inverted from +10/-15 to +5/-20. BN follows
+    NIFTY ~80% of the time unconditionally so confirmation is the common
+    weak-info case; divergence is the rare high-info case.
+    """
+
+    def test_banknifty_confirming_adds_five(self):
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             banknifty_confirming=True,
         )
-        assert score == 110
+        assert score == 95  # 90 + 5
         assert any("BankNifty confirming" in r for r in reasons)
 
-    def test_banknifty_diverging_subtracts_fifteen(self):
+    def test_banknifty_diverging_subtracts_twenty(self):
         score, reasons = score_trend_following(
             breakout=_bs(direction="UP", strength=0.6),
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             banknifty_confirming=False,
         )
-        assert score == 85
+        assert score == 70  # 90 - 20
         assert any("diverging" in r for r in reasons)
 
     def test_banknifty_unknown_no_adjustment(self):
@@ -248,8 +271,32 @@ class TestScoreTrendFollowingBankNifty:
             oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
             banknifty_confirming=None,
         )
-        assert score == 100
+        assert score == 90  # base unchanged
         assert not any("BankNifty" in r for r in reasons)
+
+
+class TestScoreTrendFollowingClamp:
+    """Score is clamped to [0, 100] — promise made, promise kept."""
+
+    def test_clamped_at_100_when_factors_aligned(self):
+        # Strong + OI + sustained + VIX-supports + VIX-direction-supports +
+        # BN-confirming = 30+25+25+10+10+5 = 105 → clamps to 100.
+        score, _ = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.95, banknifty_confirming=True,
+        )
+        assert score == 100
+
+    def test_clamped_at_zero_when_factors_oppose(self):
+        # Moderate breakout (15) only, then VIX-rising contradicts (-15)
+        # and BN diverging (-20) → 15-15-20 = -20 → clamps to 0.
+        score, _ = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.35),
+            oi_confirmed=False, trend_duration_minutes=0, vix=10.0,
+            vix_prev=9.0, banknifty_confirming=False,
+        )
+        assert score == 0
 
 
 class TestComputeIvRank:
