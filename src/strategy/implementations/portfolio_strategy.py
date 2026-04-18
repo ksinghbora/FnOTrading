@@ -33,6 +33,9 @@ from src.strategy.implementations.portfolio_pricing import (
     resolve_option_price,
 )
 from src.strategy.implementations.portfolio_scoring import (
+    compute_iv_rank,
+    iv_rank_shadow_adj,
+    load_iv_rank_baseline,
     score_premium_selling,
     score_trend_following,
 )
@@ -126,6 +129,27 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_trades_today: int = 0
         self._last_monitor_minute: int = -1  # Combined unrealized P&L
 
+        # ─── IV Rank baseline (52-week VIX) — loaded in on_start ──
+        # Used in shadow mode only — score is logged-but-not-applied so we
+        # can correlate IV-Rank-low entries with outcomes before promoting
+        # to a hard filter. Ported from trend-improvements cd21a10.
+        self._iv_rank_52w_high: float = 0.0
+        self._iv_rank_52w_low: float = 0.0
+
+        # ─── VIX direction history (for trend scoring confirmation) ──
+        # Rolling buffer of (timestamp, vix) sampled every 5 min. Used by
+        # _evaluate_trend to detect rising vs falling VIX at entry time —
+        # see score_trend_following's vix_prev branch. Cap at 12 readings
+        # (=60 min lookback) so memory stays bounded.
+        self._vix_history: list[tuple[datetime, float]] = []
+
+        # ─── BankNifty morning range (for trend confirmation) ──
+        # Built once per session from the first 3×M5 candles (9:15-9:30).
+        # _evaluate_trend compares current BN spot to this range to gate
+        # trend entries against sector divergence. Zero = not yet built.
+        self._bn_morning_high: float = 0.0
+        self._bn_morning_low: float = 0.0
+
         # ─── Decision snapshot logger (ML data collection) ────
         self._decision_logger = DecisionLogger()
         self._last_skip_minute: int = -1  # throttle SKIP logs to 1/5min
@@ -149,6 +173,20 @@ class PortfolioStrategy(BaseStrategy):
         self._regime_detector = RegimeDetector(
             self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder
         )
+        # IV Rank baseline — precomputed once from 6-month VIX CSV. Empty
+        # tuple is safe; compute_iv_rank() returns None and the shadow
+        # logger emits "iv_rank=unavailable" without affecting any score.
+        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline()
+        if self._iv_rank_52w_high > 0:
+            logger.info(
+                f"[{self.strategy_id}] IV Rank baseline loaded: "
+                f"52w_high={self._iv_rank_52w_high:.1f} 52w_low={self._iv_rank_52w_low:.1f}"
+            )
+        else:
+            logger.warning(
+                f"[{self.strategy_id}] IV Rank baseline unavailable — shadow logging disabled"
+            )
+
         # Load AI advisor day bias (if available)
         self._load_day_bias()
         logger.info(
@@ -167,6 +205,25 @@ class PortfolioStrategy(BaseStrategy):
         new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
         if new_expiry:
             self._expiry = new_expiry
+
+        # Sample VIX every 5 minutes for direction detection at trend entry.
+        # Bounded to 12 readings (~60 min lookback). Cheap — VIX is a single
+        # ltp lookup. The `second < 10` clamp avoids double-sampling when
+        # multiple ticks arrive in the same wall-clock minute.
+        if now.minute % 5 == 0 and now.second < 10:
+            vix_now = self.ctx.get_vix()
+            if vix_now > 0:
+                if not self._vix_history or self._vix_history[-1][0].minute != now.minute:
+                    self._vix_history.append((now, vix_now))
+                    if len(self._vix_history) > 12:
+                        self._vix_history.pop(0)
+
+        # Build BankNifty morning range (9:15-9:30) from M5 candles. Once
+        # built (>0), we never rebuild — the morning range is an immutable
+        # session-anchor used by score_trend_following's BN confirmation.
+        # Reset to 0 happens in reset_session() at session boundary.
+        if not self._bn_morning_high:
+            self._build_banknifty_morning_range()
 
         # Time exit — close all open legs
         if now.time() >= self.params.exit_time:
@@ -387,6 +444,22 @@ class PortfolioStrategy(BaseStrategy):
         is_phase1 = now.time() < time(10, 0)
         threshold = self.params.phase1_threshold if is_phase1 else 65
 
+        # IV Rank shadow logging — compute hypothetical adj, do NOT apply.
+        # Logged once per 5 min so we can correlate IV-Rank-low entries
+        # with outcomes before promoting to a hard filter.
+        if now.minute % 5 == 0:
+            iv_rank = compute_iv_rank(vix, self._iv_rank_52w_high, self._iv_rank_52w_low)
+            iv_adj, iv_reason = iv_rank_shadow_adj(iv_rank)
+            if iv_rank is not None:
+                shadow_score = max(0, self._prem_score + iv_adj)
+                would_block = shadow_score < threshold and self._prem_score >= threshold
+                logger.info(
+                    f"[{self.strategy_id}] [IV_RANK_SHADOW] {iv_reason} "
+                    f"would_adj={iv_adj:+d} actual_score={self._prem_score} "
+                    f"shadow_score={shadow_score} "
+                    f"{'WOULD_BLOCK' if would_block else 'no_block'}"
+                )
+
         if now.minute % 5 == 0:
             phase = "P1" if is_phase1 else "P2"
             ai_tag = f" ai_adj={self._prem_score - rule_score:+d}" if self._day_bias else ""
@@ -485,11 +558,22 @@ class PortfolioStrategy(BaseStrategy):
                 )
             return None
 
+        # VIX direction + BankNifty confirmation — both are no-ops when
+        # the inputs aren't ready (vix_prev=0 or bn_confirming=None), so
+        # behavior degrades to the original 4-factor scoring on cold start
+        # or in NIFTY-only deployments.
+        vix_prev = self._get_vix_prev_for_trend(lookback_minutes=20)
+        bn_confirming = (
+            self._get_banknifty_confirming(breakout.direction)
+            if breakout.direction else None
+        )
         self._trend_score, reasons = score_trend_following(
             breakout=breakout,
             oi_confirmed=oi_confirmed,
             trend_duration_minutes=trend_duration,
             vix=vix,
+            vix_prev=vix_prev,
+            banknifty_confirming=bn_confirming,
         )
 
         # Apply AI confluence adjustment
@@ -1415,6 +1499,82 @@ class PortfolioStrategy(BaseStrategy):
 
     # ─── Helpers ──────────────────────────────────────────────
 
+    # ─── Trend-confirmation helpers (ported from trend-improvements) ──
+
+    def _build_banknifty_morning_range(self) -> None:
+        """Populate self._bn_morning_high/_low from BN's first 3 M5 candles.
+
+        No-op when BANKNIFTY isn't subscribed (e.g. NIFTY-only deployments)
+        or when fewer than 3 candles have completed yet. Calling repeatedly
+        before 9:30 is harmless — the values stay 0.0 until enough data
+        arrives, at which point _get_banknifty_confirming() takes over.
+        """
+        bn_token = self._find_bn_spot_token()
+        if not bn_token:
+            return
+        bn_candles = self.ctx.get_candles(bn_token, Timeframe.M5, limit=10)
+        if len(bn_candles) < 3:
+            return
+        morning = bn_candles[:3]
+        self._bn_morning_high = max(float(c.high) for c in morning)
+        self._bn_morning_low = min(float(c.low) for c in morning)
+        logger.info(
+            f"[{self.strategy_id}] BankNifty morning range built: "
+            f"high={self._bn_morning_high:.1f} low={self._bn_morning_low:.1f}"
+        )
+
+    def _find_bn_spot_token(self) -> int | None:
+        """Resolve BANKNIFTY's spot token via the chain builder's registry.
+
+        Returns None when BN isn't part of this deployment. Defensive against
+        a chain_builder that doesn't expose `_spot_tokens` (older test mocks).
+        """
+        cb = getattr(self.ctx, "_chain_builder", None)
+        spot_tokens = getattr(cb, "_spot_tokens", None) if cb else None
+        if not spot_tokens:
+            return None
+        for token, name in spot_tokens.items():
+            if name == "BANKNIFTY":
+                return token
+        return None
+
+    def _get_banknifty_confirming(self, direction: str) -> bool | None:
+        """Return True/False/None for trend-direction confirmation by BN.
+
+        - True  → BN spot is above its morning high (UP) or below its low (DOWN)
+        - False → BN spot is on the opposite side (sector divergence)
+        - None  → BN range not built yet, or BN spot unavailable
+        """
+        if not self._bn_morning_high:
+            return None
+        bn_token = self._find_bn_spot_token()
+        if not bn_token:
+            return None
+        bn_spot = float(self.ctx._chain_builder.get_spot_price("BANKNIFTY") or 0.0)
+        if bn_spot <= 0:
+            return None
+        if direction == "UP":
+            return bn_spot > self._bn_morning_high
+        elif direction == "DOWN":
+            return bn_spot < self._bn_morning_low
+        return None
+
+    def _get_vix_prev_for_trend(self, lookback_minutes: int = 20) -> float:
+        """Return the VIX reading from ~lookback_minutes ago, or 0.0.
+
+        Walks the rolling history and returns the closest sample at least
+        `lookback_minutes` old. Returns 0.0 when no sample is far enough
+        back yet — score_trend_following's vix_prev branch treats 0.0 as
+        "skip the VIX-direction term" so behavior degrades gracefully.
+        """
+        if len(self._vix_history) < 2:
+            return 0.0
+        now = self.ctx.clock.now()
+        for ts, vix in reversed(self._vix_history):
+            if (now - ts).total_seconds() >= lookback_minutes * 60:
+                return vix
+        return 0.0
+
     def _load_day_bias(self) -> None:
         """Load AI advisor DayBias from file + config flags."""
         try:
@@ -1702,6 +1862,16 @@ class PortfolioStrategy(BaseStrategy):
         self._prem_trades_today = 0
         self._trend_trades_today = 0
         self._last_monitor_minute = -1
+
+        # Reset per-session signal context (Apr 18 trend-improvements port):
+        # VIX history is a 60-min lookback buffer for the rising/falling
+        # confirmation in score_trend_following — yesterday's tail readings
+        # have nothing to say about today's open. Same logic for the
+        # BankNifty morning range (built fresh from the first 3 5-min
+        # candles each day).
+        self._vix_history.clear()
+        self._bn_morning_high = 0.0
+        self._bn_morning_low = 0.0
 
         if self._regime_detector:
             self._regime_detector.reset_session()
