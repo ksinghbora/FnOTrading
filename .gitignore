@@ -64,3 +64,8 @@ data/chain_snapshots/_quarantine/*.csv.*
 # Pre-clean backups from scripts/clean_holiday_minutes.py — kept on disk
 # for one-off forensic inspection; not source-of-truth data.
 data/*.dirty-*.csv
+
+# Daemon runtime artifacts — recreated on every start, no audit value
+.fno_main.pid
+data/heartbeat/
+data/replay_runs.jsonl
