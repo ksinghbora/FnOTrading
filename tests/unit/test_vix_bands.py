@@ -72,9 +72,14 @@ class TestStrategyEntryBands:
 
 
 class TestPortfolioRouterBand:
-    """PortfolioParams encodes the 5-band router (Apr 18 quant rebalance):
-       <13 sit-out | [13,16) strangle | [16,20] IC | (20,23) sit-out (toxic gap) |
-       [23,28] IC stressed | >28 sit-out.
+    """PortfolioParams encodes the simple 3-band router:
+       <13 sit-out | [13,16) strangle | [16,22] IC | >22 sit-out.
+
+    The Apr 18 attempt to slice this further into a toxic-gap (20,23)
+    + stressed band [23,28] was reverted after the 23-day chain-replay
+    A/B showed it made P&L worse. Sample size (n≤4 in the contested
+    band) was below what the change required to be statistically
+    distinguishable from noise.
     """
 
     def test_portfolio_strangle_min_at_complacency_boundary(self):
@@ -83,17 +88,9 @@ class TestPortfolioRouterBand:
     def test_portfolio_strangle_max_at_strangle_ceiling(self):
         assert PortfolioParams().strangle_vix_max == 16.0
 
-    def test_portfolio_ic_max_at_normal_band_ceiling(self):
-        # Was 22.0 pre-Apr 18; tightened to 20.0 after chain-replay showed
-        # 20-22 was uniquely toxic (-₹3,890 across 4 trades, Apr 13-17).
-        assert PortfolioParams().ic_vix_max == 20.0
-
-    def test_portfolio_ic_stressed_band_bounds(self):
-        # New stressed band [23, 28] re-enables IC after the toxic gap.
-        # ic_vix_reduce_above=20 already halves size, so stressed entries are 0.5x.
-        p = PortfolioParams()
-        assert p.ic_vix_stressed_min == 23.0
-        assert p.ic_vix_stressed_max == 28.0
+    def test_portfolio_ic_max_at_event_risk_boundary(self):
+        # Above this: no premium leg at all (event risk).
+        assert PortfolioParams().ic_vix_max == 22.0
 
 
 class TestRegimeRecommendations:

@@ -182,21 +182,10 @@ class PortfolioParams(BaseStrategyParams):
     entry_time: time = time(9, 30)       # Wait for morning range to form
     exit_time: time = time(15, 15)
 
-    # Mode selection — Indian VIX bands (Apr 18 2026 quant audit, profit-only):
-    #   strangle 13-16 | IC 16-20 | NO-TRADE GAP 20-23 | IC stressed 23-28 | nothing >28
-    # Why the gap [20, 23): chain-replay decision logs from Apr 13-17 show every
-    # IC entry with VIX in 20.0-22.9 lost money (n=4, total -₹3,890). The 20-22
-    # window was previously inside `ic_vix_max=22.0` so we kept entering. This
-    # band is uniquely toxic — vol-of-vol high enough to whip ICs through both
-    # wings before theta accrues, but not high enough that the credit
-    # compensates. Above 23 the credit math swings positive again (rich premium
-    # comp for the wider distribution); we re-enable IC there with HALF size
-    # already enforced by ic_vix_reduce_above=20 (set in IronCondorParams).
+    # Mode selection — Indian VIX bands: strangle 13-16, IC 16-22, no trade outside.
     strangle_vix_min: float = 13.0       # Below: complacency — premium too cheap, no premium leg
-    strangle_vix_max: float = 16.0       # Above: switch to IC (defined risk handles 16-20)
-    ic_vix_max: float = 20.0             # Was 22 — Apr 18 audit: 20-22 band is loss-making
-    ic_vix_stressed_min: float = 23.0    # IC re-allowed above this (rich credit compensates wider vol)
-    ic_vix_stressed_max: float = 28.0    # Above 28: nothing — event risk dominates
+    strangle_vix_max: float = 16.0       # Above: switch to IC (defined risk handles 16-22)
+    ic_vix_max: float = 22.0             # Above: no premium leg at all (event risk)
     trend_switch_threshold: int = 70     # Close IC and switch to trend if trend score >= this mid-day
     trend_switch_enabled: bool = True    # Allow closing IC to enter trend on strong breakout
 
@@ -240,33 +229,18 @@ class PortfolioParams(BaseStrategyParams):
     # (PCR < 0.7 was 11/32 of recorded decisions, all on Apr 8/9 mornings).
     portfolio_filters_enabled: bool = False
 
-    # Iron condor mode — used when VIX 16-20 (normal) or 23-28 (stressed)
+    # Iron condor mode — used when VIX 18-25
     ic_short_call_delta: float = 0.15
     ic_short_put_delta: float = -0.15
     ic_wing_width_strikes: int = 8           # Widened from 5: improves 1:4 → 1:2 risk/reward on weekly NIFTY (Apr 17 trader analysis)
     ic_stop_loss_pct: float = 40.0
-    # PT lowered 60 → 40 (Apr 18 quant). The Apr 13-17 chain-replay sample shows
-    # IC trades that touched +50% premium-decay on the way down then reversed
-    # and stopped out at -40% on the same day (Apr 13 had two such round trips).
-    # Booking at +40% closes that asymmetry: theoretically sacrifices ~₹600 of
-    # max-profit per winner, but historically converts ~3 reversals per month
-    # from -₹2,500 losers to +₹1,400 winners. Net EV per trade: +₹290.
-    ic_profit_target_pct: float = 40.0
-    # IC max DTE — Apr 18 quant: a NIFTY weekly with >5 calendar days to expiry
-    # earns theta too slowly to recover from a single-leg test of the wing,
-    # while still carrying the same gamma + vega risk as a closer-in IC. Drop
-    # any IC with DTE > 5 (entered Wed/Thu of the prior week). On NIFTY weekly
-    # Tuesday expiry that means: enter Wed=4 DTE, Thu=5 DTE, Fri=4 DTE,
-    # Mon=1 DTE, Tue=0 DTE (latter still gated by skip_entry_on_expiry_day).
-    # Filters out 100% of Mon/Tue-week-prior IC entries — those were 4 of the
-    # 6 Apr 13 losing trades.
-    ic_max_dte: int = 5
+    ic_profit_target_pct: float = 60.0     # Let IC decay more — defined risk (was 50, OOS-validated)
     # IC min entry credit (₹/lot, total of CE+PE shorts minus wings).
-    # Strangle has premium_min_entry_credit=5.0 to catch stale-leg fills;
-    # IC needs the equivalent. Lower threshold (10 not 5) because IC has 4 legs
-    # so cumulative slippage on a stale chain hits twice as hard. Below 10
-    # almost certainly means the recorder served stale wing prices, which we
-    # then book as "credit" but on the next snapshot it inverts.
+    # Mirrors strangle's premium_min_entry_credit guard. Stale wing fills
+    # produce sub-₹10 "credits" that aren't real — without rollback the leg
+    # state stays half-set and pollutes the next entry. Pure defensive bug
+    # fix; doesn't change the entry-decision distribution. Survived the
+    # Apr 18 partial-revert because it's structural, not statistical.
     ic_min_entry_credit: float = 10.0
 
     # Gamma-aware exit — tighten stop when gamma exposure is high
@@ -286,17 +260,6 @@ class PortfolioParams(BaseStrategyParams):
     trend_profit_target_pct: float = 50.0    # was 55 (Apr 17), reverted to OOS-validated mid
     trend_trailing_stop_pct: float = 15.0    # unchanged — protects gains without choking winners
     breakout_confirmation_pct: float = 0.5
-
-    # Trend-leg entry hour gate — Apr 18 quant audit: trend entries at hour=10
-    # have negative expectancy (-₹244/trade, win rate 40%, n=15 in chain-replay
-    # decision logs). Hour-11+ entries flip to +₹680/trade (win rate 58%, n=12).
-    # The diagnosis: 10:00-11:00 is the morning-range completion window where
-    # breakouts most often fail and reverse into the prior day's range. Waiting
-    # until 11:00 lets the morning chop resolve before paying the debit.
-    # Cutoff stays at 14:00 (was 10:30 on live but bumped to 14:00 here so the
-    # window is 11:00-14:00 — last full hour of theta still works for trend).
-    trend_entry_min_hour: int = 11
-    trend_entry_max_hour: int = 14
 
 
 class TrendDebitSpreadParams(BaseStrategyParams):
