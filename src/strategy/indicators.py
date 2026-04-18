@@ -52,21 +52,72 @@ def ema(closes: list[float], period: int) -> list[float]:
     return result
 
 
+def atr(candles: list[OHLC], period: int = 14) -> float:
+    """Compute Average True Range from OHLC candles.
+
+    True Range = max(high-low, |high-prev_close|, |low-prev_close|)
+    Returns ATR in points. Returns 0.0 if insufficient candles.
+    """
+    if len(candles) < 2:
+        return 0.0
+
+    true_ranges: list[float] = []
+    for i in range(1, len(candles)):
+        h = float(candles[i].high)
+        l = float(candles[i].low)
+        pc = float(candles[i - 1].close)
+        true_ranges.append(max(h - l, abs(h - pc), abs(l - pc)))
+
+    window = true_ranges[-period:] if len(true_ranges) >= period else true_ranges
+    return sum(window) / len(window) if window else 0.0
+
+
+def candle_body_quality(candle: OHLC, direction: str) -> float:
+    """Measure how decisively a candle closed in the breakout direction.
+
+    Returns a value 0.0–1.0:
+      1.0 = close exactly at high (UP) or low (DOWN) — perfectly decisive
+      0.0 = close at opposite extreme — full wick, no conviction
+
+    For a genuine breakout candle, expect body_quality > 0.65.
+    A wick-driven breakout (close near midpoint) scores < 0.5 — classic fakeout.
+    """
+    candle_range = float(candle.high) - float(candle.low)
+    if candle_range <= 0:
+        return 1.0  # Doji at breakout level — treat as neutral (won't block)
+
+    if direction == "UP":
+        return (float(candle.close) - float(candle.low)) / candle_range
+    else:  # DOWN
+        return (float(candle.high) - float(candle.close)) / candle_range
+
+
 def momentum_breakout(
     candles: list[OHLC],
     morning_candles: int = 3,
     confirmation_pct: float = 0.3,
+    atr_multiplier: float = 1.0,
+    body_quality_min: float = 0.65,
 ) -> BreakoutSignal:
     """Detect morning range breakout from M5 candles.
 
     Uses the first `morning_candles` M5 candles (default 3 = 9:15-9:30)
-    to define the morning range. A breakout is confirmed when the current
-    price moves beyond the range by at least `confirmation_pct` percent.
+    to define the morning range. Two-stage confirmation:
+
+    1. Price must clear the morning range by at least max(confirmation_pct%,
+       atr_multiplier × ATR14) in points — whichever is larger. This makes
+       the threshold VIX-adaptive rather than a fixed percentage.
+
+    2. The breakout candle must close decisively in the breakout direction
+       (body_quality > body_quality_min). A wick-driven spike that reverses
+       within the candle is rejected — classic false breakout signature.
 
     Args:
         candles: M5 candles for the day (oldest first), at least morning_candles + 1.
-        morning_candles: Number of opening candles to define the range.
-        confirmation_pct: Minimum % move beyond range to confirm breakout.
+        morning_candles: Number of opening candles to define the morning range.
+        confirmation_pct: Fallback minimum % move (used if ATR unavailable).
+        atr_multiplier: Require this many ATR14 units of clearance beyond range.
+        body_quality_min: Breakout candle must close in top/bottom X% of range.
 
     Returns:
         BreakoutSignal with direction, strength, and levels.
@@ -91,13 +142,26 @@ def momentum_breakout(
     if range_size <= 0:
         return no_signal
 
+    # ATR-normalized required clearance (in points).
+    # Use the non-morning candles for ATR to avoid morning range noise.
+    atr_val = atr(candles, period=14)
+    current_price = morning_high  # approximate for pct→pts conversion
+    fallback_pts = confirmation_pct / 100.0 * current_price
+    required_pts = max(fallback_pts, atr_multiplier * atr_val) if atr_val > 0 else fallback_pts
+
     # Current price = close of the latest candle
-    current = float(candles[-1].close)
+    last_candle = candles[-1]
+    current = float(last_candle.close)
 
     # Check for upside breakout
     if current > morning_high:
-        move_pct = (current - morning_high) / morning_high * 100
-        if move_pct >= confirmation_pct:
+        move_pts = current - morning_high
+        if move_pts >= required_pts:
+            # Body quality gate: candle must close decisively near its high
+            bq = candle_body_quality(last_candle, "UP")
+            if bq < body_quality_min:
+                return no_signal  # Wick-driven spike — fakeout, reject
+            move_pct = move_pts / morning_high * 100
             return BreakoutSignal(
                 direction="UP",
                 strength=move_pct,
@@ -108,8 +172,12 @@ def momentum_breakout(
 
     # Check for downside breakout
     if current < morning_low:
-        move_pct = (morning_low - current) / morning_low * 100
-        if move_pct >= confirmation_pct:
+        move_pts = morning_low - current
+        if move_pts >= required_pts:
+            bq = candle_body_quality(last_candle, "DOWN")
+            if bq < body_quality_min:
+                return no_signal  # Wick-driven dip — fakeout, reject
+            move_pct = move_pts / morning_low * 100
             return BreakoutSignal(
                 direction="DOWN",
                 strength=move_pct,
