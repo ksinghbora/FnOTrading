@@ -4,12 +4,13 @@ import asyncio
 import logging
 import signal
 import sys
+from pathlib import Path
 
 import uvicorn
 
 from src.config import Settings
 from src.core.clock import MarketClock, now_ist
-from src.core.events import EventBus, EventType
+from src.core.events import EventBus, EventType, RedisEventBridge
 from src.broker.zerodha.client import ZerodhaClient
 from src.broker.zerodha.instruments import InstrumentManager
 from src.broker.zerodha.ticker import TickerManager
@@ -19,6 +20,9 @@ from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
 from src.market_data.chain_recorder import ChainSnapshotRecorder
+from src.market_data.tick_recorder import TickRecorder
+from src.market_data.vix_recorder import IndiaVixRecorder
+from src.observability.heartbeat import Heartbeat
 from src.market_data.store import MarketDataStore
 from src.oms.dedup import OrderDeduplicator
 from src.oms.executor import OrderExecutor
@@ -32,6 +36,7 @@ from src.risk.kill_switch import KillSwitch
 from src.risk.limits import RiskLimits
 from src.risk.manager import RiskManager
 from src.strategy.runner import StrategyRunner
+from src.utils.log_tags import Tag
 from src.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -222,15 +227,67 @@ async def create_app(settings: Settings):
         except Exception as e:
             logger.warning(f"Failed to seed feed LTPs: {e}")
 
-    # ─── Chain Snapshot Recorder ──────────────────────────────────
-    chain_recorder = ChainSnapshotRecorder(chain_builder, clock, interval_seconds=60)
+    # ─── Recorders + heartbeat ───────────────────────────────────
+    # In split mode (DATA_RELIABILITY_PLAN §5) the recorder process owns
+    # the WebSocket and the recorders. The trader gets ticks via Redis
+    # pub/sub (RedisEventBridge below). Heartbeat name + path differ so
+    # the watchdog can distinguish the two processes.
+    if settings.recorder_split_mode:
+        # Trader-only heartbeat. Recorder writes its own data/heartbeat/recorder.json.
+        recorder_heartbeat = Heartbeat(
+            process_name="trader",
+            output_path="data/heartbeat/trader.json",
+            interval_s=30.0,
+        )
+        chain_recorder = None
+        vix_recorder = None
+        tick_recorder = None
+        logger.info(
+            "recorder_split_mode=true — recorders run in separate process; "
+            "trader will subscribe to ticks via Redis pub/sub"
+        )
+    else:
+        recorder_heartbeat = Heartbeat(
+            process_name="trader",  # legacy single-process value, kept for back-compat
+            output_path="data/heartbeat/recorder.json",
+            interval_s=30.0,
+        )
+        chain_recorder = ChainSnapshotRecorder(
+            chain_builder, clock, interval_seconds=60, heartbeat=recorder_heartbeat,
+        )
+        vix_recorder = IndiaVixRecorder(event_bus, clock, heartbeat=recorder_heartbeat)
+        # Tick recorder: enabled by default, gated to subscribed instruments only
+        # so we don't bloat disk with unrelated WebSocket noise.
+        tick_recorder = TickRecorder(event_bus, clock, heartbeat=recorder_heartbeat)
 
-    # ─── Ticker / Simulator ───────────────────────────────────────
-    # Paper trading uses live Kite data (real prices, no real orders).
-    # Simulator is fallback only when Kite credentials are unavailable.
+    # ─── Ticker / Simulator / Redis bridge ────────────────────────
+    # Three mutually exclusive sources of TICK events:
+    #   1. split mode  -> RedisEventBridge consumes from recorder process
+    #   2. Kite creds  -> TickerManager owns the WebSocket directly
+    #   3. no creds    -> SimulationEngine generates synthetic ticks
     ticker = None
     simulator = None
-    if settings.kite_api_key and settings.kite_access_token:
+    redis_bridge = None
+    if settings.recorder_split_mode:
+        if not redis_client:
+            raise RuntimeError(
+                "recorder_split_mode=true requires Redis. Bring Redis up "
+                "before starting the trader, or set recorder_split_mode=false."
+            )
+        # Forward TICK + connection events from recorder. Strategies subscribe
+        # to TICK on the local bus exactly as before; they don't know the
+        # event came from another process.
+        redis_bridge = RedisEventBridge(
+            redis_client=redis_client,
+            bus=event_bus,
+            event_types=[
+                EventType.TICK,
+                EventType.CONNECTION_LOST,
+                EventType.CONNECTION_RESTORED,
+            ],
+        )
+        logger.info("Trader will receive market data from recorder via Redis bridge")
+    elif settings.kite_api_key and settings.kite_access_token:
         ticker = TickerManager(settings.kite_api_key, settings.kite_access_token, event_bus)
         logger.info("Live market data via Kite WebSocket" + (" (paper trading)" if settings.paper_trading else ""))
     else:
@@ -329,9 +386,13 @@ async def create_app(settings: Settings):
         "feed": feed,
         "ticker": ticker,
         "simulator": simulator,
+        "redis_bridge": redis_bridge,
         "aggregator": aggregator,
         "chain_builder": chain_builder,
         "chain_recorder": chain_recorder,
+        "vix_recorder": vix_recorder,
+        "tick_recorder": tick_recorder,
+        "recorder_heartbeat": recorder_heartbeat,
         "data_store": data_store,
         "order_manager": order_manager,
         "portfolio": portfolio,
@@ -349,7 +410,14 @@ async def create_app(settings: Settings):
 async def run():
     """Main application run loop."""
     settings = Settings()
-    setup_logging(settings.log_level, json_output=settings.is_production)
+    # JSONL sink lives next to the heartbeat dir. One file per process so
+    # recorder/trader logs don't interleave on disk (DATA_RELIABILITY_PLAN §8.2).
+    setup_logging(
+        settings.log_level,
+        json_output=settings.is_production,
+        process_name="trader",
+        log_file=Path("data/logs/trader.jsonl"),
+    )
 
     logger.info("=" * 60)
     logger.info("F&O Trading System Starting")
@@ -435,8 +503,21 @@ async def run():
     # Subscribe option chain builder to tick events
     app["event_bus"].subscribe(EventType.TICK, app["chain_builder"].on_tick)
 
-    # Start chain snapshot recorder (captures real option data for future replay)
-    await app["chain_recorder"].start()
+    # Start the recorder heartbeat first so the watchdog sees a fresh file
+    # immediately, even if individual recorders haven't produced data yet.
+    await app["recorder_heartbeat"].start()
+    # Recorders run here only when NOT in split mode. In split mode they
+    # live in src.recorder_main and we just bridge ticks from Redis.
+    if app["chain_recorder"]:
+        await app["chain_recorder"].start()
+    if app["vix_recorder"]:
+        await app["vix_recorder"].start()
+    if app["tick_recorder"]:
+        await app["tick_recorder"].start()
+    # Start the Redis tick bridge (split mode only). Must come BEFORE strategy
+    # registration so any TICK fired during startup is delivered.
+    if app["redis_bridge"]:
+        await app["redis_bridge"].start()
 
     # Schedule daily P&L reset at market open
     async def daily_reset_task():
@@ -573,14 +654,20 @@ async def run():
                 queue_depth = app["event_bus"]._queue.qsize()
 
                 logger.info(
-                    f"[SUMMARY] positions={len(open_positions)} "
-                    f"realized={pnl.realized} unrealized={pnl.unrealized} "
-                    f"day_pnl={pnl.net} charges={pnl.charges} "
-                    f"ticks_60s={ticks_since_last} "
-                    f"strategies={strategy_states} "
-                    f"circuit_breaker={cb_state} "
-                    f"pending_orders={pending_orders} "
-                    f"queue_depth={queue_depth}"
+                    "operational summary",
+                    extra={
+                        "tag": Tag.SUMMARY,
+                        "positions": len(open_positions),
+                        "realized": pnl.realized,
+                        "unrealized": pnl.unrealized,
+                        "day_pnl": pnl.net,
+                        "charges": pnl.charges,
+                        "ticks_60s": ticks_since_last,
+                        "strategies": strategy_states,
+                        "circuit_breaker": cb_state,
+                        "pending_orders": pending_orders,
+                        "queue_depth": queue_depth,
+                    },
                 )
 
                 # Take P&L snapshot for intraday curve
@@ -651,9 +738,13 @@ async def run():
                     save_day_bias_json(advisory)
                     save_advisory_json(advisory)
                     logger.info(
-                        f"[ADVISOR] Morning advisory generated: "
-                        f"risk={advisory.day_bias.risk_level} "
-                        f"conf={advisory.day_bias.confidence:.2f}"
+                        "morning advisory generated",
+                        extra={
+                            "tag": Tag.ADVISOR,
+                            "phase": "morning",
+                            "risk_level": advisory.day_bias.risk_level,
+                            "confidence": round(advisory.day_bias.confidence, 2),
+                        },
                     )
 
                     # Send to Telegram
@@ -664,7 +755,10 @@ async def run():
                         await tg.send_message(format_advisory_telegram(advisory), parse_mode="")
 
                 except Exception:
-                    logger.exception("[ADVISOR] Morning advisory failed")
+                    logger.exception(
+                        "morning advisory failed",
+                        extra={"tag": Tag.ADVISOR, "phase": "morning"},
+                    )
 
             # Nightly audit: 4:00-4:05 PM
             if (
@@ -692,9 +786,15 @@ async def run():
                     )
                     save_audit_json(audit)
                     logger.info(
-                        f"[ADVISOR] Nightly audit: {len(audit.decisions)} decisions "
-                        f"agree={audit.agree_count} disagree={audit.disagree_count} "
-                        f"ai_alpha={audit.ai_alpha:+,.0f}"
+                        "nightly audit complete",
+                        extra={
+                            "tag": Tag.ADVISOR,
+                            "phase": "nightly_audit",
+                            "decisions": len(audit.decisions),
+                            "agree_count": audit.agree_count,
+                            "disagree_count": audit.disagree_count,
+                            "ai_alpha": round(audit.ai_alpha, 2),
+                        },
                     )
 
                     # Send to Telegram if configured
@@ -704,7 +804,10 @@ async def run():
                         await tg.send_message(format_audit_telegram(audit), parse_mode="")
 
                 except Exception:
-                    logger.exception("[ADVISOR] Nightly audit failed")
+                    logger.exception(
+                        "nightly audit failed",
+                        extra={"tag": Tag.ADVISOR, "phase": "nightly_audit"},
+                    )
 
             await asyncio.sleep(30)
 
@@ -829,11 +932,40 @@ async def run():
     except Exception:
         logger.exception("Error stopping order tracker")
 
-    # 4. Stop chain recorder
+    # 4. Stop Redis bridge first (split mode) so no more ticks arrive
+    if app.get("redis_bridge"):
+        try:
+            await app["redis_bridge"].stop()
+        except Exception:
+            logger.exception("Error stopping Redis event bridge")
+
+    # 4a. Stop chain recorder (in-process mode only)
+    if app.get("chain_recorder"):
+        try:
+            await app["chain_recorder"].stop()
+        except Exception:
+            logger.exception("Error stopping chain recorder")
+
+    # 4b. Stop India VIX recorder (flush in-flight minute)
+    if app.get("vix_recorder"):
+        try:
+            await app["vix_recorder"].stop()
+        except Exception:
+            logger.exception("Error stopping VIX recorder")
+
+    # 4c. Stop tick recorder (drain pending tick buffers to Parquet)
+    if app.get("tick_recorder"):
+        try:
+            await app["tick_recorder"].stop()
+        except Exception:
+            logger.exception("Error stopping tick recorder")
+
+    # 4d. Stop heartbeat last so a crash in one of the recorder stop()s
+    # is still visible in the final heartbeat snapshot.
     try:
-        await app["chain_recorder"].stop()
+        await app["recorder_heartbeat"].stop()
     except Exception:
-        logger.exception("Error stopping chain recorder")
+        logger.exception("Error stopping recorder heartbeat")
 
     # 5. Flush market data before closing connections
     try:

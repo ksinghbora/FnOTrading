@@ -1,0 +1,74 @@
+# FnO Trading System — operational cron jobs
+#
+# These complete the data-reliability P0 plan (see docs/DATA_RELIABILITY_PLAN.md §10).
+# Install with:
+#     crontab deploy/cron/crontab.example
+# or paste the relevant lines into your existing crontab. Times are LOCAL —
+# the host should already be on Asia/Kolkata (IST) or these will fire at the
+# wrong moment.
+#
+# Environment expected:
+#   - WORKDIR is the repo root
+#   - `uv` is on PATH
+#   - .env is populated (Telegram, Kite, DB)
+#
+# Replace /path/to/FnOTrading with your install location:
+
+WORKDIR=/path/to/FnOTrading
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# ─── 08:55 IST — Daily auto-auth (refresh Kite token before market open) ─────
+55 8 * * 1-5  cd $WORKDIR && uv run python scripts/auto_auth.py >> logs/cron_auto_auth.log 2>&1
+
+# ─── 09:00 IST — Snapshot today's effective config for replay correctness ────
+# Captures params, env (secrets redacted), instruments, holidays, constants
+# into config/snapshots/<date>/. Replay engine loads from here instead of
+# current source so backtest == live counterfactual.
+0 9 * * 1-5   cd $WORKDIR && uv run python scripts/snapshot_config.py >> logs/cron_snapshot.log 2>&1
+
+# ─── 10–15:00 IST hourly — Chain dropoff alert ───────────────────────────────
+# Catches silent WS death within the hour. Compares today's row count at this
+# hour vs the 7-day average at the same hour. Suppresses dupes per (day, hour).
+0 10-15 * * 1-5  cd $WORKDIR && uv run python scripts/alert_chain_dropoff.py >> logs/cron_dropoff.log 2>&1
+
+# ─── 21:00 IST — Nightly audit (post-market) ─────────────────────────────────
+# Runs the AI advisor scorecard, audits today's chain CSV quality, checks the
+# recorder heartbeat for empty streams, persists audit JSON + DB row, and
+# Telegrams the digest. The single most important cron — never skip.
+0 21 * * 1-5  cd $WORKDIR && uv run python scripts/nightly_audit.py >> logs/cron_nightly_audit.log 2>&1
+
+# ─── 22:00 IST Sunday — Weekly review ────────────────────────────────────────
+# Aggregate week-over-week metrics; useful even when nothing alerts.
+0 22 * * 0    cd $WORKDIR && uv run python scripts/weekly_review.py >> logs/cron_weekly.log 2>&1
+
+# ─── 06:30 IST — Pre-market system verification ──────────────────────────────
+# Asserts DB up, Redis up, Kite credentials valid, recent heartbeat exists.
+# Telegrams immediately if anything is off so we can fix before market open.
+30 6 * * 1-5  cd $WORKDIR && uv run python scripts/verify_system.py >> logs/cron_verify.log 2>&1
+
+# ─── 07:00 IST — Download fresh instrument master ────────────────────────────
+# Required because the snapshot at 09:00 reads from the DB; this populates it.
+0 7 * * 1-5   cd $WORKDIR && uv run python scripts/download_instruments.py >> logs/cron_instruments.log 2>&1
+
+# ─── 21:30 IST — Morning advisor for *next* trading day ──────────────────────
+# Runs after the nightly audit so today's data informs tomorrow's bias.
+30 21 * * 0-4  cd $WORKDIR && uv run python scripts/morning_advisor.py >> logs/cron_advisor.log 2>&1
+
+# ─── 22:00 IST — Cold-storage step 1: archive eligible chain CSVs to Parquet ─
+# Convert chain_*.csv files ≥7 days old into Parquet+ZSTD level 3 (~5x smaller)
+# and append to archive/manifest.jsonl. Idempotent on SHA match. See
+# DATA_RELIABILITY_PLAN §3.3 for the chain.
+0 22 * * 1-5  cd $WORKDIR && uv run python scripts/archive_to_parquet.py >> logs/cron_archive.log 2>&1
+
+# ─── 23:00 IST — Cold-storage step 2: upload archived Parquets to B2 ─────────
+# Reads archive/manifest.jsonl, pushes any new Parquet to Backblaze B2
+# (requires B2_KEY_ID + B2_APP_KEY + B2_BUCKET in .env), writes the upload
+# ledger to archive/manifest_b2.jsonl. Fails loud on missing creds.
+0 23 * * 1-5  cd $WORKDIR && uv run python scripts/upload_to_b2.py >> logs/cron_upload.log 2>&1
+
+# ─── 09:00 IST Sunday — Cold-storage step 3: weekly DR proof ─────────────────
+# Downloads the most recently uploaded Parquet from B2, verifies SHA1 +
+# decode + row count vs original CSV. Exits 2 on any failure so cron MTA
+# (or your monitoring) fires. The whole cold-storage chain is worthless
+# without this — install it the same week you install steps 1 + 2.
+0 9 * * 0     cd $WORKDIR && uv run python scripts/restore_test.py >> logs/cron_restore_test.log 2>&1

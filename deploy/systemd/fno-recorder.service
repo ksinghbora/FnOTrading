@@ -1,0 +1,56 @@
+# Recorder process — owns the Kite WebSocket and writes all market data
+# files (chain CSVs, VIX, tick Parquet). Boring on purpose: no strategy
+# code runs here, so the trader can be restarted/upgraded without
+# interrupting data capture.
+#
+# Install:
+#   1. Replace /opt/fnotrading with the actual repo root on this host.
+#   2. Replace fno-trader with the OS user that should own the process.
+#   3. sudo cp deploy/systemd/fno-recorder.service /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable --now fno-recorder
+#   4. Verify:  systemctl status fno-recorder
+#               journalctl -fu fno-recorder
+#               cat data/heartbeat/recorder.json
+#
+# The unit restarts on any non-zero exit so a token-refresh blip or
+# transient WS failure doesn't leave the recorder down. RestartSec keeps
+# us from hammering Kite on tight crash loops.
+
+[Unit]
+Description=FnO Trading — market data recorder (chain + VIX + tick)
+Documentation=file:///opt/fnotrading/docs/DATA_RELIABILITY_PLAN.md
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fno-trader
+Group=fno-trader
+WorkingDirectory=/opt/fnotrading
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/opt/fnotrading/.env
+ExecStart=/opt/fnotrading/.venv/bin/python -m src.recorder_main
+
+# Restart policy — quick recovery from transient failures, but back off
+# if we're crash-looping (the recorder is a watchdog target itself).
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# Graceful shutdown so in-flight CSV/Parquet writes flush cleanly.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Resource caps — the recorder is light; if it's eating more than this
+# something is wrong (memory leak in tick buffer, etc).
+MemoryMax=2G
+CPUQuota=100%
+
+# Logging
+StandardOutput=append:/opt/fnotrading/logs/recorder.stdout.log
+StandardError=append:/opt/fnotrading/logs/recorder.stderr.log
+
+[Install]
+WantedBy=multi-user.target

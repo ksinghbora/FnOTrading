@@ -1,0 +1,48 @@
+# Trader process — runs strategies, OMS, risk manager, dashboard API.
+# Subscribes to ticks via Redis from the recorder process (above).
+#
+# Install: same as fno-recorder.service. Order matters: bring up the
+# recorder first so the Redis tick stream is already flowing when the
+# trader subscribes.
+#
+# After= ensures systemd boot-orders this after the recorder, but we
+# DON'T set Requires= because a trader restart shouldn't pull the
+# recorder down with it — that defeats the entire point of the split.
+
+[Unit]
+Description=FnO Trading — trader process (strategies + OMS + risk + API)
+Documentation=file:///opt/fnotrading/docs/DATA_RELIABILITY_PLAN.md
+After=network-online.target redis.service postgresql.service fno-recorder.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fno-trader
+Group=fno-trader
+WorkingDirectory=/opt/fnotrading
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/opt/fnotrading/.env
+ExecStart=/opt/fnotrading/.venv/bin/python -m src.main
+
+# Restart policy — strategy crashes shouldn't take the whole system down,
+# but burst-restart ourselves into a circuit-broken state to surface the
+# problem on the watchdog.
+Restart=on-failure
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Graceful shutdown so the OMS can settle pending orders before exit.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Resource caps — strategies + Redis bridge + API. Headroom for backtests.
+MemoryMax=4G
+CPUQuota=200%
+
+# Logging
+StandardOutput=append:/opt/fnotrading/logs/trader.stdout.log
+StandardError=append:/opt/fnotrading/logs/trader.stderr.log
+
+[Install]
+WantedBy=multi-user.target

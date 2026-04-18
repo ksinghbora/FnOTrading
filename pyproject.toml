@@ -32,12 +32,19 @@ dependencies = [
     "structlog>=24.4.0",
     # Option Pricing
     "py_vollib>=1.0.1",
+    # Columnar storage for the 1-sec tick recorder (Parquet keeps the year-1
+    # NIFTY+BANKNIFTY tick archive ~10x smaller than CSV — see tick_recorder.py)
+    "pyarrow>=16.0.0",
     # Timezone
     "pytz>=2024.1",
     "pyotp>=2.9.0",
     "breeze-connect>=1.0.67",
     # Secret storage (OS keychain — macOS Keychain, Linux Secret Service, Windows Cred Mgr)
     "keyring>=25.0.0",
+    # Cold storage — Backblaze B2 SDK for the upload_to_b2.py uploader.
+    # Lazy-imported only inside B2Uploader so the dev/CI LocalDirUploader path
+    # never touches it, but still needs to be on the box where the cron runs.
+    "b2sdk>=2.5.0",
 ]
 
 [project.optional-dependencies]

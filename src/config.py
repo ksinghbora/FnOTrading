@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # ─── Paper Trading ───────────────────────────────────────────────
     paper_trading: bool = True  # Default to paper trading for safety
 
+    # ─── Process isolation (DATA_RELIABILITY_PLAN §5) ───────────────
+    # When True, the recorder runs as a separate process (`python -m
+    # src.recorder_main`) and the trader (`src.main`) skips TickerManager
+    # creation, instead receiving ticks via Redis pub/sub through the
+    # RedisEventBridge. Default False keeps the legacy single-process
+    # behaviour for backward compatibility.
+    recorder_split_mode: bool = False
+
     # ─── Strategies ────────────────────────────────────────────────
     # JSON array of strategies to auto-start, e.g.:
     # [{"name": "short_strangle", "id": "nifty_strangle_1", "params": {"underlying": "NIFTY"}}]

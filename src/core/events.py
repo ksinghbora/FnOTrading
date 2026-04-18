@@ -97,7 +97,12 @@ class EventBus:
             handlers.remove(handler)
 
     async def publish(self, event: Event) -> None:
-        """Publish an event to all subscribers."""
+        """Publish an event to all subscribers (local + Redis).
+
+        Redis mirroring is best-effort. It exists so a separate process (e.g.
+        the recorder splitting off from the trader) can subscribe to ticks via
+        ``RedisEventBridge`` below.
+        """
         await self._queue.put(event)
 
         # Also publish to Redis for cross-process subscribers
@@ -107,6 +112,15 @@ class EventBus:
                 await self._redis.publish(channel, event.model_dump_json())
             except Exception as e:
                 logger.warning(f"Failed to publish to Redis: {e}")
+
+    async def publish_local(self, event: Event) -> None:
+        """Publish to local handlers only — does NOT mirror to Redis.
+
+        Used by ``RedisEventBridge`` when forwarding events received from
+        another process. If we used ``publish()`` here the event would loop
+        right back through Redis, causing an infinite echo.
+        """
+        await self._queue.put(event)
 
     async def start(self) -> None:
         """Start the event dispatch loop."""
@@ -157,3 +171,94 @@ class EventBus:
             logger.exception(
                 f"Error in event handler {handler.__qualname__} for {event.type.value}"
             )
+
+
+class RedisEventBridge:
+    """Forward events from Redis pub/sub into a local EventBus.
+
+    The recorder process owns the Kite WebSocket and publishes ticks to
+    ``events:tick`` on Redis. The trader process runs a ``RedisEventBridge``
+    that subscribes to those channels and re-emits the events on its own
+    in-process EventBus, so trader code (strategies, chain builder, OMS) can
+    keep using the bus exactly like before — it just no longer owns the WS.
+
+    Loop avoidance: we call ``bus.publish_local()`` which intentionally does
+    NOT mirror back to Redis. Otherwise every forwarded tick would echo
+    forever between the two processes.
+
+    Channel discovery: caller passes a list of ``EventType`` values to
+    forward. We don't auto-subscribe to ``events:*`` because the trader
+    only cares about a handful of types — wider subscriptions would burn
+    CPU deserializing events nothing handles.
+    """
+
+    def __init__(
+        self,
+        redis_client: Any,
+        bus: "EventBus",
+        event_types: list[EventType],
+    ):
+        self._redis = redis_client
+        self._bus = bus
+        self._channels = [f"events:{t.value}" for t in event_types]
+        self._pubsub: Any = None
+        self._task: asyncio.Task[None] | None = None
+        self._running = False
+
+    async def start(self) -> None:
+        """Subscribe to Redis channels and start forwarding into the bus.
+
+        Subscription happens synchronously here (not inside the listen task)
+        so callers can rely on the property: after start() returns, any
+        subsequent ``redis.publish()`` will be delivered to the bus.
+        """
+        if self._running:
+            return
+        self._pubsub = self._redis.pubsub()
+        await self._pubsub.subscribe(*self._channels)
+        self._running = True
+        self._task = asyncio.create_task(self._listen_loop())
+        logger.info(
+            "RedisEventBridge listening on %d channel(s): %s",
+            len(self._channels), ", ".join(self._channels),
+        )
+
+    async def stop(self) -> None:
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        if self._pubsub is not None:
+            try:
+                await self._pubsub.unsubscribe(*self._channels)
+                await self._pubsub.close()
+            except Exception:
+                pass
+            self._pubsub = None
+        logger.info("RedisEventBridge stopped")
+
+    async def _listen_loop(self) -> None:
+        try:
+            async for msg in self._pubsub.listen():
+                if not self._running:
+                    break
+                # Redis pub/sub yields a 'subscribe' confirmation message
+                # before any real data — skip it and any future control msgs.
+                if msg.get("type") != "message":
+                    continue
+                try:
+                    data = msg["data"]
+                    if isinstance(data, bytes):
+                        data = data.decode()
+                    event = Event.model_validate_json(data)
+                    await self._bus.publish_local(event)
+                except Exception:
+                    logger.exception("Failed to forward event from Redis")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("RedisEventBridge listen loop crashed")
