@@ -54,3 +54,9 @@ coverage.xml
 
 # Backfill artifacts — regeneratable from scripts/backfill_day_bias.py
 data/day_bias_backfill/
+
+# Quarantined chain snapshots — large simulator-generated CSVs kept for
+# forensic inspection only. Track the README so the audit trail lives in
+# git, but the CSVs themselves are not source-of-truth data.
+data/chain_snapshots/_quarantine/*.csv
+data/chain_snapshots/_quarantine/*.csv.*
