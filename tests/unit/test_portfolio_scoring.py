@@ -14,11 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.strategy.implementations.portfolio_scoring import (
+    ScoreBreakdown,
     compute_iv_rank,
     iv_rank_shadow_adj,
     load_iv_rank_baseline,
     score_premium_selling,
     score_trend_following,
+    score_trend_following_breakdown,
 )
 from src.strategy.indicators import BreakoutSignal
 
@@ -297,6 +299,176 @@ class TestScoreTrendFollowingClamp:
             vix_prev=9.0, banknifty_confirming=False,
         )
         assert score == 0
+
+
+class TestScoreTrendFollowingBreakdown:
+    """Per-factor breakdown variant — used by Phase A decision logging.
+
+    Locks the invariant: when clamp_hit=False, sum(f1..f6) == score. When
+    clamp_hit=True, the per-factor fields hold the unclamped contributions
+    and score holds the [0, 100]-clamped projection. The decision log uses
+    this to attribute blocked entries to specific factors during the 30-day
+    shadow window — see memory/score_validation_plan.md.
+    """
+
+    def test_all_zero_when_no_breakout(self):
+        bd = score_trend_following_breakdown(
+            breakout=_bs(direction=None, strength=0.0),
+            oi_confirmed=True, trend_duration_minutes=60, vix=15.0,
+        )
+        assert bd.score == 0
+        assert bd.f1_breakout == 0
+        assert bd.f2_oi == 0
+        assert bd.f3_duration == 0
+        assert bd.f4_vix_level == 0
+        assert bd.f5_vix_dir == 0
+        assert bd.f6_banknifty == 0
+        assert bd.clamp_hit is False
+        assert bd.reasons == ["no breakout"]
+
+    def test_individual_factor_contributions_match_branches(self):
+        # Strong breakout (30) + OI (25) + sustained 45min (25) + VIX 15 (10)
+        # + VIX-stable supports UP (10) + BN confirming (5) = 105 → clamps 100.
+        bd = score_trend_following_breakdown(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.95, banknifty_confirming=True,
+        )
+        assert bd.f1_breakout == 30
+        assert bd.f2_oi == 25
+        assert bd.f3_duration == 25
+        assert bd.f4_vix_level == 10
+        assert bd.f5_vix_dir == 10
+        assert bd.f6_banknifty == 5
+        # Unclamped raw is 105, clamped to 100 — clamp_hit must reflect this.
+        assert bd.score == 100
+        assert bd.clamp_hit is True
+
+    def test_unclamped_sum_equals_score_in_normal_range(self):
+        # Strong (30) + OI (25) + early sustained 15-29min (12) + VIX low (5)
+        # + no vix_prev branch (0) + BN unknown (0) = 72. No clamp.
+        bd = score_trend_following_breakdown(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=20, vix=12.0,
+            vix_prev=0.0, banknifty_confirming=None,
+        )
+        raw_sum = (
+            bd.f1_breakout + bd.f2_oi + bd.f3_duration
+            + bd.f4_vix_level + bd.f5_vix_dir + bd.f6_banknifty
+        )
+        assert bd.clamp_hit is False
+        assert bd.score == raw_sum == 72
+
+    def test_negative_clamp_sets_clamp_hit(self):
+        # Moderate breakout (15) + nothing else + VIX-rising contradicts UP (-15)
+        # + BN diverging (-20) = -20 → clamps 0.
+        bd = score_trend_following_breakdown(
+            breakout=_bs(direction="UP", strength=0.35),
+            oi_confirmed=False, trend_duration_minutes=0, vix=10.0,
+            vix_prev=9.0, banknifty_confirming=False,
+        )
+        assert bd.f1_breakout == 15
+        assert bd.f5_vix_dir == -15
+        assert bd.f6_banknifty == -20
+        assert bd.score == 0
+        assert bd.clamp_hit is True
+
+    def test_back_compat_wrapper_returns_same_score(self):
+        # The thin wrapper must project (score, reasons) identically.
+        kwargs = dict(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.95, banknifty_confirming=True,
+        )
+        wrapper_score, wrapper_reasons = score_trend_following(**kwargs)
+        bd = score_trend_following_breakdown(**kwargs)
+        assert wrapper_score == bd.score
+        assert wrapper_reasons == bd.reasons
+
+
+class TestDecisionLoggerPhaseA:
+    """The Phase A logging columns appear in the CSV when a TREND row is logged.
+
+    Doesn't exercise the live strategy — that's covered by
+    test_portfolio_entry_gates.py and integration runs. This locks the schema
+    contract: every Phase A field has a column header AND round-trips through
+    csv writer/reader without loss.
+    """
+
+    def test_phase_a_columns_present_in_header(self):
+        from src.strategy.decision_logger import COLUMNS
+        required = [
+            "breakout_strength", "oi_confirmed", "trend_duration_minutes",
+            "vix_prev", "banknifty_confirming", "bn_data_available",
+            "score_f1_breakout", "score_f2_oi", "score_f3_duration",
+            "score_f4_vix_level", "score_f5_vix_dir", "score_f6_banknifty",
+            "score_clamp_hit", "trend_signal_threshold",
+        ]
+        for col in required:
+            assert col in COLUMNS, f"Phase A column {col!r} missing from CSV header"
+
+    def test_trend_row_round_trips_through_csv(self, tmp_path):
+        import csv as _csv
+        from src.strategy.decision_logger import (
+            COLUMNS, DecisionLogger, DecisionSnapshot,
+        )
+
+        dl = DecisionLogger(output_dir=tmp_path)
+        snap = DecisionSnapshot(
+            timestamp="2026-04-21T10:15:00+05:30",
+            strategy_id="portfolio_hist", leg="TREND", decision="ENTER",
+            mode="debit_spread", spot=24500.0, vix=15.0,
+            rule_score=72, threshold=50,
+            breakout_strength=0.62, oi_confirmed=True,
+            trend_duration_minutes=45, vix_prev=14.95,
+            banknifty_confirming=True, bn_data_available=True,
+            score_f1_breakout=30, score_f2_oi=25, score_f3_duration=25,
+            score_f4_vix_level=10, score_f5_vix_dir=10, score_f6_banknifty=5,
+            score_clamp_hit=True, trend_signal_threshold=50,
+        )
+        dl.log(snap)
+        dl.close()
+
+        csv_path = tmp_path / "decisions_2026-04-21.csv"
+        assert csv_path.exists(), "Logger should have created the daily CSV"
+        with open(csv_path, newline="") as f:
+            rows = list(_csv.DictReader(f))
+        assert len(rows) == 1
+        row = rows[0]
+        # Headers match COLUMNS exactly (no drift).
+        assert list(rows[0].keys()) == COLUMNS
+        # Phase A round-trip checks — string-typed since CSV is untyped.
+        assert row["breakout_strength"] == "0.62"
+        assert row["oi_confirmed"] == "True"
+        assert row["trend_duration_minutes"] == "45"
+        assert row["banknifty_confirming"] == "True"
+        assert row["bn_data_available"] == "True"
+        assert row["score_f1_breakout"] == "30"
+        assert row["score_f6_banknifty"] == "5"
+        assert row["score_clamp_hit"] == "True"
+        assert row["trend_signal_threshold"] == "50"
+
+    def test_premium_row_leaves_phase_a_at_defaults(self, tmp_path):
+        import csv as _csv
+        from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+
+        dl = DecisionLogger(output_dir=tmp_path)
+        # PREMIUM row: caller doesn't fill any Phase A fields.
+        dl.log(DecisionSnapshot(
+            timestamp="2026-04-21T09:35:00+05:30",
+            strategy_id="portfolio_hist", leg="PREMIUM", decision="ENTER",
+            mode="iron_condor", spot=24500.0, vix=18.0,
+            rule_score=78, threshold=60,
+        ))
+        dl.close()
+
+        with open(tmp_path / "decisions_2026-04-21.csv", newline="") as f:
+            row = next(_csv.DictReader(f))
+        # banknifty_confirming defaults to None → CSV writes empty string.
+        assert row["banknifty_confirming"] == ""
+        # All numeric Phase A defaults are 0 / False.
+        assert row["score_f1_breakout"] == "0"
+        assert row["score_clamp_hit"] == "False"
 
 
 class TestComputeIvRank:

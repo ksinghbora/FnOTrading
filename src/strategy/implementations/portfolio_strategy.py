@@ -33,11 +33,12 @@ from src.strategy.implementations.portfolio_pricing import (
     resolve_option_price,
 )
 from src.strategy.implementations.portfolio_scoring import (
+    ScoreBreakdown,
     compute_iv_rank,
     iv_rank_shadow_adj,
     load_iv_rank_baseline,
     score_premium_selling,
-    score_trend_following,
+    score_trend_following_breakdown,
 )
 from src.strategy.signals import entry_signal, exit_signal, make_leg
 from src.utils.log_tags import Tag
@@ -94,6 +95,12 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_entered = False
         self._trend_stopped = False
         self._trend_score: int = 0
+        # Phase A logging cache (Apr 18 — score_validation_plan.md):
+        # populated alongside self._trend_score every tick so _build_snapshot
+        # can attach the per-factor breakdown + inputs to TREND decision rows
+        # without re-running the score function.
+        self._trend_breakdown: ScoreBreakdown | None = None
+        self._trend_inputs: dict = {}
         self._trend_buy_token: int = 0
         self._trend_buy_symbol: str = ""
         self._trend_sell_token: int = 0
@@ -578,7 +585,7 @@ class PortfolioStrategy(BaseStrategy):
             self._get_banknifty_confirming(breakout.direction)
             if breakout.direction else None
         )
-        self._trend_score, reasons = score_trend_following(
+        self._trend_breakdown = score_trend_following_breakdown(
             breakout=breakout,
             oi_confirmed=oi_confirmed,
             trend_duration_minutes=trend_duration,
@@ -586,6 +593,18 @@ class PortfolioStrategy(BaseStrategy):
             vix_prev=vix_prev,
             banknifty_confirming=bn_confirming,
         )
+        self._trend_score = self._trend_breakdown.score
+        reasons = self._trend_breakdown.reasons
+        # Cache inputs so _build_snapshot can emit them on the decision row
+        # without re-deriving — Phase A of score_validation_plan.md.
+        self._trend_inputs = {
+            "breakout_strength": breakout.strength,
+            "oi_confirmed": oi_confirmed,
+            "trend_duration_minutes": trend_duration,
+            "vix_prev": vix_prev,
+            "banknifty_confirming": bn_confirming,
+            "bn_data_available": not self._bn_unavailable,
+        }
 
         # Apply AI confluence adjustment
         rule_score = self._trend_score
@@ -1734,6 +1753,31 @@ class PortfolioStrategy(BaseStrategy):
                 s_range = max(highs) - min(lows)
                 session_range_pct = s_range / spot * 100 if spot > 0 else 0
 
+        # Phase A trend-score breakdown — populated only for TREND rows where
+        # _evaluate_trend ran this tick and cached the breakdown + inputs.
+        # PREMIUM rows (and TREND rows that got logged before _evaluate_trend
+        # ran, e.g. early SKIP) leave these at dataclass defaults.
+        trend_kwargs: dict = {}
+        if leg == "TREND" and self._trend_breakdown is not None:
+            bd = self._trend_breakdown
+            ti = self._trend_inputs
+            trend_kwargs = {
+                "breakout_strength": round(ti.get("breakout_strength", 0.0), 3),
+                "oi_confirmed": ti.get("oi_confirmed", False),
+                "trend_duration_minutes": ti.get("trend_duration_minutes", 0),
+                "vix_prev": round(ti.get("vix_prev", 0.0), 2),
+                "banknifty_confirming": ti.get("banknifty_confirming"),
+                "bn_data_available": ti.get("bn_data_available", False),
+                "score_f1_breakout": bd.f1_breakout,
+                "score_f2_oi": bd.f2_oi,
+                "score_f3_duration": bd.f3_duration,
+                "score_f4_vix_level": bd.f4_vix_level,
+                "score_f5_vix_dir": bd.f5_vix_dir,
+                "score_f6_banknifty": bd.f6_banknifty,
+                "score_clamp_hit": bd.clamp_hit,
+                "trend_signal_threshold": self.params.trend_signal_threshold,
+            }
+
         return DecisionSnapshot(
             timestamp=now.isoformat(),
             strategy_id=self.strategy_id,
@@ -1780,6 +1824,7 @@ class PortfolioStrategy(BaseStrategy):
             outcome_pnl=outcome_pnl,
             held_minutes=held_minutes,
             shadow_blocked=shadow_blocked,
+            **trend_kwargs,
         )
 
     def _get_gamma_exposure(self) -> float:
@@ -1878,6 +1923,8 @@ class PortfolioStrategy(BaseStrategy):
         self._trend_entered = False
         self._trend_stopped = False
         self._trend_score = 0
+        self._trend_breakdown = None  # Phase A logging cache
+        self._trend_inputs = {}
         self._peak_spread_value = Decimal("0")
         self._day_pnl = 0.0
 

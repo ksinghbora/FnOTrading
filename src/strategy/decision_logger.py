@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 DECISIONS_DIR = Path("data/decisions")
 
-# CSV column order (fixed for ML pipeline stability)
+# CSV column order (fixed for ML pipeline stability — APPEND new columns
+# at the end, never reorder, so old parsers and downstream tools keep
+# working).
 COLUMNS = [
     "timestamp", "strategy_id", "leg", "decision", "mode",
     # Market state
@@ -35,6 +37,16 @@ COLUMNS = [
     "entry_premium", "quantity", "exit_reason",
     # Outcome (backfilled on exit)
     "outcome_pnl", "held_minutes",
+    # Phase A trend-score breakdown (Apr 18 — see memory/score_validation_plan.md).
+    # Inputs to score_trend_following so we can replay the new score from logs:
+    "breakout_strength", "oi_confirmed", "trend_duration_minutes",
+    "vix_prev", "banknifty_confirming", "bn_data_available",
+    # Per-factor contributions (sum equals rule_score unless score_clamp_hit):
+    "score_f1_breakout", "score_f2_oi", "score_f3_duration",
+    "score_f4_vix_level", "score_f5_vix_dir", "score_f6_banknifty",
+    "score_clamp_hit",
+    # Live threshold at decision time (catches future config drift):
+    "trend_signal_threshold",
 ]
 
 
@@ -121,6 +133,30 @@ class DecisionSnapshot:
 
     # Shadow blocking (paper mode: entered despite block)
     shadow_blocked: bool = False
+
+    # ─── Phase A trend-score breakdown (Apr 18 — score_validation_plan.md) ─
+    # Inputs to score_trend_following so we can replay the new score from logs.
+    # These are populated for TREND decisions; PREMIUM rows leave them at defaults.
+    breakout_strength: float = 0.0          # % move beyond breakout level
+    oi_confirmed: bool = False              # oi_breakout_confirm output
+    trend_duration_minutes: int = 0         # mins since trend signal first fired
+    vix_prev: float = 0.0                   # VIX at previous decision tick (factor 5)
+    banknifty_confirming: bool | None = None  # TRUE/FALSE/None per BN alignment
+    bn_data_available: bool = False         # FALSE = sticky-sentinel said BN unavailable
+
+    # Per-factor contributions to rule_score. Sum equals rule_score unless
+    # score_clamp_hit=True (then unclamped raw was outside [0, 100]).
+    score_f1_breakout: int = 0
+    score_f2_oi: int = 0
+    score_f3_duration: int = 0
+    score_f4_vix_level: int = 0
+    score_f5_vix_dir: int = 0
+    score_f6_banknifty: int = 0
+    score_clamp_hit: bool = False
+
+    # Live threshold at decision time — catches future config drift if
+    # someone tunes trend_signal_threshold without an audit trail.
+    trend_signal_threshold: int = 0
 
 
 class DecisionLogger:

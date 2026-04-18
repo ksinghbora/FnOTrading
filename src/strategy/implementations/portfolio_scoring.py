@@ -15,11 +15,36 @@ from __future__ import annotations
 
 import csv
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.strategy.indicators import BreakoutSignal
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ScoreBreakdown:
+    """Per-factor breakdown of a trend-following score.
+
+    Returned by :func:`score_trend_following_breakdown`. Carries the same
+    headline `score` and `reasons` that :func:`score_trend_following` returns,
+    plus the integer contribution of each individual factor and a flag for
+    whether the [0, 100] clamp was hit. Phase A of the Apr 18 score
+    validation plan logs every field per TREND decision so we can attribute
+    blocked entries to specific factors during the 30-day shadow window.
+
+    Invariant: `clamp_hit=False` implies `score == sum(f1..f6)`.
+    """
+    score: int = 0
+    reasons: list[str] = field(default_factory=list)
+    f1_breakout: int = 0
+    f2_oi: int = 0
+    f3_duration: int = 0
+    f4_vix_level: int = 0
+    f5_vix_dir: int = 0
+    f6_banknifty: int = 0
+    clamp_hit: bool = False
 
 
 def score_premium_selling(
@@ -117,15 +142,25 @@ def score_premium_selling(
     return score, reasons
 
 
-def score_trend_following(
+def score_trend_following_breakdown(
     breakout: BreakoutSignal,
     oi_confirmed: bool,
     trend_duration_minutes: int,
     vix: float,
     vix_prev: float = 0.0,
     banknifty_confirming: bool | None = None,
-) -> tuple[int, list[str]]:
-    """Score conditions for trend following (0-100, clamped at boundaries).
+) -> ScoreBreakdown:
+    """Per-factor variant of :func:`score_trend_following`.
+
+    Returns a :class:`ScoreBreakdown` carrying the headline score, the
+    same human-readable reasons, AND the integer contribution of each
+    individual factor (so the decision logger can attribute blocked
+    entries during the 30-day shadow window — see
+    `memory/score_validation_plan.md`).
+
+    The scoring math is the canonical implementation; the back-compat
+    :func:`score_trend_following` wrapper just projects this to
+    `(score, reasons)` to keep existing callers and tests untouched.
 
     Calibrated for Indian markets (Apr 18 2026 review):
 
@@ -143,45 +178,47 @@ def score_trend_following(
 
     Score is clamped to [0, 100] before return so the value is comparable
     against a fixed threshold; the docstring "0-100" promise is now real
-    rather than aspirational.
+    rather than aspirational. When the clamp fires, `clamp_hit=True` and
+    `score != sum(f1..f6)` — the per-factor fields hold the unclamped
+    contributions for honest attribution.
     """
-    score = 0
-    reasons: list[str] = []
+    bd = ScoreBreakdown()
 
     if not breakout.direction:
-        return 0, ["no breakout"]
+        bd.reasons = ["no breakout"]
+        return bd
 
     # 1. Breakout strength (+30)
     if breakout.strength >= 0.5:
-        score += 30
-        reasons.append(f"breakout={breakout.strength:.2f}% strong")
+        bd.f1_breakout = 30
+        bd.reasons.append(f"breakout={breakout.strength:.2f}% strong")
     elif breakout.strength >= 0.3:
-        score += 15
-        reasons.append(f"breakout={breakout.strength:.2f}% moderate")
+        bd.f1_breakout = 15
+        bd.reasons.append(f"breakout={breakout.strength:.2f}% moderate")
 
     # 2. OI confirmation (+25)
     if oi_confirmed:
-        score += 25
-        reasons.append("OI confirmed")
+        bd.f2_oi = 25
+        bd.reasons.append("OI confirmed")
 
     # 3. Trend sustained (+25)
     if trend_duration_minutes >= 30:
-        score += 25
-        reasons.append(f"sustained={trend_duration_minutes}min")
+        bd.f3_duration = 25
+        bd.reasons.append(f"sustained={trend_duration_minutes}min")
     elif trend_duration_minutes >= 15:
-        score += 12
-        reasons.append(f"sustained={trend_duration_minutes}min early")
+        bd.f3_duration = 12
+        bd.reasons.append(f"sustained={trend_duration_minutes}min early")
 
     # 4. VIX level adequate (+10) — reduced from +20 (Apr 18). Factor 5
     # below now captures the "regime supports this direction" signal that
     # was previously bundled in here. Keeping both at +20/+10 each was
     # double-counting and inflating scores ~30% for trending VIX days.
     if vix >= 14:
-        score += 10
-        reasons.append(f"VIX={vix:.1f} supports trend")
+        bd.f4_vix_level = 10
+        bd.reasons.append(f"VIX={vix:.1f} supports trend")
     elif vix >= 11:
-        score += 5
-        reasons.append(f"VIX={vix:.1f} low for trend")
+        bd.f4_vix_level = 5
+        bd.reasons.append(f"VIX={vix:.1f} low for trend")
 
     # 5. VIX direction (+10 / -15) — ported from trend-improvements 766df2e.
     # Rising VIX + UP breakout = contradiction (fear rising while buying = fake).
@@ -192,18 +229,18 @@ def score_trend_following(
         vix_rising = vix > vix_prev * 1.02
         if breakout.direction == "UP":
             if vix_rising:
-                score -= 15
-                reasons.append(f"VIX_rising={vix:.1f}>{vix_prev:.1f} contradicts UP")
+                bd.f5_vix_dir = -15
+                bd.reasons.append(f"VIX_rising={vix:.1f}>{vix_prev:.1f} contradicts UP")
             else:
-                score += 10
-                reasons.append("VIX_stable/falling supports UP")
+                bd.f5_vix_dir = 10
+                bd.reasons.append("VIX_stable/falling supports UP")
         else:  # DOWN
             if vix_rising:
-                score += 10
-                reasons.append(f"VIX_rising={vix:.1f} confirms DOWN")
+                bd.f5_vix_dir = 10
+                bd.reasons.append(f"VIX_rising={vix:.1f} confirms DOWN")
             else:
-                score -= 15
-                reasons.append("VIX_falling contradicts DOWN(bounce risk)")
+                bd.f5_vix_dir = -15
+                bd.reasons.append("VIX_falling contradicts DOWN(bounce risk)")
 
     # 6. BankNifty sector confirmation (+5 / -20) — ported from 766df2e,
     # asymmetry recalibrated Apr 18. BN follows NIFTY ~80% unconditionally
@@ -211,17 +248,50 @@ def score_trend_following(
     # weak-info case; divergence is the rare high-info case. Old +10/-15
     # was backward — common case earned more than rare case.
     if banknifty_confirming is True:
-        score += 5
-        reasons.append("BankNifty confirming")
+        bd.f6_banknifty = 5
+        bd.reasons.append("BankNifty confirming")
     elif banknifty_confirming is False:
-        score -= 20
-        reasons.append("BankNifty diverging(sector-only move)")
+        bd.f6_banknifty = -20
+        bd.reasons.append("BankNifty diverging(sector-only move)")
 
     # Clamp to 0-100 — keeps the threshold comparison semantically clean.
     # Without clamp, max possible was ~110 (90 base + 10 VIXdir + 5 BN)
     # which silently shifted what the 60-threshold "means" relative to
-    # the historical backtest.
-    return max(0, min(100, score)), reasons
+    # the historical backtest. Track whether clamp fired so the decision
+    # logger can flag rows where attribution sums won't match the score.
+    raw = (
+        bd.f1_breakout + bd.f2_oi + bd.f3_duration
+        + bd.f4_vix_level + bd.f5_vix_dir + bd.f6_banknifty
+    )
+    clamped = max(0, min(100, raw))
+    bd.clamp_hit = (raw != clamped)
+    bd.score = clamped
+    return bd
+
+
+def score_trend_following(
+    breakout: BreakoutSignal,
+    oi_confirmed: bool,
+    trend_duration_minutes: int,
+    vix: float,
+    vix_prev: float = 0.0,
+    banknifty_confirming: bool | None = None,
+) -> tuple[int, list[str]]:
+    """Score conditions for trend following (0-100, clamped at boundaries).
+
+    Thin back-compat wrapper around :func:`score_trend_following_breakdown`
+    that returns just the headline `(score, reasons)`. New callers that
+    need per-factor attribution should use the breakdown function directly.
+    """
+    bd = score_trend_following_breakdown(
+        breakout=breakout,
+        oi_confirmed=oi_confirmed,
+        trend_duration_minutes=trend_duration_minutes,
+        vix=vix,
+        vix_prev=vix_prev,
+        banknifty_confirming=banknifty_confirming,
+    )
+    return bd.score, bd.reasons
 
 
 # ─── IV Rank Baseline (52-week VIX context) ──────────────────────────
