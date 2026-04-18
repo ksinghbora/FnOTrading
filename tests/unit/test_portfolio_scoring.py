@@ -11,7 +11,12 @@ the score arithmetic readable.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.strategy.implementations.portfolio_scoring import (
+    compute_iv_rank,
+    iv_rank_shadow_adj,
+    load_iv_rank_baseline,
     score_premium_selling,
     score_trend_following,
 )
@@ -146,3 +151,222 @@ class TestScoreTrendFollowing:
         # +30 + 25 + 25 + 0 = 80
         assert score == 80
         assert not any(r.startswith("VIX=") for r in reasons)
+
+
+class TestScoreTrendFollowingVixDirection:
+    """VIX direction confirmation (factor 5) — ported from trend-improvements."""
+
+    def test_vix_rising_on_up_breakout_subtracts_fifteen(self):
+        # Same baseline as test_strong_confirmed_sustained_max (=100), then
+        # VIX_prev triggers: 15.0 > 14.0 * 1.01 = 14.14 → rising → -15.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.0,
+        )
+        assert score == 85  # 100 - 15
+        assert any("contradicts UP" in r for r in reasons)
+
+    def test_vix_stable_on_up_breakout_adds_ten(self):
+        # vix=15.0, vix_prev=14.95 → 14.95 * 1.01 = 15.10 > 15.0 → not rising.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.95,
+        )
+        # Capped at 100 (would be 110); function doesn't clamp, so check raw
+        assert score == 110  # 100 + 10
+        assert any("VIX_stable/falling supports UP" in r for r in reasons)
+
+    def test_vix_rising_on_down_breakout_adds_ten(self):
+        # DOWN breakout + rising VIX = real selling, +10.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="DOWN", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.0,
+        )
+        assert score == 110  # 100 + 10
+        assert any("confirms DOWN" in r for r in reasons)
+
+    def test_vix_falling_on_down_breakout_subtracts_fifteen(self):
+        # DOWN breakout + falling VIX = bounce risk, -15.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="DOWN", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=15.5,
+        )
+        assert score == 85  # 100 - 15
+        assert any("contradicts DOWN" in r for r in reasons)
+
+    def test_vix_prev_below_one_percent_jitter_treated_as_stable(self):
+        # vix=15.0, vix_prev=14.9 → 14.9 * 1.01 = 15.049 > 15.0 → not rising.
+        # The 1% threshold filters intraday VIX jitter.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=14.9,
+        )
+        assert score == 110  # treated as stable → +10
+        assert any("supports UP" in r for r in reasons)
+
+    def test_vix_prev_zero_skips_branch(self):
+        # Default vix_prev=0.0 → branch skipped (back-compat with old callers).
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            vix_prev=0.0,
+        )
+        assert score == 100
+        assert not any("VIX_rising" in r or "VIX_stable" in r for r in reasons)
+
+
+class TestScoreTrendFollowingBankNifty:
+    """BankNifty sector confirmation (factor 6) — ported from trend-improvements."""
+
+    def test_banknifty_confirming_adds_ten(self):
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            banknifty_confirming=True,
+        )
+        assert score == 110
+        assert any("BankNifty confirming" in r for r in reasons)
+
+    def test_banknifty_diverging_subtracts_fifteen(self):
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            banknifty_confirming=False,
+        )
+        assert score == 85
+        assert any("diverging" in r for r in reasons)
+
+    def test_banknifty_unknown_no_adjustment(self):
+        # None means "not yet built / unavailable" — must not penalise.
+        score, reasons = score_trend_following(
+            breakout=_bs(direction="UP", strength=0.6),
+            oi_confirmed=True, trend_duration_minutes=45, vix=15.0,
+            banknifty_confirming=None,
+        )
+        assert score == 100
+        assert not any("BankNifty" in r for r in reasons)
+
+
+class TestComputeIvRank:
+    """IV Rank arithmetic — null-safe under degenerate baselines."""
+
+    def test_midpoint_returns_fifty(self):
+        assert compute_iv_rank(vix=15.0, vix_52w_high=20.0, vix_52w_low=10.0) == 50.0
+
+    def test_at_low_returns_zero(self):
+        assert compute_iv_rank(vix=10.0, vix_52w_high=20.0, vix_52w_low=10.0) == 0.0
+
+    def test_at_high_returns_hundred(self):
+        assert compute_iv_rank(vix=20.0, vix_52w_high=20.0, vix_52w_low=10.0) == 100.0
+
+    def test_above_high_returns_above_hundred(self):
+        # We don't clamp — caller's job to interpret. Above-52w-high is a
+        # legitimate signal worth seeing.
+        result = compute_iv_rank(vix=22.0, vix_52w_high=20.0, vix_52w_low=10.0)
+        assert result == 120.0
+
+    def test_zero_high_returns_none(self):
+        # Baseline unavailable (e.g. CSV missing) → None, not 0.
+        assert compute_iv_rank(vix=15.0, vix_52w_high=0.0, vix_52w_low=0.0) is None
+
+    def test_inverted_range_returns_none(self):
+        # Defensive — bad data shouldn't crash the strategy.
+        assert compute_iv_rank(vix=15.0, vix_52w_high=10.0, vix_52w_low=20.0) is None
+
+
+class TestIvRankShadowAdj:
+    """Shadow-mode adjustment brackets."""
+
+    def test_unavailable_returns_zero(self):
+        adj, reason = iv_rank_shadow_adj(None)
+        assert adj == 0
+        assert "unavailable" in reason
+
+    def test_below_thirty_subtracts_fifteen(self):
+        adj, reason = iv_rank_shadow_adj(20.0)
+        assert adj == -15
+        assert "thin_premium" in reason
+
+    def test_thirty_to_fifty_subtracts_eight(self):
+        adj, reason = iv_rank_shadow_adj(40.0)
+        assert adj == -8
+        assert "below_avg" in reason
+
+    def test_at_fifty_no_adjustment(self):
+        adj, reason = iv_rank_shadow_adj(50.0)
+        assert adj == 0
+        assert "acceptable" in reason
+
+    def test_above_fifty_no_adjustment(self):
+        adj, _ = iv_rank_shadow_adj(85.0)
+        assert adj == 0
+
+
+class TestLoadIvRankBaseline:
+    """CSV ingestion — tolerant of column variants, returns (0,0) on failure."""
+
+    def test_missing_file_returns_zeros(self, tmp_path: Path):
+        result = load_iv_rank_baseline(tmp_path / "nope.csv")
+        assert result == (0.0, 0.0)
+
+    def test_canonical_columns_date_and_close(self, tmp_path: Path):
+        csv = tmp_path / "vix.csv"
+        csv.write_text(
+            "date,close\n"
+            "2025-01-01T09:15:00,12.0\n"
+            "2025-01-01T15:30:00,13.0\n"  # last tick of day → 13.0 wins
+            "2025-01-02T15:30:00,18.0\n"
+            "2025-01-03T15:30:00,15.0\n"
+        )
+        high, low = load_iv_rank_baseline(csv)
+        assert high == 18.0
+        assert low == 13.0
+
+    def test_alt_columns_ts_and_vix(self, tmp_path: Path):
+        # The recorder went through a "ts/vix" naming era — must still load.
+        csv = tmp_path / "vix.csv"
+        csv.write_text(
+            "ts,vix\n"
+            "2025-01-01T15:30:00,12.0\n"
+            "2025-01-02T15:30:00,20.0\n"
+        )
+        high, low = load_iv_rank_baseline(csv)
+        assert high == 20.0
+        assert low == 12.0
+
+    def test_only_last_252_days_used(self, tmp_path: Path):
+        # Generate 300 days; the first 48 should be ignored.
+        csv = tmp_path / "vix.csv"
+        lines = ["date,close\n"]
+        # Days 0-47: VIX=99 (would dominate if window honoured wrong)
+        for i in range(48):
+            lines.append(f"2024-{(i // 30) + 1:02d}-{(i % 30) + 1:02d}T15:30:00,99.0\n")
+        # Days 48-299: VIX in 10-20 range (these should be the only ones counted)
+        for i in range(48, 300):
+            lines.append(f"2025-{((i - 48) // 30) + 1:02d}-{((i - 48) % 30) + 1:02d}T15:30:00,15.0\n")
+        csv.write_text("".join(lines))
+        high, low = load_iv_rank_baseline(csv)
+        assert high == 15.0
+        assert low == 15.0  # 99.0 must not appear
+
+    def test_unparseable_close_skipped(self, tmp_path: Path):
+        csv = tmp_path / "vix.csv"
+        csv.write_text(
+            "date,close\n"
+            "2025-01-01T15:30:00,not-a-number\n"
+            "2025-01-02T15:30:00,15.0\n"
+        )
+        high, low = load_iv_rank_baseline(csv)
+        # Bad row dropped silently; only the parseable day survives
+        assert high == 15.0
+        assert low == 15.0
+
+    def test_empty_csv_returns_zeros(self, tmp_path: Path):
+        csv = tmp_path / "vix.csv"
+        csv.write_text("date,close\n")  # header only
+        assert load_iv_rank_baseline(csv) == (0.0, 0.0)
