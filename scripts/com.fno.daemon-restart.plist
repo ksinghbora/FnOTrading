@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job: bounce the FnO trading daemon at 08:50 IST every weekday so the
+  one-shot holiday guard in src/main.py:830 re-evaluates against today's date.
+
+  Install:
+      cp scripts/com.fno.daemon-restart.plist ~/Library/LaunchAgents/
+      launchctl load ~/Library/LaunchAgents/com.fno.daemon-restart.plist
+
+  Uninstall:
+      launchctl unload ~/Library/LaunchAgents/com.fno.daemon-restart.plist
+      rm ~/Library/LaunchAgents/com.fno.daemon-restart.plist
+
+  Inspect schedule:
+      launchctl list | grep fno
+      launchctl print gui/$UID/com.fno.daemon-restart
+
+  Trigger manually (for smoke tests):
+      launchctl start com.fno.daemon-restart
+
+  StartCalendarInterval times are in the host's local timezone. This Mac is
+  Asia/Kolkata, so 08:50 fires at 08:50 IST — 25 minutes before market open.
+  NSE-holiday filtering happens inside restart_daemon.sh.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fno.daemon-restart</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/kundanbora/Documents/FnOTrading/scripts/restart_daemon.sh</string>
+    </array>
+
+    <!-- Mon (1) through Fri (5) at 08:50 local time. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>50</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>50</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>50</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>50</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>50</integer>
+        </dict>
+    </array>
+
+    <!-- Don't fire on `launchctl load` — only on the calendar trigger. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Capture script stdout/stderr for forensics if a restart misfires. -->
+    <key>StandardOutPath</key>
+    <string>/Users/kundanbora/Documents/FnOTrading/logs/restart_daemon.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/kundanbora/Documents/FnOTrading/logs/restart_daemon.stderr.log</string>
+
+    <!-- launchd's default PATH is minimal; uv is invoked by absolute path
+         inside the script, so this is belt-and-braces only. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
