@@ -167,11 +167,34 @@ class DecisionLogger:
         dl.log(DecisionSnapshot(timestamp=..., ...))
     """
 
-    def __init__(self, output_dir: Path = DECISIONS_DIR):
+    def __init__(
+        self,
+        output_dir: Path = DECISIONS_DIR,
+        truncate_per_session: bool = False,
+    ):
+        """
+        Args:
+            output_dir: where to write decisions_YYYY-MM-DD.csv files.
+            truncate_per_session: if True, the first open of each date
+                truncates the file instead of appending. Set to True for
+                replay/backtest contexts so re-running the same window
+                doesn't pile duplicate rows on top of prior runs. Live
+                trading must keep this False — within a session the same
+                file is opened once and many decisions are appended; we
+                must not lose rows on reconnect or restart mid-day.
+                See scripts/replay_23days.py for the replay caller.
+        """
         self._dir = output_dir
         self._current_date: str = ""
         self._writer = None
         self._file = None
+        self._truncate_per_session = truncate_per_session
+        # Track which dates this logger instance has already truncated
+        # within its own lifetime. A multi-day replay rotates through
+        # dates; once we've truncated date D, subsequent opens of D in
+        # the same replay run must APPEND (otherwise we'd lose rows the
+        # logger itself just wrote earlier in the run).
+        self._truncated_dates: set[str] = set()
 
     def log(self, snap: DecisionSnapshot) -> None:
         """Write one decision row to today's CSV."""
@@ -199,13 +222,25 @@ class DecisionLogger:
         self.close()
         self._dir.mkdir(parents=True, exist_ok=True)
         path = self._dir / f"decisions_{date_str}.csv"
-        is_new = not path.exists()
 
-        self._file = open(path, "a", newline="")
+        # Decide write mode. Truncation is one-shot per date per logger
+        # instance — see comment on _truncated_dates above.
+        if self._truncate_per_session and date_str not in self._truncated_dates:
+            mode = "w"
+            self._truncated_dates.add(date_str)
+            wrote_header_now = True
+        else:
+            mode = "a"
+            wrote_header_now = not path.exists()
+
+        self._file = open(path, mode, newline="")
         self._writer = csv.writer(self._file)
         self._current_date = date_str
 
-        if is_new:
+        if wrote_header_now:
             self._writer.writerow(COLUMNS)
             self._file.flush()
-            logger.info(f"[DECISION] Created {path}")
+            if mode == "w":
+                logger.info(f"[DECISION] Truncated + reopened {path} (replay mode)")
+            else:
+                logger.info(f"[DECISION] Created {path}")

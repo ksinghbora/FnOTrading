@@ -164,8 +164,32 @@ class PortfolioStrategy(BaseStrategy):
         self._last_iv_rank_log_minute: int = -1
 
         # ─── Decision snapshot logger (ML data collection) ────
-        self._decision_logger = DecisionLogger()
+        # Replay strategy IDs end in "_replay" (set by ReplayBacktestEngine
+        # at scripts/replay_23days.py). For replay we truncate the per-day
+        # CSV on first write so re-running the same window doesn't pile
+        # duplicate rows on top of prior runs — the Apr 17 file showed 6×
+        # duplication from successive replays (Apr 18 2026 audit). Live
+        # trading must keep append mode so a mid-day reconnect doesn't
+        # lose decisions already written that morning.
+        is_replay = strategy_id.endswith("_replay")
+        self._decision_logger = DecisionLogger(truncate_per_session=is_replay)
         self._last_skip_minute: int = -1  # throttle SKIP logs to 1/5min
+
+        # ─── Stale-tick sanity check (Apr 18 2026) ─────────────
+        # Reject impossibly large spot moves between ticks. Concrete trigger:
+        # the 13-day chain replay showed Apr 17 entered a TREND debit_spread
+        # at spot=22505 followed 28 minutes later by an IC entry at spot=24268
+        # — a phantom 7.8% move from corrupted recorder snapshots. Real NIFTY
+        # has never moved 2% in a minute without circuit-breakers halting
+        # trade, so any tick exceeding that ceiling is treated as bad data
+        # (broker reconnect cache, stale ChainBuilder snapshot, partial Kite
+        # WebSocket frame). On_tick refuses to advance state on such ticks.
+        # Live and replay both pay this cost — the strategy code is shared.
+        self._last_sane_spot: float = 0.0
+        self._last_sane_spot_ts: datetime | None = None
+        # Throttle the warn log so a sustained bad-data window doesn't spam.
+        self._last_stale_log_minute: int = -1
+        self._stale_ticks_today: int = 0
 
         # ─── Paper trading: shadow blocking (log but don't block) ──
         # force=False because strategy __init__ is not a process boundary —
@@ -213,6 +237,47 @@ class PortfolioStrategy(BaseStrategy):
 
     async def on_tick(self, tick: Tick) -> Signal | None:
         now = self.ctx.clock.now()
+
+        # ─── Stale-tick / impossible-move guard ───────────────
+        # Read spot once at the top of the tick. If the move from the last
+        # accepted spot exceeds SANITY_MAX_MOVE_PCT_PER_MINUTE pro-rated by
+        # elapsed seconds, refuse to advance any state and bail. Protects
+        # against:
+        #   • Live: Kite WebSocket reconnects that replay a stale cached LTP
+        #     on a different ChainBuilder generation
+        #   • Replay: chain-recorder corruption (Apr 17 2026: snapshots
+        #     toggled between spot=22505 and spot=24278 within 28 min)
+        # First tick of a session is always accepted (no baseline to compare).
+        # Stop/exit logic still runs on subsequent good ticks — this only
+        # rejects the bad tick itself, not the strategy's response cycle.
+        SANITY_MAX_MOVE_PCT_PER_MINUTE = 2.0
+        try:
+            spot_now_dec = self.ctx.get_spot_price(self.params.underlying)
+            spot_now = float(spot_now_dec) if spot_now_dec else 0.0
+        except Exception:
+            spot_now = 0.0
+        if spot_now > 0:
+            if self._last_sane_spot > 0 and self._last_sane_spot_ts is not None:
+                dt_s = (now - self._last_sane_spot_ts).total_seconds()
+                # Only police adjacent ticks; large gaps (overnight, market
+                # halts, lunch on certain segments) are not data corruption.
+                if 0 < dt_s <= 120:
+                    move_pct = abs(spot_now - self._last_sane_spot) / self._last_sane_spot * 100
+                    allowed = SANITY_MAX_MOVE_PCT_PER_MINUTE * (dt_s / 60.0)
+                    if move_pct > allowed:
+                        self._stale_ticks_today += 1
+                        cur_min = now.hour * 60 + now.minute
+                        if self._last_stale_log_minute != cur_min:
+                            self._last_stale_log_minute = cur_min
+                            logger.warning(
+                                f"[{self.strategy_id}] [STALE_TICK] rejecting spot={spot_now:.2f} "
+                                f"prev={self._last_sane_spot:.2f} dt={dt_s:.0f}s "
+                                f"move={move_pct:.2f}% > allowed={allowed:.2f}% "
+                                f"(stale_today={self._stale_ticks_today})"
+                            )
+                        return None
+            self._last_sane_spot = spot_now
+            self._last_sane_spot_ts = now
 
         # Expiry rollover
         new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
@@ -1960,6 +2025,14 @@ class PortfolioStrategy(BaseStrategy):
         self._bn_morning_low = 0.0
         self._bn_unavailable = False
         self._last_iv_rank_log_minute = -1
+
+        # Stale-tick guard: clear cross-session baseline so the first tick
+        # tomorrow is always accepted (gap-up/gap-down is not corruption).
+        # Day-counter resets so the warn log is per-session.
+        self._last_sane_spot = 0.0
+        self._last_sane_spot_ts = None
+        self._last_stale_log_minute = -1
+        self._stale_ticks_today = 0
 
         if self._regime_detector:
             self._regime_detector.reset_session()

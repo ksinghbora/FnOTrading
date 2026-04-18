@@ -471,6 +471,127 @@ class TestDecisionLoggerPhaseA:
         assert row["score_clamp_hit"] == "False"
 
 
+class TestDecisionLoggerTruncateMode:
+    """The truncate_per_session flag (Apr 18 2026) prevents replay re-runs
+    from piling duplicate rows on the same per-day CSV.
+
+    Concrete trigger: scripts/replay_23days.py was invoked 6× during the
+    Apr 18 chain-quality investigation. Each run reopened
+    decisions_2026-04-17.csv in append mode, producing 6× duplication of
+    every ENTER/EXIT row. This made any per-trade analysis (win rate,
+    P&L attribution, factor activation) wrong by a factor of 6.
+
+    Live trading must keep the original append behavior — within a single
+    session, we open the file at session start and append decisions all
+    day. Truncate mode is only safe when the caller knows the file
+    content can be discarded (replay over historical chain data).
+    """
+
+    def test_truncate_mode_overwrites_existing_file(self, tmp_path):
+        """Second logger instance with truncate=True wipes the first run's rows."""
+        import csv as _csv
+        from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+
+        # First "replay run" — writes 3 rows.
+        dl1 = DecisionLogger(output_dir=tmp_path, truncate_per_session=True)
+        for i in range(3):
+            dl1.log(DecisionSnapshot(
+                timestamp="2026-04-17T09:30:00+05:30",
+                strategy_id="portfolio_replay", leg="PREMIUM",
+                decision="ENTER", mode="iron_condor",
+                spot=24000.0 + i, rule_score=70,
+            ))
+        dl1.close()
+
+        # Second "replay run" — should TRUNCATE, then write 2 new rows.
+        dl2 = DecisionLogger(output_dir=tmp_path, truncate_per_session=True)
+        for i in range(2):
+            dl2.log(DecisionSnapshot(
+                timestamp="2026-04-17T09:30:00+05:30",
+                strategy_id="portfolio_replay", leg="PREMIUM",
+                decision="ENTER", mode="iron_condor",
+                spot=25000.0 + i, rule_score=80,
+            ))
+        dl2.close()
+
+        with open(tmp_path / "decisions_2026-04-17.csv", newline="") as f:
+            rows = list(_csv.DictReader(f))
+        # Only the second run's rows survive — the first 3 were truncated.
+        assert len(rows) == 2
+        assert all(int(float(r["spot"])) >= 25000 for r in rows)
+
+    def test_append_mode_preserves_existing_rows(self, tmp_path):
+        """Default (truncate=False) keeps prior rows — required for live."""
+        import csv as _csv
+        from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+
+        # First write — 2 rows
+        dl1 = DecisionLogger(output_dir=tmp_path)  # default: append
+        for i in range(2):
+            dl1.log(DecisionSnapshot(
+                timestamp="2026-04-17T09:30:00+05:30",
+                strategy_id="portfolio_live", leg="PREMIUM",
+                decision="ENTER", mode="iron_condor", rule_score=70,
+            ))
+        dl1.close()
+
+        # Second logger instance (e.g. process restart mid-day) — should append.
+        dl2 = DecisionLogger(output_dir=tmp_path)
+        dl2.log(DecisionSnapshot(
+            timestamp="2026-04-17T13:30:00+05:30",
+            strategy_id="portfolio_live", leg="PREMIUM",
+            decision="EXIT", mode="iron_condor", rule_score=0,
+        ))
+        dl2.close()
+
+        with open(tmp_path / "decisions_2026-04-17.csv", newline="") as f:
+            rows = list(_csv.DictReader(f))
+        # All 3 rows preserved (2 ENTER + 1 EXIT).
+        assert len(rows) == 3
+        assert sum(1 for r in rows if r["decision"] == "ENTER") == 2
+        assert sum(1 for r in rows if r["decision"] == "EXIT") == 1
+
+    def test_truncate_only_on_first_open_per_date(self, tmp_path):
+        """Within a single replay run, multi-day rotation must not re-truncate.
+
+        A replay loops through dates; the logger opens 04-17 first
+        (truncate), writes rows, then 04-18 (truncate), then maybe back
+        to 04-17 if the strategy emits an EXIT for a position that
+        spanned days. The second open of 04-17 in the SAME logger
+        instance must APPEND, not truncate — otherwise we'd lose the
+        morning's rows the moment the afternoon's logic ran.
+        """
+        import csv as _csv
+        from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+
+        dl = DecisionLogger(output_dir=tmp_path, truncate_per_session=True)
+        # Day 1 morning
+        dl.log(DecisionSnapshot(
+            timestamp="2026-04-17T09:30:00+05:30",
+            strategy_id="portfolio_replay", leg="PREMIUM",
+            decision="ENTER", mode="iron_condor", rule_score=70,
+        ))
+        # Day 2 morning
+        dl.log(DecisionSnapshot(
+            timestamp="2026-04-18T09:30:00+05:30",
+            strategy_id="portfolio_replay", leg="PREMIUM",
+            decision="ENTER", mode="iron_condor", rule_score=72,
+        ))
+        # Day 1 afternoon — same date as first row; must NOT wipe it.
+        dl.log(DecisionSnapshot(
+            timestamp="2026-04-17T15:15:00+05:30",
+            strategy_id="portfolio_replay", leg="PREMIUM",
+            decision="EXIT", mode="iron_condor", rule_score=0,
+        ))
+        dl.close()
+
+        with open(tmp_path / "decisions_2026-04-17.csv", newline="") as f:
+            day1_rows = list(_csv.DictReader(f))
+        # Both the morning ENTER and afternoon EXIT are present.
+        assert len(day1_rows) == 2
+        assert {r["decision"] for r in day1_rows} == {"ENTER", "EXIT"}
+
+
 class TestComputeIvRank:
     """IV Rank arithmetic — null-safe under degenerate baselines."""
 
