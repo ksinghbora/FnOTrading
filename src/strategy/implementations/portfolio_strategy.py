@@ -131,9 +131,14 @@ class PortfolioStrategy(BaseStrategy):
         self._last_skip_minute: int = -1  # throttle SKIP logs to 1/5min
 
         # ─── Paper trading: shadow blocking (log but don't block) ──
+        # force=False because strategy __init__ is not a process boundary —
+        # if a caller (test harness, A/B script) has pre-set os.environ,
+        # respect it. Production main() still calls load_env() at startup
+        # with the default force=True. See scripts/auto_auth.load_env
+        # docstring for the full rationale.
         import os
         from scripts.auto_auth import load_env
-        load_env()
+        load_env(force=False)
         self._paper_mode = os.environ.get("PAPER_TRADING", "false").lower() == "true"
 
     def get_subscriptions(self) -> Subscription:

@@ -26,16 +26,39 @@ from kiteconnect import KiteConnect
 ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
-def load_env():
-    """Load .env file into os.environ (overwrites empty values)."""
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, value = line.partition("=")
-                key, value = key.strip(), value.strip()
-                if value:  # Only set if .env has a non-empty value
-                    os.environ[key] = value
+def load_env(force: bool = True):
+    """Load .env file into os.environ.
+
+    Args:
+        force: When True (default, production behavior), every .env value
+            overwrites os.environ — preserves the operator-expected
+            invariant that .env is canonical at process start. When False,
+            uses setdefault semantics — caller-set values win, .env only
+            fills in missing keys. Use force=False when calling from
+            inside long-lived objects (strategy __init__, etc.) where
+            the caller may have intentionally pre-set os.environ for an
+            A/B test or one-off override.
+
+    Background: prior to Apr 18, load_env() always clobbered. Two A/B
+    harnesses (ab_portfolio_filters.py, ab_advisor_confluence.py) had to
+    work around this by patching the .env file itself in try/finally
+    blocks because pre-setting os.environ from the harness was wiped on
+    strategy import. force=False restores the natural override path for
+    those callers. See commits 13f3656 / 25ddfb2 for the workaround
+    those harnesses still carry — they could be simplified now.
+    """
+    if not ENV_FILE.exists():
+        return
+    for line in ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if not value:
+            continue
+        if force or key not in os.environ:
+            os.environ[key] = value
 
 
 def get_request_token(api_key: str, user_id: str, password: str, totp_secret: str) -> str:
