@@ -16,6 +16,15 @@ class BaseStrategyParams(BaseModel):
     max_loss: Decimal = Decimal("5000")
     product: str = "NRML"
     use_weekly_expiry: bool = True
+
+    # Shadow-only mode — strategy generates signals (full decision pipeline
+    # runs, decisions logged to CSV) but the runner short-circuits before
+    # calling the OMS. Used to A/B challenger strategies against a single
+    # live "champion" strategy on the same paper-trading capital pool, so
+    # P&L attribution stays clean. The decision-log captures
+    # entry/exit/score so the challenger's hypothetical performance can be
+    # reconstructed offline. Default False — strategies trade as usual.
+    shadow_only: bool = False
     # VIX filter — Indian-calibrated bands (see src/core/constants.py).
     # Strategy subclasses override these with band-appropriate values.
     vix_entry_min: float = 0.0        # Skip entry if VIX < this (e.g., 13 = no premium below complacency)

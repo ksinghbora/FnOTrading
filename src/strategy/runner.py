@@ -233,6 +233,28 @@ class StrategyRunner:
         if not self._clock.is_market_open():
             logger.warning(f"Signal from {signal.strategy_id} ignored — market not open")
             return
+        # Shadow-only gate (Apr 18 plan-review fix): if the strategy is flagged
+        # shadow_only, log the would-be order and return WITHOUT touching the
+        # OMS. The strategy still flips its internal "_entered" flags so its
+        # subsequent on_tick exit logic fires; it just never moves capital.
+        # The decision logger has already captured the entry/exit context, so
+        # offline reconstruction can compare champion vs. shadow P&L.
+        strategy = self._strategies.get(signal.strategy_id)
+        shadow = bool(getattr(strategy.params, "shadow_only", False)) if strategy else False
+        if shadow:
+            leg_summary = ", ".join(
+                f"{leg.order_side.value if hasattr(leg.order_side, 'value') else leg.order_side}"
+                f" {leg.quantity}@{leg.tradingsymbol}"
+                for leg in signal.legs
+            )
+            logger.info(
+                f"[SHADOW_ORDER] {signal.strategy_id} signal_type={signal.signal_type} "
+                f"legs=[{leg_summary}] — no OMS routing (shadow_only=True)"
+            )
+            # Persist state so the strategy's "entered" flags survive a crash;
+            # without this a shadow-restart would re-fire the same entry signal.
+            await self._persist_state(strategy)
+            return
         try:
             await self._order_callback(signal)
             # Persist state after a signal-driven entry/exit lands. Catches
