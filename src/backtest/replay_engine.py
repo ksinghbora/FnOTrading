@@ -55,27 +55,98 @@ logger = logging.getLogger(__name__)
 IST = pytz.timezone("Asia/Kolkata")
 
 
-def _load_chain_snapshots(snapshot_dir: Path, trading_days: list[date]) -> dict:
+def _load_chain_snapshots(
+    snapshot_dir: Path,
+    trading_days: list[date],
+    underlying: str | None = None,
+    skip_degraded: bool = True,
+    accept_partial: bool = True,
+) -> tuple[dict, dict]:
     """Load chain snapshot CSVs for the given trading days.
 
-    Returns: {date: {minute_key: {(strike, option_type): row_dict}}}
-    where minute_key = "HH:MM" for O(1) lookup per tick.
+    Args:
+        snapshot_dir: Directory of chain_YYYY-MM-DD.csv files.
+        trading_days: Days to load.
+        underlying: If set, only rows whose `underlying` column matches are
+            loaded. Required when the chain CSVs mix multiple underlyings
+            (the recorder writes NIFTY+BANKNIFTY into the same file by date).
+            If None, loads everything (legacy behavior).
+        skip_degraded: When True (default), days classified as `degraded` or
+            `weekend` by `audit_chain_quality.audit_file` are skipped. These
+            days produce wrong P&L if replayed (Apr 17 audit found 6 weekend
+            days and 1 zero-IV day silently corrupting a 23-day replay).
+        accept_partial: When True (default), `partial` days (LTP only, no
+            bid/ask) are loaded with a warning. The replay engine compensates
+            by routing fills through LTP-only logic. Set False to gate them
+            out entirely.
+
+    Returns:
+        (snapshots, quality_report) where snapshots is the chain map
+        {date: {minute_key: {(strike, option_type): row_dict}}} and
+        quality_report is {date: status_string}. The replay engine uses the
+        report to surface skipped/degraded days in its result dict.
     """
+    # Local import to avoid a heavy module load when this function is unused
+    from scripts.audit_chain_quality import audit_file
+
     snapshots: dict[date, dict[str, dict[tuple[float, str], dict]]] = {}
+    quality_report: dict[date, str] = {}
+    bid_gt_ask_count = 0
 
     for day in trading_days:
         filepath = snapshot_dir / f"chain_{day.isoformat()}.csv"
         if not filepath.exists():
+            quality_report[day] = "missing"
             continue
+
+        # Quality gate (Apr 17 audit): refuse to replay degraded / weekend
+        # days unless the caller explicitly opts in.
+        rep = audit_file(filepath)
+        quality_report[day] = rep.status
+        if rep.status == "weekend":
+            logger.warning(
+                f"[REPLAY_BACKTEST] SKIP {day} ({rep.weekday}): weekend file "
+                f"(should already be in _quarantine — check recorder gate)"
+            )
+            continue
+        if rep.status == "degraded" and skip_degraded:
+            logger.warning(
+                f"[REPLAY_BACKTEST] SKIP {day} ({rep.weekday}): DEGRADED "
+                f"(price={rep.priceable_pct:.0f}% iv={rep.iv_pct:.0f}% "
+                f"bidask={rep.bidask_pct:.0f}%)"
+            )
+            continue
+        if rep.status == "partial":
+            if not accept_partial:
+                logger.warning(
+                    f"[REPLAY_BACKTEST] SKIP {day} ({rep.weekday}): PARTIAL "
+                    f"and accept_partial=False"
+                )
+                continue
+            logger.warning(
+                f"[REPLAY_BACKTEST] PARTIAL {day} ({rep.weekday}): bidask=0% — "
+                f"fills will use LTP only"
+            )
 
         day_data: dict[str, dict[tuple[float, str], dict]] = defaultdict(dict)
         with open(filepath) as f:
             reader = csv.DictReader(f)
             for row in reader:
+                if underlying and row.get("underlying") != underlying:
+                    continue
                 dt = datetime.fromisoformat(row["time"])
                 minute_key = dt.strftime("%H:%M")
                 strike = float(row["strike"])
                 opt_type = row["option_type"]
+                bid = float(row.get("bid_price", 0) or 0)
+                ask = float(row.get("ask_price", 0) or 0)
+
+                # Sanity assertion: bid <= ask. A crossed book (bid > ask)
+                # is broker junk. We don't drop the row (LTP may still be
+                # usable) but we count it for the post-run report.
+                if bid > 0 and ask > 0 and bid > ask:
+                    bid_gt_ask_count += 1
+
                 day_data[minute_key][(strike, opt_type)] = {
                     "ltp": float(row["ltp"]),
                     "iv": float(row.get("iv", 0)),
@@ -85,14 +156,20 @@ def _load_chain_snapshots(snapshot_dir: Path, trading_days: list[date]) -> dict:
                     "vega": float(row.get("vega", 0)),
                     "oi": int(row.get("oi", 0)),
                     "volume": int(row.get("volume", 0)),
-                    "bid_price": float(row.get("bid_price", 0)),
-                    "ask_price": float(row.get("ask_price", 0)),
+                    "bid_price": bid,
+                    "ask_price": ask,
                 }
 
         if day_data:
             snapshots[day] = dict(day_data)
 
-    return snapshots
+    if bid_gt_ask_count > 0:
+        logger.warning(
+            f"[REPLAY_BACKTEST] {bid_gt_ask_count} crossed-book rows (bid > ask) "
+            f"loaded — these will be skipped by the price-resolution helper"
+        )
+
+    return snapshots, quality_report
 
 
 class ReplayBacktestEngine:
@@ -113,6 +190,8 @@ class ReplayBacktestEngine:
         num_days: int | None = None,
         start_date: date | None = None,
         initial_capital: float = 1_000_000,
+        skip_degraded: bool = True,
+        accept_partial: bool = True,
     ) -> dict:
         """Run backtest with recorded chain snapshot data.
 
@@ -126,9 +205,15 @@ class ReplayBacktestEngine:
             num_days: Limit trading days.
             start_date: Start from this date.
             initial_capital: Starting capital.
+            skip_degraded: Skip days flagged `degraded` by audit_chain_quality
+                (Apr 17 audit default — prevents the kind of zero-IV / zero
+                bid-ask contamination that produced bogus 23-day P&L).
+            accept_partial: Allow `partial` days (LTP only, no bid/ask depth).
+                Set False for the strictest run.
 
         Returns:
-            Dict with metrics, daily_results, equity_curve.
+            Dict with metrics, daily_results, equity_curve, plus
+            `chain_quality` (per-day status) and `skipped_days` (list).
         """
         strategy_id = strategy_id or f"{strategy_name}_replay"
         params = strategy_params or {}
@@ -157,14 +242,31 @@ class ReplayBacktestEngine:
         if not trading_days:
             return {"error": "No trading days in range"}
 
-        # Load chain snapshots
-        chain_snaps = _load_chain_snapshots(snapshot_dir, trading_days)
+        # Load chain snapshots — filter by underlying so e.g. BANKNIFTY rows
+        # in the same file don't pollute NIFTY strike selection. The quality
+        # gate skips degraded/weekend days inside the loader.
+        chain_snaps, quality_report = _load_chain_snapshots(
+            snapshot_dir, trading_days,
+            underlying=underlying,
+            skip_degraded=skip_degraded,
+            accept_partial=accept_partial,
+        )
         days_with_snapshots = len(chain_snaps)
         total_snapshot_points = sum(len(v) for v in chain_snaps.values())
+        skipped_days = sorted(
+            d for d, status in quality_report.items()
+            if status in ("weekend", "missing")
+            or (status == "degraded" and skip_degraded)
+            or (status == "partial" and not accept_partial)
+        )
+        # Drop skipped days from the trading_days list so the engine doesn't
+        # try to step through them and produce phantom no-trade days.
+        trading_days = [d for d in trading_days if d not in skipped_days]
 
         logger.info(
             f"[REPLAY_BACKTEST] Loaded {len(trading_days)} days, "
-            f"{days_with_snapshots} with snapshots ({total_snapshot_points} timepoints)"
+            f"{days_with_snapshots} with snapshots ({total_snapshot_points} timepoints) — "
+            f"skipped {len(skipped_days)} days for quality"
         )
 
         # ─── Create infrastructure ────────────────────────────────
@@ -203,15 +305,36 @@ class ReplayBacktestEngine:
         _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
 
         # ─── Order callback ─────────────────────────────────────
+        # Realistic-fill rule: cross the spread.
+        #   BUY  → fill at ASK   (you take the offer)
+        #   SELL → fill at BID   (you hit the bid)
+        # Falls back to LTP + 5bps simulator slippage if bid/ask aren't usable
+        # (zero or inverted — happens when the underlying recorder had no quote).
+        # This is the dominant friction in Indian options. ATM spreads are
+        # 30-100 bps; OTM wings are 200-500 bps. The previous flat 5 bps
+        # understated real fills by ~10x for OTM trades.
+        from src.core.types import OrderSide as _OS
+        fill_method_counts = {"bid_ask": 0, "ltp_slip": 0}
+
         async def order_callback(signal_obj):
             orders = []
             for leg in signal_obj.legs:
-                ltp = feed.get_ltp(leg.instrument_token)
-                price = float(leg.price) if float(leg.price) > 0 else float(ltp or 0)
-                if price <= 0:
-                    continue
+                tick = feed.get_tick(leg.instrument_token)
+                ltp = float(tick.ltp) if tick and tick.ltp else 0
+                bid = float(tick.bid_price) if tick and tick.bid_price else 0
+                ask = float(tick.ask_price) if tick and tick.ask_price else 0
 
-                price = fill_sim.simulate_fill(price, leg.order_side)
+                if bid > 0 and ask > 0 and bid < ask:
+                    # Cross the spread — realistic for market orders
+                    price = ask if leg.order_side == _OS.BUY else bid
+                    fill_method_counts["bid_ask"] += 1
+                else:
+                    base = float(leg.price) if float(leg.price) > 0 else ltp
+                    if base <= 0:
+                        continue
+                    price = fill_sim.simulate_fill(base, leg.order_side)
+                    fill_method_counts["ltp_slip"] += 1
+
                 broker.set_ltp(leg.tradingsymbol, price)
 
                 order_id = await broker.place_order(
@@ -404,6 +527,12 @@ class ReplayBacktestEngine:
         metrics["snapshot_coverage_pct"] = round(
             100 * snapshot_hits / max(1, snapshot_hits + bs_fallbacks), 1
         )
+        metrics["fills_via_bid_ask"] = fill_method_counts["bid_ask"]
+        metrics["fills_via_ltp_slip"] = fill_method_counts["ltp_slip"]
+        total_fills = fill_method_counts["bid_ask"] + fill_method_counts["ltp_slip"]
+        metrics["bid_ask_fill_pct"] = round(
+            100 * fill_method_counts["bid_ask"] / max(1, total_fills), 1
+        )
 
         result = {
             "strategy": strategy_name,
@@ -422,6 +551,11 @@ class ReplayBacktestEngine:
             "daily_results": daily_results,
             "equity_curve": equity_curve,
             "final_pnl": round(float(running_pnl), 2),
+            # Apr 17 audit: surface data-quality decisions in the result so
+            # downstream tooling can warn / refuse to publish results from
+            # contaminated runs.
+            "chain_quality": {d.isoformat(): s for d, s in quality_report.items()},
+            "skipped_days": [d.isoformat() for d in skipped_days],
         }
 
         logger.info(

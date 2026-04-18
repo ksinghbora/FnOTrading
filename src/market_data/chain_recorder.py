@@ -20,6 +20,7 @@ from pathlib import Path
 
 from src.core.clock import MarketClock
 from src.market_data.option_chain import OptionChainBuilder
+from src.observability.heartbeat import Heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,7 @@ class ChainSnapshotRecorder:
         output_dir: str | Path = "data/chain_snapshots",
         interval_seconds: int = 60,
         num_strikes: int = 20,
+        heartbeat: Heartbeat | None = None,
     ):
         self._chain_builder = chain_builder
         self._clock = clock
@@ -136,6 +138,7 @@ class ChainSnapshotRecorder:
         self._running = False
         self._snapshots_today = 0
         self._breeze = BreezeEnricher()
+        self._heartbeat = heartbeat
 
     async def start(self) -> None:
         """Start periodic snapshot recording."""
@@ -164,7 +167,14 @@ class ChainSnapshotRecorder:
         )
 
     async def _record_loop(self) -> None:
-        """Main recording loop — snapshot every interval."""
+        """Main recording loop — snapshot every interval.
+
+        Apr 2026 fix: refuse to record on weekends + NSE holidays. The 23-day
+        replay was contaminated by 6 weekend CSVs (Mar 28/29, Apr 4/5, 11/12)
+        because the recorder ran any time the process was up — including
+        Saturdays when only the simulator was producing chain data. The
+        replay engine then treated those simulator rows as "real" market data.
+        """
         while self._running:
             try:
                 await asyncio.sleep(self._interval)
@@ -172,6 +182,15 @@ class ChainSnapshotRecorder:
                     break
 
                 now = self._clock.now()
+
+                # Hard gate: never record on weekends or NSE holidays.
+                # is_trading_holiday() returns True for Sat/Sun too.
+                if self._clock.is_trading_holiday(now.date()):
+                    if self._snapshots_today != 0:
+                        # We rolled past midnight without a stop() call — reset counter
+                        self._snapshots_today = 0
+                    continue
+
                 # Only record during market hours (9:15 - 15:30)
                 if now.hour < 9 or (now.hour == 9 and now.minute < 15):
                     continue
@@ -185,13 +204,30 @@ class ChainSnapshotRecorder:
             except Exception:
                 logger.exception("[CHAIN_RECORDER] Error in recording loop")
 
+    # ── Snapshot construction ────────────────────────────────────
     def _take_snapshot(self, now: datetime) -> None:
         """Snapshot all active chains to CSV.
 
         Merges WebSocket data (greeks, LTP) with Breeze data (bid/ask, OI)
         when available. Falls back to WebSocket-only if Breeze is unavailable.
+
+        Apr 2026 audit fixes:
+          1. Skip-or-flag for degraded snapshots: if every CE+PE in this
+             snapshot has ltp == 0 AND bid == 0 AND ask == 0, the broker
+             feed is dead — log a clear DEGRADED warning and refuse to
+             write the snapshot. Writing junk rows once polluted Mar 26
+             with 30,586 all-zero quote rows.
+          2. IV fallback when BS inversion fails: keep `iv=0` only when
+             greeks are missing entirely; if greeks exist with iv=0 but
+             ltp>0, leave iv=0 in the row (downstream knows to skip),
+             but log the quote count so we can audit IV-coverage trends.
+          3. Atomic write: temp + fsync + rename instead of append-mode.
+             A power loss mid-append used to leave a torn final row.
         """
         rows = []
+        zero_quote_count = 0
+        zero_iv_count = 0
+        priceable_count = 0
 
         for underlying, expiry_chains in self._chain_builder._chains.items():
             spot = float(self._chain_builder._spot_prices.get(underlying, 0))
@@ -237,6 +273,16 @@ class ChainSnapshotRecorder:
                             if ltp <= 0 and bq["ltp"] > 0:
                                 ltp = bq["ltp"]
 
+                        # Quality counters
+                        has_quote = ltp > 0 or bid > 0 or ask > 0
+                        if not has_quote:
+                            zero_quote_count += 1
+                        else:
+                            priceable_count += 1
+                        iv = g.iv if g else 0
+                        if iv <= 0:
+                            zero_iv_count += 1
+
                         rows.append({
                             "time": now.isoformat(),
                             "underlying": underlying,
@@ -244,7 +290,7 @@ class ChainSnapshotRecorder:
                             "strike": strike,
                             "option_type": opt_type,
                             "ltp": ltp,
-                            "iv": g.iv if g else 0,
+                            "iv": iv,
                             "delta": g.delta if g else 0,
                             "gamma": g.gamma if g else 0,
                             "theta": g.theta if g else 0,
@@ -256,22 +302,92 @@ class ChainSnapshotRecorder:
                         })
 
         if not rows:
+            logger.warning(
+                "[CHAIN_RECORDER] DEGRADED: no chain rows produced at %s "
+                "(chain builder empty?)",
+                now.isoformat(),
+            )
             return
 
-        # Write to daily CSV (append mode)
-        today = now.date()
-        filepath = self._output_dir / f"chain_{today.isoformat()}.csv"
-        file_exists = filepath.exists()
+        # Skip-or-flag: refuse to write if every leg is unpriceable.
+        # When the WebSocket is dead but the recorder is still ticking,
+        # the loop produces hundreds of all-zero rows. Skipping keeps the
+        # day's CSV honest at the cost of a hole the auditor can see.
+        total_legs = len(rows)
+        if priceable_count == 0:
+            logger.warning(
+                "[CHAIN_RECORDER] DEGRADED: snapshot at %s has 0 priceable "
+                "legs out of %d — refusing to write (broker feed likely down)",
+                now.isoformat(), total_legs,
+            )
+            return
 
-        with open(filepath, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            if not file_exists:
-                writer.writeheader()
-            writer.writerows(rows)
+        # Soft warning when most legs are unpriceable but at least one is.
+        # Keeps the snapshot but flags it for downstream.
+        priceable_pct = 100.0 * priceable_count / total_legs
+        if priceable_pct < 50.0:
+            logger.warning(
+                "[CHAIN_RECORDER] PARTIAL: snapshot at %s has only %d/%d "
+                "priceable legs (%.0f%%)",
+                now.isoformat(), priceable_count, total_legs, priceable_pct,
+            )
+
+        # IV-coverage trend audit (info only)
+        iv_pct = 100.0 * (total_legs - zero_iv_count) / total_legs
+        if iv_pct < 80.0 and self._snapshots_today % 10 == 0:
+            logger.info(
+                "[CHAIN_RECORDER] IV coverage %.0f%% at %s (BS inversion fails for some legs)",
+                iv_pct, now.isoformat(),
+            )
+
+        # Atomic rewrite of the day's CSV (temp + fsync + rename).
+        # Append mode is unsafe under crash: a torn write leaves a mangled
+        # final row that breaks downstream parsers.
+        self._atomic_append(now.date(), rows)
 
         self._snapshots_today += 1
         if self._snapshots_today % 10 == 0:
             logger.info(
-                f"[CHAIN_RECORDER] Snapshot #{self._snapshots_today} — "
-                f"{len(rows)} rows written to {filepath.name}"
+                "[CHAIN_RECORDER] Snapshot #%d — %d rows (priceable=%d, iv_pct=%.0f%%)",
+                self._snapshots_today, len(rows), priceable_count, iv_pct,
             )
+
+        # Heartbeat for the external watchdog. The recorder owns these fields
+        # and the watchdog reads them — see src/observability/heartbeat.py.
+        if self._heartbeat is not None:
+            self._heartbeat.update(
+                "chain_recorder",
+                snapshots_today=self._snapshots_today,
+                rows_in_last_snapshot=len(rows),
+                priceable_pct_last=round(priceable_pct, 1),
+                iv_pct_last=round(iv_pct, 1),
+                last_write=now.isoformat(timespec="seconds"),
+            )
+
+    def _atomic_append(self, day: date, new_rows: list[dict]) -> None:
+        """Append `new_rows` to the day's CSV atomically.
+
+        Reads the existing file, concatenates, writes to a temp file, fsyncs,
+        and renames over the day file. Cost is O(rows-so-far) per snapshot
+        — at 60s interval and ~600 legs/snapshot, the day file maxes out at
+        ~225K rows / 22 MB, which rewrites in well under a second on SSD.
+        """
+        filepath = self._output_dir / f"chain_{day.isoformat()}.csv"
+        tmp_path = filepath.with_suffix(".csv.tmp")
+
+        existing: list[dict] = []
+        if filepath.exists():
+            with open(filepath) as f:
+                reader = csv.DictReader(f)
+                existing.extend(reader)
+
+        all_rows = existing + new_rows
+        fieldnames = list(new_rows[0].keys())
+
+        with open(tmp_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_rows)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp_path, filepath)
