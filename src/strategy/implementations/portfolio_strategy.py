@@ -109,6 +109,12 @@ class PortfolioStrategy(BaseStrategy):
         self._entry_debit: Decimal = Decimal("0")
         self._max_spread_value: Decimal = Decimal("0")
         self._peak_spread_value: Decimal = Decimal("0")
+        # Trend fill-pending mirrors _prem_fill_pending — entry_debit was
+        # captured from chain quotes; once the OMS reports actual fills we
+        # reconcile so SL/PT math is anchored to the price we really paid.
+        # Apr 18 quant: chain-quote-only debits drift up to ~3% from real fills
+        # on illiquid spreads, which can flip a 50% PT into a 47% near-miss.
+        self._trend_fill_pending: bool = False
 
         # ─── Portfolio-level tracking ─────────────────────────
         self._day_pnl: float = 0.0
@@ -305,6 +311,25 @@ class PortfolioStrategy(BaseStrategy):
         if not self._bn_morning_high:
             self._build_banknifty_morning_range()
 
+        # Expiry-day force-exit (Apr 18 tech audit). The param
+        # `expiry_day_force_exit_at` (default 14:30) was already defined on
+        # BaseStrategyParams but never wired — entries were blocked on expiry
+        # day, but anything carried in from yesterday or a missed gate kept
+        # running into the 15:15 normal exit_time, eating the 14:30→15:15
+        # gamma-vertical window. Hard exit at the configured time on expiry
+        # day prevents 0DTE auto-exercise STT and gamma blow-ups.
+        if (
+            self._expiry
+            and now.date() == self._expiry
+            and now.time() >= self.params.expiry_day_force_exit_at
+        ):
+            if self._prem_entered:
+                return self._exit_premium("Expiry-day force-exit")
+            if self._trend_entered:
+                return self._exit_trend("Expiry-day force-exit")
+            # No positions — fall through (don't return; let evaluate happen
+            # in case some downstream gate still needs to run logging).
+
         # Time exit — close all open legs
         if now.time() >= self.params.exit_time:
             if self._prem_entered:
@@ -342,11 +367,12 @@ class PortfolioStrategy(BaseStrategy):
             signal = self._check_trend_exit()
             if signal:
                 return signal
-        elif not self._trend_stopped and now.time() >= time(10, 0):
-            # Paper mode: allow until 14:00 for data collection
-            # Live mode: only 10:00-10:30 — late-morning breakouts in high-VIX
-            # whipsaw too often (validated in 23-day chain replay, Apr 2026)
-            trend_cutoff = time(14, 0) if self._paper_mode else time(10, 30)
+        elif not self._trend_stopped and now.time() >= time(self.params.trend_entry_min_hour, 0):
+            # Apr 18 quant audit shifted min entry from 10:00 → 11:00 (params).
+            # Hour 10 entries had -₹244 EV / 40% WR vs hour 11+ at +₹680 / 58%.
+            # Live cutoff bumped from 10:30 → 14:00 so the window is the full
+            # 11:00-14:00 mid-day theta zone, not a 30-min sliver.
+            trend_cutoff = time(self.params.trend_entry_max_hour, 0)
             if now.time() < trend_cutoff:
                 # Check every 5 minutes, not every tick
                 cur_min = now.hour * 60 + now.minute
@@ -584,7 +610,14 @@ class PortfolioStrategy(BaseStrategy):
         return None
 
     def _enter_premium(self, vix: float) -> Signal | None:
-        """Route by Indian VIX band: no-trade <13, strangle 13-16, IC 16-22, no-trade >22."""
+        """Route by Indian VIX band (Apr 18 quant-rebalanced):
+            <13              → no trade (complacency)
+            [13, 16)         → strangle
+            [16, 20]         → IC (normal)
+            (20, 23)         → NO TRADE (toxic vol-of-vol band, see params)
+            [23, 28]         → IC (stressed; ic_vix_reduce_above halves size)
+            >28              → no trade (event risk)
+        """
         # Expiry-day 0DTE block — premium leg never enters when today == expiry
         expiry_block = self._check_expiry_day_block(self.params.underlying)
         if expiry_block:
@@ -596,19 +629,38 @@ class PortfolioStrategy(BaseStrategy):
                 f"< strangle_vix_min={self.params.strangle_vix_min} (complacency)"
             )
             return None
-        if vix > self.params.ic_vix_max:
-            logger.info(
-                f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
-                f"> ic_vix_max={self.params.ic_vix_max} (event/crash zone)"
-            )
-            return None
+        # Strangle band
         if vix < self.params.strangle_vix_max:
             return self._enter_strangle(vix)
-        # VIX in IC band 16-22 — wings handle expansion; fall back to strangle if IC unavailable
-        result = self._enter_iron_condor(vix)
-        if result:
-            return result
-        return self._enter_strangle(vix)
+        # IC normal band [16, 20]
+        if vix <= self.params.ic_vix_max:
+            result = self._enter_iron_condor(vix)
+            if result:
+                return result
+            # Fall through to strangle is dangerous in IC band — strangle's own
+            # vix_entry_max=16 will reject anyway, but we keep the call for
+            # log-trail visibility.
+            return self._enter_strangle(vix)
+        # No-trade gap (20, 23) — Apr 18 quant: -₹3,890 across 4 trades in Apr 13-17
+        if vix < self.params.ic_vix_stressed_min:
+            logger.info(
+                f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
+                f"in toxic gap ({self.params.ic_vix_max:.1f}, {self.params.ic_vix_stressed_min:.1f}) "
+                f"— vol-of-vol high, credit insufficient"
+            )
+            return None
+        # Stressed IC band [23, 28]
+        if vix <= self.params.ic_vix_stressed_max:
+            result = self._enter_iron_condor(vix)
+            if result:
+                return result
+            return None
+        # Above stressed max — pure event risk
+        logger.info(
+            f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
+            f"> ic_vix_stressed_max={self.params.ic_vix_stressed_max} (event/crash zone)"
+        )
+        return None
 
     # ─── Trend Leg Evaluation ─────────────────────────────────
 
@@ -861,6 +913,20 @@ class PortfolioStrategy(BaseStrategy):
 
     def _enter_iron_condor(self, vix: float) -> Signal | None:
         """Enter iron condor with delta shorts + fixed wings."""
+        # DTE gate (Apr 18 quant audit). NIFTY weekly Tuesday expiry.
+        # >5 days to expiry: theta accrual is too slow vs gamma/vega risk —
+        # 4 of 6 Apr 13 losing IC trades were Wed-of-prior-week (DTE=6,7).
+        # _expiry is set in set_context; calc DTE from clock.now() for replay safety.
+        if self._expiry:
+            now_date = self.ctx.clock.now().date()
+            dte = (self._expiry - now_date).days
+            if dte > self.params.ic_max_dte:
+                logger.info(
+                    f"[{self.strategy_id}] IC BLOCKED: DTE={dte} > ic_max_dte={self.params.ic_max_dte} "
+                    f"(theta/gamma asymmetry too poor)"
+                )
+                return None
+
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         if not chain or not chain.strikes:
             logger.warning(f"[{self.strategy_id}] IC BLOCKED: no option chain (strikes={len(chain.strikes) if chain else 0})")
@@ -929,9 +995,27 @@ class PortfolioStrategy(BaseStrategy):
         self._entry_premium = short_prem - long_prem
         self._peak_premium = self._entry_premium
 
-        # Minimum credit check
-        if self._entry_premium < Decimal("10"):
-            logger.warning(f"[{self.strategy_id}] IC BLOCKED: credit too low ({self._entry_premium})")
+        # Minimum credit check — Apr 18 mirror of strangle's premium_min_entry_credit
+        # rollback. Without resetting tokens/symbols/premium, a subsequent
+        # _check_premium_exit would see _prem_entered=False (good) but the leg
+        # symbols still populated — and a future ENTER would skip overwriting
+        # them in some code paths. Belt-and-suspenders: clear everything.
+        min_credit = Decimal(str(self.params.ic_min_entry_credit))
+        if self._entry_premium < min_credit:
+            logger.warning(
+                f"[{self.strategy_id}] IC BLOCKED: credit={self._entry_premium} "
+                f"< ic_min_entry_credit={min_credit} (likely stale wing fills)"
+            )
+            self._short_ce_token = 0
+            self._short_pe_token = 0
+            self._long_ce_token = 0
+            self._long_pe_token = 0
+            self._short_ce_symbol = ""
+            self._short_pe_symbol = ""
+            self._long_ce_symbol = ""
+            self._long_pe_symbol = ""
+            self._entry_premium = Decimal("0")
+            self._peak_premium = Decimal("0")
             return None
 
         self._prem_entered = True
@@ -1065,6 +1149,7 @@ class PortfolioStrategy(BaseStrategy):
             return None
 
         self._trend_entered = True
+        self._trend_fill_pending = True  # Reconcile entry_debit from real fills
         self._trend_quantity = self._base_quantity
         self._trend_entry_time = self.ctx.clock.now()
         self._trend_entry_spot = spot
@@ -1198,14 +1283,16 @@ class PortfolioStrategy(BaseStrategy):
         if change_pct < 0 and abs(change_pct) >= pt_pct:
             return self._exit_premium(f"Profit target: premium decayed {abs(change_pct):.1f}%")
 
-        # Stop loss (gamma-tightened, VIX-scaled for IC)
+        # Stop loss (gamma-tightened). Apr 18 quant audit REMOVED the VIX>20
+        # widening (`base_sl * 1.5` to 60%) — it was double-rationalized:
+        # the strategy already enters IC at ic_vix_reduce_above=20 with HALF
+        # quantity, so position-size protection is in place. Widening the stop
+        # ON TOP of half-size meant losers ran 50% further before triggering,
+        # converting -₹2,000 cuts into -₹3,000 cuts. The chain-replay sample
+        # showed 3 of 4 stressed-VIX IC trades stopped between 41-58% — every
+        # one of them would have been cut earlier at the original 40% gate.
         if self._prem_mode == "iron_condor":
-            base_sl = self.params.ic_stop_loss_pct
-            # IC in high VIX: premiums are fatter so noise is larger — widen stop
-            vix_now = self.ctx.get_vix()
-            if vix_now > 20:
-                base_sl = min(base_sl * 1.5, 80.0)  # 40% → 60%, capped at 80%
-            sl_pct = base_sl * sl_multiplier
+            sl_pct = self.params.ic_stop_loss_pct * sl_multiplier
         else:
             sl_pct = self.params.premium_stop_loss_pct * sl_multiplier
         if change_pct > sl_pct:
@@ -1287,6 +1374,7 @@ class PortfolioStrategy(BaseStrategy):
 
         self._prem_entered = False
         self._prem_stopped = True  # No re-entry same day — data shows re-entries are net negative
+        self._prem_fill_pending = False
         return exit_signal(self.strategy_id, legs, reason)
 
     # ─── Trend Exit ───────────────────────────────────────────
@@ -1295,6 +1383,31 @@ class PortfolioStrategy(BaseStrategy):
         """Monitor trend position (debit spread)."""
         if self._entry_debit <= 0:
             return None
+
+        # Reconcile entry debit from actual fills (Apr 18 quant). Mirrors
+        # _check_premium_exit's _prem_fill_pending block. Buy leg average_price
+        # is positive (we paid), sell leg average_price represents credit
+        # received — net debit = abs(buy) - abs(sell).
+        if getattr(self, '_trend_fill_pending', False):
+            positions = self.ctx.get_positions()
+            if positions:
+                buy_fill = Decimal("0")
+                sell_fill = Decimal("0")
+                for pos in positions:
+                    if pos.instrument_token == self._trend_buy_token:
+                        buy_fill = abs(pos.average_price)
+                    elif pos.instrument_token == self._trend_sell_token:
+                        sell_fill = abs(pos.average_price)
+                if buy_fill > 0 and sell_fill > 0:
+                    fill_debit = buy_fill - sell_fill
+                    if fill_debit > 0 and fill_debit != self._entry_debit:
+                        logger.info(
+                            f"[{self.strategy_id}] TREND fill reconciled: "
+                            f"chain={float(self._entry_debit):.2f} -> fill={float(fill_debit):.2f}"
+                        )
+                        self._entry_debit = fill_debit
+                        self._peak_spread_value = fill_debit
+                    self._trend_fill_pending = False
 
         buy_ltp = self.ctx.get_ltp(self._trend_buy_token)
         sell_ltp = self.ctx.get_ltp(self._trend_sell_token)
@@ -1370,6 +1483,7 @@ class PortfolioStrategy(BaseStrategy):
 
         self._trend_entered = False
         self._trend_stopped = True
+        self._trend_fill_pending = False
         return exit_signal(self.strategy_id, legs, reason)
 
     # ─── Logging & Attribution ─────────────────────────────────
@@ -1985,12 +2099,14 @@ class PortfolioStrategy(BaseStrategy):
         self._prem_mode = "idle"
         self._prem_score = 0
         self._peak_premium = Decimal("0")
+        self._prem_fill_pending = False
         self._trend_entered = False
         self._trend_stopped = False
         self._trend_score = 0
         self._trend_breakdown = None  # Phase A logging cache
         self._trend_inputs = {}
         self._peak_spread_value = Decimal("0")
+        self._trend_fill_pending = False
         self._day_pnl = 0.0
 
         # Reload AI day bias for new day
