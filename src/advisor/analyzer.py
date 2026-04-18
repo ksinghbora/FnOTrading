@@ -77,7 +77,9 @@ For each signal adjustment, think through:
 5. **What's my confidence?** (only high if the causal chain is clear and specific)
 
 ## Tunable Parameters
-- `signal_threshold` (60): Min score to enter. Higher = more selective.
+- `signal_threshold` (60): Premium-leg min score. Higher = more selective.
+- `trend_signal_threshold` (50): Trend-leg min score (lower because the trend
+  score function was rebalanced Apr 18 — max base 90 vs premium's 100).
 - `strangle_vix_max` (12.0): Strangle only below this VIX (above = Iron Condor with wings).
 - `premium_stop_loss_pct` (30.0): Exit premium leg at X% loss.
 - `ic_stop_loss_pct` (40.0): Exit IC at X% loss.

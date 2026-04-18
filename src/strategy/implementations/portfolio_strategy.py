@@ -199,7 +199,7 @@ class PortfolioStrategy(BaseStrategy):
             f"[{self.strategy_id}] Portfolio strategy started: "
             f"underlying={self.params.underlying} expiry={self._expiry} "
             f"premium_threshold={self.params.signal_threshold} "
-            f"trend_threshold={self.params.signal_threshold} "
+            f"trend_threshold={self.params.trend_signal_threshold} "
             f"advisor={'active' if self._confluence_enabled else 'shadow'} "
             f"day_bias={'loaded' if self._day_bias else 'none'}"
         )
@@ -602,7 +602,11 @@ class PortfolioStrategy(BaseStrategy):
             )
 
         ai_adj = self._trend_score - rule_score
-        trend_threshold = self.params.signal_threshold
+        # Use trend-specific threshold (default 50) — the trend score function
+        # was rebalanced Apr 18 (max base 100 → 90), so the shared 60
+        # threshold became materially restrictive. See params.py for the
+        # rationale and scripts/analyze_score_rebalance_impact.py for the data.
+        trend_threshold = self.params.trend_signal_threshold
 
         trend_would_block = self._trend_score < trend_threshold
         if trend_would_block and self._paper_mode:

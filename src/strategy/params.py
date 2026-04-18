@@ -165,8 +165,19 @@ class PortfolioParams(BaseStrategyParams):
     Premium sellers on range-bound days, trend follower on trending days.
     """
 
-    # Signal gating — minimum score (out of 100) to trigger a trade
-    signal_threshold: int = 60           # Phase 2 minimum (trend or premium fallback)
+    # Signal gating — minimum score (out of 100) to trigger a trade.
+    # Trend got its own threshold Apr 18 because the score_trend_following
+    # rebalance reduced max base from 100 → 90 (factor 4 VIX-level halved
+    # to remove double-count with factor 5 VIX-direction). A scenario-bounded
+    # analysis on 4,958 historical TREND ENTERs (factor4_only scenario, the
+    # honest apples-to-apples view since old rule_score predates factors 5/6)
+    # showed 32.7% would be blocked at threshold=60 — too restrictive — but
+    # only 8.0% at threshold=50, which lands in the "instrument and decide
+    # after 30 days of shadow data" band. Blocked entries cluster on high-VIX
+    # days where the factor 4 reduction is intentionally selective.
+    # See scripts/analyze_score_rebalance_impact.py.
+    signal_threshold: int = 60           # Premium leg (score_premium_selling unchanged → 100 max)
+    trend_signal_threshold: int = 50     # Trend leg (score_trend_following rebalanced → 90 max base)
     phase1_threshold: int = 75           # Phase 1 (9:30-10:00): only high-conviction premium
     entry_time: time = time(9, 30)       # Wait for morning range to form
     exit_time: time = time(15, 15)
