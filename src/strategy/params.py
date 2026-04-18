@@ -234,9 +234,13 @@ class PortfolioParams(BaseStrategyParams):
 
     # Trend mode (debit spread) — used when trending
     trend_spread_width_strikes: int = 2
-    trend_stop_loss_pct: float = 20.0       # Tighter — cut trend losers fast (was 25, OOS-validated)
-    trend_profit_target_pct: float = 55.0    # Let winners run slightly bigger (was 50)
-    trend_trailing_stop_pct: float = 15.0    # Reduced trail — still protects gains (was 25)
+    # SL/PT blended back to 25/50 (Apr 18) after Apr 17 aggressive tightening
+    # (20/55) was found to clip too many spreads during normal intraday
+    # whipsaws — paper-cut death rate exceeded the marginal PT gain.
+    # Trail stays at 15 — that piece passed the second look.
+    trend_stop_loss_pct: float = 25.0        # was 20 (Apr 17), reverted to OOS-validated mid
+    trend_profit_target_pct: float = 50.0    # was 55 (Apr 17), reverted to OOS-validated mid
+    trend_trailing_stop_pct: float = 15.0    # unchanged — protects gains without choking winners
     breakout_confirmation_pct: float = 0.5
 
 
@@ -251,11 +255,20 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     # Override base 22 cap because trend works through stressed regimes too.
     vix_entry_min: float = 12.0              # Below 12: too calm for breakouts
     vix_entry_max: float = 25.0              # Above 25: event risk overwhelms direction
-    entry_time: time = time(10, 0)            # Wait for morning range to fully form (was 9:45)
+    entry_time: time = time(10, 30)           # Apr 18: bumped 10:00 → 10:30 — gives BankNifty
+                                              # confirmation signal (built by 9:30) a full hour
+                                              # to develop a clean directional bias before entry.
     exit_time: time = time(15, 0)            # Exit before close
     breakout_confirmation_pct: float = 0.7   # Stronger breakout required (was 0.5 — too many false signals)
-    spread_width_strikes: int = 3            # 150pts on NIFTY (3 x 50pt) — better reward/risk
-    stop_loss_pct: float = 35.0              # Cut losers faster (was 50 — too wide)
+    spread_width_strikes: int = 2            # Apr 18: 3 → 2 to align with PortfolioParams trend
+                                             # block. Narrower spread = lower max profit but
+                                             # also lower max loss; back-tests showed the
+                                             # 3-strike width hit max value <8% of trades.
+    stop_loss_pct: float = 50.0              # Apr 18: 35 → 50. Apr-17 audit overshot here —
+                                             # debit spreads need slack through the 11:00-13:00
+                                             # chop window or the trail-stop never gets a chance
+                                             # to lock real profit. Trailing_stop is the active
+                                             # exit; this SL is the disaster cap.
     profit_target_pct: float = 50.0          # Unchanged — good balance
     trailing_stop_pct: float = 15.0          # Tighter trail (was 25), activation threshold also fixed
     max_trades_per_day: int = 1              # Reduced from 2 — avoid whipsaw re-entries
