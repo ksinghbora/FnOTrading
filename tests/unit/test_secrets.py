@@ -32,8 +32,11 @@ class TestGetSecret:
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("KITE_API_SECRET") == "from-env"
 
-    def test_default_returned_when_neither_source_has_value(self, monkeypatch):
+    def test_default_returned_when_neither_source_has_value(self, monkeypatch, tmp_path):
         monkeypatch.delenv("KITE_API_SECRET", raising=False)
+        # chdir away from the repo so the .env tertiary fallback (Apr 20)
+        # doesn't accidentally pick up a real value.
+        monkeypatch.chdir(tmp_path)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("KITE_API_SECRET", default="fallback") == "fallback"
 
@@ -52,6 +55,83 @@ class TestGetSecret:
              patch.object(secrets, "_keyring") as kr:
             kr.get_password.side_effect = secrets._KeyringError("backend down")
             assert secrets.get_secret("KITE_API_SECRET") == "from-env"
+
+
+class TestDotenvFallback:
+    """The .env tertiary fallback was added Apr 20 after Claude Desktop /
+    Claude Code was found to inject `ANTHROPIC_API_KEY=""` into the shell,
+    which then shadowed the real value in .env (pydantic-settings
+    prioritises os.environ over .env). Without these fallback tests the
+    advisor silently disables itself and we only notice via Telegram.
+    """
+
+    def test_dotenv_picked_up_when_env_is_empty_string(self, monkeypatch, tmp_path):
+        # Empty env value masks the real .env line — must not win.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=sk-ant-real-key\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("ANTHROPIC_API_KEY") == "sk-ant-real-key"
+
+    def test_dotenv_picked_up_when_env_unset(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=sk-ant-real-key\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("ANTHROPIC_API_KEY") == "sk-ant-real-key"
+
+    def test_env_still_wins_over_dotenv_when_non_empty(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "from-env")
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=from-dotenv\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("ANTHROPIC_API_KEY") == "from-env"
+
+    def test_keychain_still_wins_over_dotenv(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+        env_file = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=from-dotenv\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", True), \
+             patch.object(secrets, "_keyring") as kr:
+            kr.get_password.return_value = "from-keychain"
+            assert secrets.get_secret("ANTHROPIC_API_KEY") == "from-keychain"
+
+    def test_dotenv_handles_quoted_value(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("X", raising=False)
+        (tmp_path / ".env").write_text('X="quoted-value"\n')
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("X") == "quoted-value"
+
+    def test_dotenv_skips_comments_and_blanks(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("X", raising=False)
+        (tmp_path / ".env").write_text(
+            "# header comment\n"
+            "\n"
+            "Y=other\n"
+            "X=hit\n"
+        )
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("X") == "hit"
+
+    def test_dotenv_missing_file_returns_default(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("X", raising=False)
+        # tmp_path has no .env
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("X", default="dflt") == "dflt"
+
+    def test_dotenv_empty_value_treated_as_unset(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("X", raising=False)
+        (tmp_path / ".env").write_text("X=\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets.get_secret("X", default="dflt") == "dflt"
 
 
 class TestSetSecret:

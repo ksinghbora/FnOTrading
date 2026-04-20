@@ -59,10 +59,18 @@ def keyring_available() -> bool:
 
 
 def get_secret(key: str, default: str = "") -> str:
-    """Resolve a secret. Keychain wins; env is fallback.
+    """Resolve a secret. Keychain wins; env then .env are fallbacks.
 
-    Empty-string values from the keychain are treated as not-set, so a
-    user can blank a stale entry without seeing it shadow a newer .env value.
+    Empty-string values from any source are treated as not-set, so a
+    user can blank a stale entry without seeing it shadow a newer value.
+
+    The .env fallback (Apr 20 fix) matters because Claude Desktop /
+    Claude Code injects ANTHROPIC_API_KEY="" into the shell to prevent
+    its own key from leaking. Pydantic-settings prioritises os.environ
+    over the .env file, so the empty env value would shadow the real
+    one in .env and the morning advisor would silently disable itself
+    with "No API key configured". By re-reading .env directly here we
+    short-circuit that shadowing for any caller using get_secret.
     """
     if _KEYRING_AVAILABLE:
         try:
@@ -75,7 +83,40 @@ def get_secret(key: str, default: str = "") -> str:
     env_value = os.environ.get(key, "")
     if env_value:
         return env_value
+
+    dotenv_value = _read_dotenv_value(key)
+    if dotenv_value:
+        return dotenv_value
+
     return default
+
+
+def _read_dotenv_value(key: str, dotenv_path: str = ".env") -> str:
+    """Read a single key from .env. Returns "" if file missing or key absent.
+
+    Hand-rolled (no python-dotenv dep) to keep this module self-contained.
+    Handles `KEY=value`, `KEY = value`, ignores comments and blank lines,
+    strips surrounding quotes. Stops at the first match — duplicate keys
+    in .env take the first occurrence (matches pydantic-settings behavior).
+    """
+    try:
+        with open(dotenv_path, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                if k.strip() != key:
+                    continue
+                v = v.strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+                    v = v[1:-1]
+                return v
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.debug(f"[SECRETS] .env read failed for {key}: {e}")
+    return ""
 
 
 def set_secret(key: str, value: str) -> bool:
