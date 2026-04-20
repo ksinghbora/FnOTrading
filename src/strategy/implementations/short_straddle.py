@@ -236,6 +236,15 @@ class ShortStraddleStrategy(BaseStrategy):
             f"total_premium={self._entry_premium} qty={self._quantity} "
             f"lots={adjusted_lots}"
         )
+        self._log_decision(
+            "ENTER",
+            leg="PREMIUM",
+            mode="straddle",
+            rule_score=score,
+            threshold=60,
+            entry_premium=float(self._entry_premium),
+            quantity=self._quantity,
+        )
 
         return entry_signal(self.strategy_id, legs, f"Straddle @ {self._atm_strike}")
 
@@ -381,6 +390,15 @@ class ShortStraddleStrategy(BaseStrategy):
             f"[EXIT] strategy={self.strategy_id} reason={reason} "
             f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        self._log_decision(
+            "EXIT",
+            leg="PREMIUM",
+            mode="straddle",
+            entry_premium=float(self._entry_premium),
+            quantity=self._quantity,
+            exit_reason=reason,
+            outcome_pnl=float(pnl_estimate) * self._quantity,
         )
         self._entered = False
         self._stopped_for_day = True

@@ -6,6 +6,7 @@ from typing import Any
 
 from src.core.models import OHLC, Order, Signal, Subscription, Tick
 from src.core.types import StrategyState
+from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
 from src.strategy.params import BaseStrategyParams
 from src.utils.log_tags import Tag
 
@@ -31,6 +32,26 @@ class BaseStrategy(ABC):
         self.params = params
         self.state = StrategyState.IDLE
         self._context: Any = None  # Set by StrategyRunner
+        # ─── Decision snapshot logger (Apr 20 — was portfolio-only) ──
+        # Lives on every strategy now so the 23-day chain replay and
+        # live paper trading can emit one row per ENTER/EXIT for every
+        # active strategy, not just portfolio_1. The Apr 20 audit found
+        # decisions_2026-04-20.csv had only 2 rows total (1 ENTER + 1
+        # EXIT for portfolio_1) despite ic_1, strangle_1, straddle_1,
+        # and trend_1 all running — they had no logger at all. With
+        # GDFL 18-month tick data arriving, we need decisions from
+        # every strategy to do honest A/B attribution.
+        # Replay strategy IDs end in "_replay" (set by ReplayBacktestEngine)
+        # — truncate per session so a re-run doesn't pile rows on top of
+        # the prior run. Live trading must keep append mode (mid-day
+        # reconnect must not lose decisions written that morning).
+        is_replay = strategy_id.endswith("_replay")
+        self._decision_logger: DecisionLogger = DecisionLogger(
+            truncate_per_session=is_replay
+        )
+        # Entry timestamp — set by _log_decision on ENTER, read on EXIT
+        # to compute held_minutes without each strategy tracking it.
+        self._decision_entry_ts: Any = None
 
     def set_context(self, context: "StrategyContext") -> None:
         """Inject the strategy context (called by runner, not by strategy)."""
@@ -453,6 +474,89 @@ class BaseStrategy(ABC):
             )
             return new_expiry
         return None
+
+    def _log_decision(
+        self,
+        decision: str,
+        *,
+        leg: str = "",
+        mode: str = "",
+        rule_score: int = 0,
+        threshold: int = 0,
+        entry_premium: float = 0.0,
+        quantity: int = 0,
+        exit_reason: str = "",
+        outcome_pnl: float | None = None,
+        held_minutes: int | None = None,
+    ) -> None:
+        """Write a DecisionSnapshot row for this strategy (common fields only).
+
+        portfolio_strategy still has its own richer `_build_snapshot` with
+        the Phase A trend-score breakdown — this helper covers the bare
+        minimum (timestamp, spot, vix, dte, score, threshold, entry/exit
+        premium, outcome P&L, held minutes) that's enough for cross-
+        strategy attribution and ML labelling. Other strategies should
+        call this from their _try_entry success path and _create_exit_signal.
+
+        Wrapped in a broad except — decision logging is observational,
+        never block a trade for a logger error. Apr 20 audit: 4 of 5
+        strategies wrote zero rows and we had no idea why each strategy
+        skipped each tick. This fills that gap without coupling logging
+        failures to trading correctness.
+        """
+        try:
+            now = self.ctx.clock.now()
+            # Best-effort spot/vix — these can fail silently if context
+            # isn't fully wired (e.g. very early on_start path).
+            try:
+                underlying = getattr(self.params, "underlying", "")
+                spot = float(self.ctx.get_spot_price(underlying)) if underlying else 0.0
+            except Exception:
+                spot = 0.0
+            try:
+                vix = float(self.ctx.get_vix())
+            except Exception:
+                vix = 0.0
+
+            # DTE if the strategy exposes _expiry (most do)
+            expiry = getattr(self, "_expiry", None)
+            dte = (expiry - now.date()).days if expiry else 0
+            is_expiry = 1 if expiry and now.date() == expiry else 0
+
+            # Track entry/exit timing so we can fill held_minutes on EXIT
+            # rows without each strategy plumbing it through.
+            if decision == "ENTER":
+                self._decision_entry_ts = now
+            if decision == "EXIT" and held_minutes is None and self._decision_entry_ts:
+                delta = now - self._decision_entry_ts
+                held_minutes = int(delta.total_seconds() // 60)
+
+            snap = DecisionSnapshot(
+                timestamp=now.isoformat(),
+                strategy_id=self.strategy_id,
+                leg=leg,
+                decision=decision,
+                mode=mode,
+                spot=spot,
+                vix=vix,
+                dte=dte,
+                hour=now.hour,
+                minute=now.minute,
+                day_of_week=now.weekday(),
+                is_expiry=is_expiry,
+                rule_score=rule_score,
+                threshold=threshold,
+                entry_premium=entry_premium,
+                quantity=quantity,
+                exit_reason=exit_reason,
+                outcome_pnl=outcome_pnl,
+                held_minutes=held_minutes,
+            )
+            self._decision_logger.log(snap)
+        except Exception:
+            logger.exception(
+                f"[DECISION] {self.strategy_id} log failed (decision={decision})"
+            )
 
     def reset_day_state(self) -> None:
         """Reset intraday flags at start of a new trading day.

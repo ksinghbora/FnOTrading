@@ -269,7 +269,22 @@ class PortfolioStrategy(BaseStrategy):
                 # halts, lunch on certain segments) are not data corruption.
                 if 0 < dt_s <= 120:
                     move_pct = abs(spot_now - self._last_sane_spot) / self._last_sane_spot * 100
-                    allowed = SANITY_MAX_MOVE_PCT_PER_MINUTE * (dt_s / 60.0)
+                    # Two-tier ceiling (Apr 20 fix). The per-second rate
+                    # (2%/min ⇒ 0.033%/s) is correct for sustained moves but
+                    # collapses to ~zero at sub-second tick cadence — and
+                    # real bid/ask wiggle of 0.01% then trips on every tick.
+                    # Live data on Apr 20 fired this guard 363 times/day at
+                    # dt=sub-second / move=0.01-0.05%, blocking ~6 minutes
+                    # of decision opportunities. Floor allowed at 0.10%
+                    # (24pts at NIFTY 24000) — a single one-second 0.10%
+                    # jump is normal market noise; the 2%/min ceiling still
+                    # catches the sustained-corruption pattern (7.8% / 28min
+                    # from the d522ce1 commit message: that pattern needs
+                    # 0.28%/min sustained, way over both bounds).
+                    allowed = max(
+                        SANITY_MAX_MOVE_PCT_PER_MINUTE * (dt_s / 60.0),
+                        0.10,
+                    )
                     if move_pct > allowed:
                         self._stale_ticks_today += 1
                         cur_min = now.hour * 60 + now.minute

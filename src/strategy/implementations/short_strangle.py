@@ -228,6 +228,15 @@ class ShortStrangleStrategy(BaseStrategy):
             f"pe_delta={pe_delta:.3f} pe_iv={pe_iv:.1f} "
             f"total_premium={self._entry_premium} qty={self._quantity}"
         )
+        self._log_decision(
+            "ENTER",
+            leg="PREMIUM",
+            mode="strangle",
+            rule_score=score,
+            threshold=60,
+            entry_premium=float(self._entry_premium),
+            quantity=self._quantity,
+        )
 
         return entry_signal(
             self.strategy_id, legs,
@@ -423,6 +432,17 @@ class ShortStrangleStrategy(BaseStrategy):
             f"[EXIT] strategy={self.strategy_id} reason={reason} "
             f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        # Premium short: P&L per lot = entry - exit, scaled by qty.
+        outcome_pnl = float(pnl_estimate) * self._quantity
+        self._log_decision(
+            "EXIT",
+            leg="PREMIUM",
+            mode="strangle",
+            entry_premium=float(self._entry_premium),
+            quantity=self._quantity,
+            exit_reason=reason,
+            outcome_pnl=outcome_pnl,
         )
         legs = [
             make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),

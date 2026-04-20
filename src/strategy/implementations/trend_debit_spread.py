@@ -97,12 +97,21 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             self._stopped_for_day = True
             return self._create_exit_signal("Exit time reached")
 
-        # Hard block: DTE ≤ 2 — debit spreads need time to reach max value
+        # Block trend entry on expiry day only (Apr 20 reconciliation).
+        # The previous DTE≤2 hard block disagreed with portfolio_strategy's
+        # trend leg, which only blocks DTE=0 (actual expiry day). That gap
+        # cost the standalone strategy ~2 trading days/week (Mon DTE=1 +
+        # Tue DTE=0) while portfolio_1 traded the same Monday slots. The
+        # data justifying DTE≤2 was never captured — comment said "debit
+        # spreads need time to reach max value" but 23-day chain replay
+        # had only 8 trend entries total, no DTE-conditioned breakdown.
+        # Reconciled to match portfolio_strategy; if Mon-DTE=1 entries
+        # underperform once we have data, re-tighten with evidence.
         if self._expiry and not self._entered:
             dte = (self._expiry - now.date()).days
-            if dte <= 2:
+            if dte < 0 or (dte == 0 and now.date() == self._expiry):
                 if now.minute == 0:
-                    logger.info(f"[{self.strategy_id}] TREND hard-blocked: DTE={dte} ≤ 2")
+                    logger.info(f"[{self.strategy_id}] TREND hard-blocked: DTE={dte} (expiry day)")
                 return None
 
         # Entry window
@@ -336,6 +345,15 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             f"debit={self._entry_debit} max_value={self._max_spread_value} "
             f"qty={self._quantity}"
         )
+        self._log_decision(
+            "ENTER",
+            leg="TREND",
+            mode="debit_spread",
+            rule_score=score,
+            threshold=60,
+            entry_premium=float(self._entry_debit),
+            quantity=self._quantity,
+        )
 
         spread_type = "Bull Call" if self._direction == "UP" else "Bear Put"
         return entry_signal(
@@ -404,6 +422,16 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             f"direction={self._direction} "
             f"entry_debit={self._entry_debit} exit_value={exit_value} "
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        # Debit spread: P&L per lot = exit_value - entry_debit, scaled by qty.
+        self._log_decision(
+            "EXIT",
+            leg="TREND",
+            mode="debit_spread",
+            entry_premium=float(self._entry_debit),
+            quantity=self._quantity,
+            exit_reason=reason,
+            outcome_pnl=float(pnl_estimate) * self._quantity,
         )
 
         self._entered = False

@@ -237,6 +237,60 @@ class TestStaleTickGuard:
         assert s._stale_ticks_today == 0
 
     @pytest.mark.asyncio
+    async def test_subsecond_tick_with_normal_noise_accepted(self):
+        """Sub-second tick with bid/ask wiggle must NOT be rejected.
+
+        Apr 20 2026 live regression: the per-second budget formula
+        `2%/min × dt_s/60` collapsed to ~0% at sub-second tick rates,
+        causing 363 STALE_TICK rejections in one day on dt≈0.5s and
+        move=0.01-0.05% — i.e., normal market noise. The fix: floor
+        `allowed` at 0.10% (~24pts at NIFTY 24000), an absolute below
+        which we treat the move as tick-rate noise rather than data
+        corruption. The 2%/min ceiling still catches sustained moves.
+        """
+        s = _make_strategy()
+        # Pre-entry-time clock keeps on_tick on the guard-only code path,
+        # matching the established pattern in the other tests in this file.
+        ts0 = datetime(2026, 4, 20, 9, 20, 0)
+        s.set_context(_make_ctx(spot=24300.0, clock_now=ts0))
+        await s.on_tick(_make_tick(ts0))
+
+        # 0.3s later, spot moved 0.05% (~12pts) — typical bid/ask flip.
+        # Pre-fix: allowed = 2 * (0.3/60) = 0.01%, move = 0.05% would FAIL.
+        # Post-fix: allowed = max(0.01%, 0.10%) = 0.10%, move = 0.05% passes.
+        ts1 = datetime(2026, 4, 20, 9, 20, 0, 300_000)  # +0.3s
+        s.ctx.get_spot_price = MagicMock(return_value=Decimal("24312.15"))  # +0.05%
+        s.ctx.clock.now = MagicMock(return_value=ts1)
+        await s.on_tick(_make_tick(ts1))
+
+        assert s._stale_ticks_today == 0, \
+            "0.05% move at sub-second cadence is normal market noise, not corruption"
+        assert s._last_sane_spot == 24312.15, \
+            "Baseline must advance to the accepted tick"
+
+    @pytest.mark.asyncio
+    async def test_subsecond_tick_with_huge_move_still_rejected(self):
+        """The 0.10% floor must not let through actual corruption.
+
+        A 0.5% sub-second jump is still implausible (real NIFTY tick noise
+        rarely exceeds 0.10%); the absolute floor is calibrated so that
+        anything beyond it is suspicious regardless of dt.
+        """
+        s = _make_strategy()
+        ts0 = datetime(2026, 4, 20, 9, 20, 0)
+        s.set_context(_make_ctx(spot=24300.0, clock_now=ts0))
+        await s.on_tick(_make_tick(ts0))
+
+        ts1 = datetime(2026, 4, 20, 9, 20, 0, 500_000)  # +0.5s
+        s.ctx.get_spot_price = MagicMock(return_value=Decimal("24422"))  # +0.5%
+        s.ctx.clock.now = MagicMock(return_value=ts1)
+        result = await s.on_tick(_make_tick(ts1))
+
+        assert result is None
+        assert s._stale_ticks_today == 1
+        assert s._last_sane_spot == 24300.0, "Baseline preserved on bad tick"
+
+    @pytest.mark.asyncio
     async def test_reset_session_clears_baseline(self):
         """End-of-day session reset must clear the baseline.
 

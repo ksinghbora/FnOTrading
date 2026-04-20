@@ -286,6 +286,15 @@ class IronCondorStrategy(BaseStrategy):
             f"long_pe={self._long_pe_strike}@{long_pe_ltp} "
             f"net_credit={self._entry_credit} qty={self._quantity}"
         )
+        self._log_decision(
+            "ENTER",
+            leg="PREMIUM",
+            mode="iron_condor",
+            rule_score=score,
+            threshold=60,
+            entry_premium=float(self._entry_credit),
+            quantity=self._quantity,
+        )
 
         return entry_signal(
             self.strategy_id, legs,
@@ -544,6 +553,15 @@ class IronCondorStrategy(BaseStrategy):
             f"[EXIT] strategy={self.strategy_id} reason={reason} "
             f"entry_credit={self._entry_credit} exit_debit={exit_debit} "
             f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+        )
+        self._log_decision(
+            "EXIT",
+            leg="PREMIUM",
+            mode="iron_condor",
+            entry_premium=float(self._entry_credit),
+            quantity=self._quantity,
+            exit_reason=reason,
+            outcome_pnl=float(pnl_estimate) * self._quantity,
         )
         self._entered = False
         self._stopped_for_day = True
