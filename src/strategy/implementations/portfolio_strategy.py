@@ -1340,8 +1340,16 @@ class PortfolioStrategy(BaseStrategy):
         self._log_exit_attribution("PREMIUM", self._prem_mode.upper(), reason, pnl)
 
         held_mins = int((self.ctx.clock.now() - self._prem_entry_time).total_seconds() / 60) if self._prem_entry_time else 0
+        # Apr 20 audit: chain-vs-trade reconciliation showed the EXIT row
+        # was leaving entry_premium=0.0 and quantity=0 because callers
+        # only passed exit-side fields. Pass the entry context too so the
+        # ML pipeline can compute P&L/share = outcome_pnl / quantity and
+        # premium-decay% = (entry_premium - implied_exit) / entry_premium
+        # directly from a single CSV row, without joining back to ENTER.
         self._decision_logger.log(self._build_snapshot(
             "PREMIUM", "EXIT", mode=self._prem_mode,
+            entry_premium=float(self._entry_premium),
+            quantity=self._prem_quantity,
             exit_reason=reason, outcome_pnl=round(pnl, 2), held_minutes=held_mins,
         ))
 
@@ -1450,8 +1458,12 @@ class PortfolioStrategy(BaseStrategy):
         self._log_exit_attribution("TREND", self._trend_direction, reason, pnl)
 
         held_mins = int((self.ctx.clock.now() - self._trend_entry_time).total_seconds() / 60) if self._trend_entry_time else 0
+        # Mirror the PREMIUM exit fix (Apr 20): pass entry_debit + quantity
+        # so an EXIT row alone is enough to derive P&L/share and decay%.
         self._decision_logger.log(self._build_snapshot(
             "TREND", "EXIT", mode="debit_spread",
+            entry_premium=float(self._entry_debit),
+            quantity=self._trend_quantity,
             exit_reason=reason, outcome_pnl=round(pnl, 2), held_minutes=held_mins,
         ))
 
