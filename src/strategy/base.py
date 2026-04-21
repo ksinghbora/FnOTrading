@@ -52,6 +52,14 @@ class BaseStrategy(ABC):
         # Entry timestamp — set by _log_decision on ENTER, read on EXIT
         # to compute held_minutes without each strategy tracking it.
         self._decision_entry_ts: Any = None
+        # Per-(strategy, key) dedup state for entry-skip log throttling.
+        # See _log_skip_throttled below for why this lives on the base —
+        # without it, every structural skip (expiry day 0DTE, VIX gate,
+        # DTE hard-block, etc.) emits a fresh log line on every tick. On
+        # Apr 21 expiry the unthrottled base.py "filter blocked entry"
+        # log fired 19,646 times across ic_1/strangle_1/straddle_1 in
+        # ~20 minutes, drowning real signal in the audit log.
+        self._last_skip_log_minute: dict[str, int] = {}
 
     def set_context(self, context: "StrategyContext") -> None:
         """Inject the strategy context (called by runner, not by strategy)."""
@@ -155,6 +163,36 @@ class BaseStrategy(ABC):
         )
         await self.ctx.place_signal(signal)
 
+    def _log_skip_throttled(
+        self, key: str, message: str, *, extra: dict | None = None
+    ) -> None:
+        """Log an entry-skip message at most once per wall-clock minute per key.
+
+        Dedup contract — the key partitions reasons so a *change* of reason
+        surfaces immediately even within the same minute, while a sustained
+        block emits one line/minute (enough for the audit log, not enough
+        to drown real signal). The base class owns this so every strategy
+        gets the same throttle for free; previously each subclass had its
+        own copy of the helper and the base methods (`_check_expiry_day_block`,
+        VIX gate) logged unthrottled — which is what produced the 19k-line
+        flood on Apr 21 expiry.
+
+        Logger resolution: we use the *subclass's* module logger so caplog
+        filters keyed on `src.strategy.implementations.<x>` continue to
+        work and the log line shows the strategy file, not base.py.
+        """
+        try:
+            now = self.ctx.clock.now()
+            cur_min = now.hour * 60 + now.minute
+        except Exception:
+            cur_min = -1
+        if self._last_skip_log_minute.get(key) == cur_min:
+            return
+        self._last_skip_log_minute[key] = cur_min
+        logging.getLogger(type(self).__module__).info(
+            message, extra=extra or {}
+        )
+
     def _check_expiry_day_block(self, underlying: str) -> str | None:
         """Block new premium-leg entries on weekly expiry day (NIFTY: Tuesday).
 
@@ -168,7 +206,8 @@ class BaseStrategy(ABC):
             return None
         if not self.ctx.clock.is_expiry_day(underlying):
             return None
-        logger.info(
+        self._log_skip_throttled(
+            f"EXPIRY_DAY_BLOCK:{underlying}",
             "filter blocked entry: expiry day 0DTE",
             extra={
                 "tag": Tag.FILTER,
@@ -562,11 +601,19 @@ class BaseStrategy(ABC):
         """Reset intraday flags at start of a new trading day.
 
         Override in subclasses that use _entered / _stopped_for_day flags.
+        Subclasses that override MUST call super().reset_day_state() so the
+        skip-log dedup map is cleared — otherwise yesterday's stale minute
+        keys would silently swallow this morning's first occurrence of each
+        reason. (See test_portfolio_skip_log_dedup.test_dedup_state_clears_on_session_reset)
         """
         if hasattr(self, "_entered"):
             self._entered = False
         if hasattr(self, "_stopped_for_day"):
             self._stopped_for_day = False
+        # Clear skip-log dedup memory so the first skip on the new session
+        # logs cleanly (yesterday's "minute 630" key would still be in the
+        # dict and would suppress today's 10:30 line if we didn't clear).
+        self._last_skip_log_minute.clear()
 
     def get_state_data(self) -> dict:
         """Serialize strategy-specific state for persistence.

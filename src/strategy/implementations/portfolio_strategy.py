@@ -24,7 +24,11 @@ from src.strategy.indicators import BreakoutSignal, momentum_breakout, oi_breako
 from src.strategy.params import PortfolioParams
 from src.strategy.regime import MarketRegime, RegimeDetector
 from src.strategy.registry import register_strategy
-from src.advisor.confluence import apply_confluence, load_day_bias
+from src.advisor.confluence import (
+    apply_confluence,
+    load_day_bias,
+    reset_confluence_log_dedup,
+)
 from src.advisor.models import DayBias
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
 from src.strategy.implementations import portfolio_strikes as _strikes
@@ -196,11 +200,11 @@ class PortfolioStrategy(BaseStrategy):
         # Throttle the warn log so a sustained bad-data window doesn't spam.
         self._last_stale_log_minute: int = -1
         self._stale_ticks_today: int = 0
-        # Same dedup pattern for the entry-skip messages. Without this the
-        # PREMIUM/TREND "skipped" logs fire on every tick (~25 lines/sec)
-        # whenever a structural block is active (expiry day, VIX gate, etc.)
-        # — Apr 21 expiry day produced 25 lines in 6s before this guard.
-        self._last_skip_log_minute: dict[str, int] = {}
+        # NOTE: `self._last_skip_log_minute` and `_log_skip_throttled` now
+        # live on BaseStrategy (centralised so base.py's _check_expiry_day_block
+        # and every other strategy share the same throttle). Calls below
+        # (PREMIUM_EXPIRY / PREMIUM_VIX_LOW / PREMIUM_VIX_HIGH) use the
+        # inherited helper.
 
         # ─── Paper trading: shadow blocking (log but don't block) ──
         # force=False because strategy __init__ is not a process boundary —
@@ -559,11 +563,15 @@ class PortfolioStrategy(BaseStrategy):
             if event_penalty:
                 reasons.append(f"event({event_penalty:+d})")
 
-        # Apply AI confluence adjustment
+        # Apply AI confluence adjustment. dedup_minute throttles the
+        # IGNORED/shadow log lines to one-per-minute-per-gate so a
+        # low-confidence morning doesn't flood the audit log (Apr 21
+        # produced ~2,600 identical IGNORED(low_confidence) lines).
         rule_score = self._prem_score
         self._prem_score, _ = apply_confluence(
             self._prem_score, self._day_bias, "premium",
             enabled=self._confluence_enabled, weight=self._confluence_weight,
+            dedup_minute=now.hour * 60 + now.minute,
         )
 
         is_phase1 = now.time() < time(10, 0)
@@ -627,23 +635,6 @@ class PortfolioStrategy(BaseStrategy):
             ))
 
         return None
-
-    def _log_skip_throttled(self, key: str, message: str) -> None:
-        """Log an entry-skip message at most once per wall-clock minute per key.
-
-        Without this, structural blocks (expiry day, VIX gate) emit a log line
-        on every tick — ~1500 lines/min on a quiet expiry. Audit logs become
-        unreadable and disk fills with redundant noise. The dedup key lets us
-        keep distinct reasons separate (PREMIUM_EXPIRY vs PREMIUM_VIX_LOW),
-        so a state change still surfaces immediately.
-        """
-        try:
-            cur_min = self.ctx.clock.now().hour * 60 + self.ctx.clock.now().minute
-        except Exception:
-            cur_min = -1
-        if self._last_skip_log_minute.get(key) != cur_min:
-            self._last_skip_log_minute[key] = cur_min
-            logger.info(message)
 
     def _enter_premium(self, vix: float) -> Signal | None:
         """Route by Indian VIX band: no-trade <13, strangle 13-16, IC 16-22, no-trade >22."""
@@ -738,11 +729,13 @@ class PortfolioStrategy(BaseStrategy):
             "bn_data_available": not self._bn_unavailable,
         }
 
-        # Apply AI confluence adjustment
+        # Apply AI confluence adjustment (see premium-leg call for the
+        # dedup_minute rationale — same per-tick spam class).
         rule_score = self._trend_score
         self._trend_score, _ = apply_confluence(
             self._trend_score, self._day_bias, "trend",
             enabled=self._confluence_enabled, weight=self._confluence_weight,
+            dedup_minute=now.hour * 60 + now.minute,
         )
 
         if now.minute % 10 == 0:
@@ -2163,6 +2156,10 @@ class PortfolioStrategy(BaseStrategy):
         self._last_stale_log_minute = -1
         self._stale_ticks_today = 0
         self._last_skip_log_minute.clear()
+        # Confluence log dedup is process-global (module state) — clear so
+        # the first decision tomorrow logs cleanly even if the daemon
+        # spans midnight without a process restart.
+        reset_confluence_log_dedup()
 
         if self._regime_detector:
             self._regime_detector.reset_session()

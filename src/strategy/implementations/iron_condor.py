@@ -584,6 +584,9 @@ class IronCondorStrategy(BaseStrategy):
         self._entered = False
         self._stopped_for_day = False
         self._adjustments_today = 0
+        # Inherited skip-log dedup: clear so today's first expiry/VIX
+        # block log isn't shadowed by yesterday's stale minute key.
+        self._last_skip_log_minute.clear()
 
     def get_state_data(self) -> dict:
         return {

@@ -71,13 +71,12 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         self._expiry: date | None = None
         self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
         self._quantity: int = params.quantity_lots * self._lot_size
-        # Per-minute dedup for entry-skip logs. Without this, a structural
-        # block (e.g. DTE=0 expiry hard-block) emits one line per tick —
-        # Apr 21 produced 240 identical "TREND hard-blocked" lines in the
-        # 11:00:00-11:00:59 window because the old `if now.minute == 0`
-        # guard was true for the entire 60-second window. Mirrors the
-        # sibling fix in portfolio_strategy (commit 88ae455).
-        self._last_skip_log_minute: dict[str, int] = {}
+        # NOTE: per-minute skip-log dedup state (`_last_skip_log_minute`
+        # + `_log_skip_throttled`) now lives on BaseStrategy. The DTE=0
+        # hard-block call below uses the inherited helper. Apr 21 expiry
+        # produced 240 identical lines in 60s before the original throttle
+        # was added; centralising it removes a class of recurrence here
+        # AND in base.py's _check_expiry_day_block / VIX gate logs.
 
     def get_subscriptions(self) -> Subscription:
         return Subscription(instrument_tokens=[], timeframes=[])
@@ -460,25 +459,6 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             if name == self.params.underlying:
                 return token
         return None
-
-    def _log_skip_throttled(self, key: str, message: str) -> None:
-        """Log an entry-skip message at most once per wall-clock minute per key.
-
-        Mirrors portfolio_strategy._log_skip_throttled (commit 88ae455). The
-        old `if now.minute == 0` guard was true for the whole 60-second
-        window, so every tick during that minute logged — Apr 21 expiry day
-        produced 240 identical TREND hard-block lines in one minute. The
-        dedup key lets distinct reasons (TREND_EXPIRY_DAY vs TREND_EXPIRED)
-        surface independently so a state flip still emits on the next tick.
-        """
-        try:
-            now = self.ctx.clock.now()
-            cur_min = now.hour * 60 + now.minute
-        except Exception:
-            cur_min = -1
-        if self._last_skip_log_minute.get(key) != cur_min:
-            self._last_skip_log_minute[key] = cur_min
-            logger.info(message)
 
     async def on_stop(self) -> None:
         if self._entered:

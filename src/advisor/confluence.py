@@ -15,6 +15,44 @@ logger = logging.getLogger(__name__)
 CONFIDENCE_THRESHOLD = 0.7  # Ignore AI signal below this
 SIGNIFICANCE_THRESHOLD = 5  # Ignore adjustments smaller than ±5 points
 
+# Per-minute dedup state for repetitive [CONFLUENCE] log lines. Without
+# this, on a quiet day_bias=low_confidence morning the IGNORED gate fires
+# on every tick — Apr 21 produced ~2,600 identical "[CONFLUENCE] leg=PREMIUM
+# rule=70 ai_adj=+0 conf=0.00 IGNORED(low_confidence)" lines in 23 minutes.
+# The shadow-audit parser (`src/advisor/shadow.py:build_audit`) already
+# discards low-confidence rows via `if d.ai_adj == 0 or d.ai_confidence < 0.7`,
+# and over-counting agreements per-tick distorts the not_significant /
+# shadow audit math too — so deduping these is *more* accurate, not less.
+# Key = (leg, gate_reason); the "applied" path is never deduped (those
+# lines are rare and the final score must surface every time).
+_LAST_LOG_MINUTE: dict[tuple[str, str], int] = {}
+
+
+def _emit_throttled(
+    key: tuple[str, str], detail: str, minute: int | None
+) -> None:
+    """Log `detail` once per `minute` per `key`. minute=None → no throttle.
+
+    Callers in production (portfolio_strategy) pass the strategy clock's
+    current minute so replay/backtest runs honor the simulated clock —
+    using time.time() here would collapse every log line in a fast
+    historical replay to a single entry.
+    """
+    if minute is None:
+        logger.info(detail)
+        return
+    if _LAST_LOG_MINUTE.get(key) == minute:
+        return
+    _LAST_LOG_MINUTE[key] = minute
+    logger.info(detail)
+
+
+def reset_confluence_log_dedup() -> None:
+    """Clear the module-level dedup cache. Called by `reset_day_state` so
+    the first decision of a new session always logs cleanly even if the
+    process spans a midnight rollover (back-to-back trading days)."""
+    _LAST_LOG_MINUTE.clear()
+
 
 def load_day_bias(path: Path | None = None, *, as_of: date | None = None) -> DayBias | None:
     """Load DayBias from JSON file. Returns None if unavailable.
@@ -58,6 +96,7 @@ def apply_confluence(
     *,
     enabled: bool = False,
     weight: float = 1.0,
+    dedup_minute: int | None = None,
 ) -> tuple[int, str]:
     """Apply AI confluence adjustment to rule-based score.
 
@@ -67,6 +106,14 @@ def apply_confluence(
         leg: "premium" or "trend".
         enabled: If False, log but don't apply (shadow mode).
         weight: Scale factor for AI adjustment (0.0-1.0).
+        dedup_minute: When provided, IGNORED/shadow log lines are emitted
+            at most once per minute per (leg, gate_reason). Pass the
+            strategy clock's current minute (`now.hour*60 + now.minute`)
+            so replay engines honor the simulated clock. None → no
+            throttle (preserves historical behaviour for tests/scripts
+            that don't have a clock to thread through). The "applied"
+            path is never throttled — those lines are rare and the
+            final score must always surface.
 
     Returns:
         (final_score, log_detail) — adjusted score and structured log string.
@@ -92,7 +139,7 @@ def apply_confluence(
             f"[CONFLUENCE] leg={leg.upper()} rule={rule_score} "
             f"ai_adj={adj:+d} conf={conf:.2f} IGNORED(low_confidence) {shadow_tag}"
         )
-        logger.info(detail)
+        _emit_throttled((leg, "low_confidence"), detail, dedup_minute)
         return rule_score, detail
 
     # Gate 2: Adjustment not significant
@@ -101,7 +148,7 @@ def apply_confluence(
             f"[CONFLUENCE] leg={leg.upper()} rule={rule_score} "
             f"ai_adj={adj:+d} conf={conf:.2f} IGNORED(not_significant) {shadow_tag}"
         )
-        logger.info(detail)
+        _emit_throttled((leg, "not_significant"), detail, dedup_minute)
         return rule_score, detail
 
     # Gate 3: Scale by confidence and weight
@@ -115,10 +162,10 @@ def apply_confluence(
             f"ai_adj={adj:+d} conf={conf:.2f} scaled={scaled_adj:+d} "
             f"would_be={would_be} (shadow)"
         )
-        logger.info(detail)
+        _emit_throttled((leg, "shadow"), detail, dedup_minute)
         return rule_score, detail
 
-    # Active mode: apply adjustment
+    # Active mode: apply adjustment — never throttled (rare, must surface).
     final = max(0, min(100, rule_score + scaled_adj))
     detail = (
         f"[CONFLUENCE] leg={leg.upper()} rule={rule_score} "
