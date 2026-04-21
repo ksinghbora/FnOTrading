@@ -196,6 +196,11 @@ class PortfolioStrategy(BaseStrategy):
         # Throttle the warn log so a sustained bad-data window doesn't spam.
         self._last_stale_log_minute: int = -1
         self._stale_ticks_today: int = 0
+        # Same dedup pattern for the entry-skip messages. Without this the
+        # PREMIUM/TREND "skipped" logs fire on every tick (~25 lines/sec)
+        # whenever a structural block is active (expiry day, VIX gate, etc.)
+        # — Apr 21 expiry day produced 25 lines in 6s before this guard.
+        self._last_skip_log_minute: dict[str, int] = {}
 
         # ─── Paper trading: shadow blocking (log but don't block) ──
         # force=False because strategy __init__ is not a process boundary —
@@ -623,23 +628,45 @@ class PortfolioStrategy(BaseStrategy):
 
         return None
 
+    def _log_skip_throttled(self, key: str, message: str) -> None:
+        """Log an entry-skip message at most once per wall-clock minute per key.
+
+        Without this, structural blocks (expiry day, VIX gate) emit a log line
+        on every tick — ~1500 lines/min on a quiet expiry. Audit logs become
+        unreadable and disk fills with redundant noise. The dedup key lets us
+        keep distinct reasons separate (PREMIUM_EXPIRY vs PREMIUM_VIX_LOW),
+        so a state change still surfaces immediately.
+        """
+        try:
+            cur_min = self.ctx.clock.now().hour * 60 + self.ctx.clock.now().minute
+        except Exception:
+            cur_min = -1
+        if self._last_skip_log_minute.get(key) != cur_min:
+            self._last_skip_log_minute[key] = cur_min
+            logger.info(message)
+
     def _enter_premium(self, vix: float) -> Signal | None:
         """Route by Indian VIX band: no-trade <13, strangle 13-16, IC 16-22, no-trade >22."""
         # Expiry-day 0DTE block — premium leg never enters when today == expiry
         expiry_block = self._check_expiry_day_block(self.params.underlying)
         if expiry_block:
-            logger.info(f"[{self.strategy_id}] PREMIUM skipped: {expiry_block}")
+            self._log_skip_throttled(
+                "PREMIUM_EXPIRY",
+                f"[{self.strategy_id}] PREMIUM skipped: {expiry_block}",
+            )
             return None
         if vix < self.params.strangle_vix_min:
-            logger.info(
+            self._log_skip_throttled(
+                "PREMIUM_VIX_LOW",
                 f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
-                f"< strangle_vix_min={self.params.strangle_vix_min} (complacency)"
+                f"< strangle_vix_min={self.params.strangle_vix_min} (complacency)",
             )
             return None
         if vix > self.params.ic_vix_max:
-            logger.info(
+            self._log_skip_throttled(
+                "PREMIUM_VIX_HIGH",
                 f"[{self.strategy_id}] [VIX_GATE] PREMIUM blocked: VIX={vix:.1f} "
-                f"> ic_vix_max={self.params.ic_vix_max} (event/crash zone)"
+                f"> ic_vix_max={self.params.ic_vix_max} (event/crash zone)",
             )
             return None
         if vix < self.params.strangle_vix_max:
@@ -2135,6 +2162,7 @@ class PortfolioStrategy(BaseStrategy):
         self._last_sane_spot_ts = None
         self._last_stale_log_minute = -1
         self._stale_ticks_today = 0
+        self._last_skip_log_minute.clear()
 
         if self._regime_detector:
             self._regime_detector.reset_session()
