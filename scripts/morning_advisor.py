@@ -102,7 +102,9 @@ async def run(
         if not skip_telegram and settings.telegram_bot_token:
             try:
                 from src.notifications.telegram import TelegramNotifier
-                notifier = TelegramNotifier(settings)
+                notifier = TelegramNotifier(
+                    settings.telegram_bot_token, settings.telegram_chat_id
+                )
                 msg = format_advisory_telegram(advisory)
                 await notifier.send_message(msg)
                 print("  Sent to Telegram")

@@ -167,7 +167,9 @@ async def _send_telegram(msg: str) -> bool:
             logger.warning("Telegram not configured — printing alert instead")
             print(msg)
             return False
-        notifier = TelegramNotifier(settings)
+        notifier = TelegramNotifier(
+            settings.telegram_bot_token, settings.telegram_chat_id
+        )
         await notifier.send_message(msg)
         return True
     except Exception as e:

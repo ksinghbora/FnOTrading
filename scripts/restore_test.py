@@ -395,7 +395,9 @@ def main():
             settings = Settings()
             if settings.telegram_bot_token:
                 import asyncio
-                notifier = TelegramNotifier(settings)
+                notifier = TelegramNotifier(
+                    settings.telegram_bot_token, settings.telegram_chat_id
+                )
                 asyncio.run(notifier.send_message(alert))
                 print("(sent alert to Telegram)")
         except Exception as e:
