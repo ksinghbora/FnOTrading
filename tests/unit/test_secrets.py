@@ -34,9 +34,9 @@ class TestGetSecret:
 
     def test_default_returned_when_neither_source_has_value(self, monkeypatch, tmp_path):
         monkeypatch.delenv("KITE_API_SECRET", raising=False)
-        # chdir away from the repo so the .env tertiary fallback (Apr 20)
-        # doesn't accidentally pick up a real value.
-        monkeypatch.chdir(tmp_path)
+        # Point the .env fallback at an empty tmp dir (Apr 21: default is
+        # now repo-root, no longer CWD-relative — chdir alone won't isolate).
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", tmp_path / ".env")
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("KITE_API_SECRET", default="fallback") == "fallback"
 
@@ -70,7 +70,7 @@ class TestDotenvFallback:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "")
         env_file = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-ant-real-key\n")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("ANTHROPIC_API_KEY") == "sk-ant-real-key"
 
@@ -78,7 +78,7 @@ class TestDotenvFallback:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         env_file = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-ant-real-key\n")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("ANTHROPIC_API_KEY") == "sk-ant-real-key"
 
@@ -86,7 +86,7 @@ class TestDotenvFallback:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "from-env")
         env_file = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=from-dotenv\n")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("ANTHROPIC_API_KEY") == "from-env"
 
@@ -94,7 +94,7 @@ class TestDotenvFallback:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "")
         env_file = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=from-dotenv\n")
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", True), \
              patch.object(secrets, "_keyring") as kr:
             kr.get_password.return_value = "from-keychain"
@@ -102,36 +102,88 @@ class TestDotenvFallback:
 
     def test_dotenv_handles_quoted_value(self, monkeypatch, tmp_path):
         monkeypatch.delenv("X", raising=False)
-        (tmp_path / ".env").write_text('X="quoted-value"\n')
-        monkeypatch.chdir(tmp_path)
+        env_file = tmp_path / ".env"
+        env_file.write_text('X="quoted-value"\n')
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("X") == "quoted-value"
 
     def test_dotenv_skips_comments_and_blanks(self, monkeypatch, tmp_path):
         monkeypatch.delenv("X", raising=False)
-        (tmp_path / ".env").write_text(
+        env_file = tmp_path / ".env"
+        env_file.write_text(
             "# header comment\n"
             "\n"
             "Y=other\n"
             "X=hit\n"
         )
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("X") == "hit"
 
     def test_dotenv_missing_file_returns_default(self, monkeypatch, tmp_path):
         monkeypatch.delenv("X", raising=False)
-        # tmp_path has no .env
-        monkeypatch.chdir(tmp_path)
+        # tmp_path has no .env — point default there to ensure miss
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", tmp_path / ".env")
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("X", default="dflt") == "dflt"
 
     def test_dotenv_empty_value_treated_as_unset(self, monkeypatch, tmp_path):
         monkeypatch.delenv("X", raising=False)
-        (tmp_path / ".env").write_text("X=\n")
-        monkeypatch.chdir(tmp_path)
+        env_file = tmp_path / ".env"
+        env_file.write_text("X=\n")
+        monkeypatch.setattr(secrets, "_DEFAULT_DOTENV", env_file)
         with patch.object(secrets, "_KEYRING_AVAILABLE", False):
             assert secrets.get_secret("X", default="dflt") == "dflt"
+
+
+class TestDotenvPathResolution:
+    """Apr 21 hardening: the .env fallback must work even when CWD isn't
+    the repo root. The original Apr 20 fix used a bare relative ".env"
+    which only worked because launchd's restart-daemon.sh happened to
+    `cd $REPO` first. Anyone restarting the daemon from another CWD
+    silently lost the fallback and saw "advisor disabled" at 9 AM.
+    """
+
+    def test_default_path_is_cwd_independent(self, monkeypatch, tmp_path):
+        # With CWD elsewhere AND a spurious .env in tmp_path, the
+        # production default must NOT pick up the spurious value — it
+        # must look at the repo-root .env (resolved from this module's
+        # own location, not CWD).
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=spurious-tmp-value\n")
+        # Don't patch _DEFAULT_DOTENV — we're testing exactly that the
+        # production default ignores CWD.
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            result = secrets.get_secret("ANTHROPIC_API_KEY", default="dflt")
+        assert result != "spurious-tmp-value", (
+            "get_secret() picked up CWD-relative .env instead of "
+            "repo-root .env. The daemon will silently break when "
+            "started from any directory other than the repo root."
+        )
+
+    def test_default_dotenv_constant_points_to_repo_root(self):
+        # Lock the constant so a future refactor of the parents[N] math
+        # can't silently drift.
+        from pathlib import Path as _P
+        expected_root = _P(secrets.__file__).resolve().parents[2]
+        assert secrets._DEFAULT_DOTENV == expected_root / ".env"
+        assert secrets._DEFAULT_DOTENV.name == ".env"
+
+    def test_explicit_relative_path_still_honoured(self, monkeypatch, tmp_path):
+        # Tests use this form — must keep working.
+        monkeypatch.delenv("X", raising=False)
+        (tmp_path / ".env").write_text("X=tmp-value\n")
+        monkeypatch.chdir(tmp_path)
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets._read_dotenv_value("X", ".env") == "tmp-value"
+
+    def test_explicit_absolute_path_honoured(self, tmp_path):
+        env_file = tmp_path / "custom.env"
+        env_file.write_text("X=abs-value\n")
+        with patch.object(secrets, "_KEYRING_AVAILABLE", False):
+            assert secrets._read_dotenv_value("X", env_file) == "abs-value"
 
 
 class TestSetSecret:

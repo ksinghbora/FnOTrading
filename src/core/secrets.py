@@ -15,7 +15,15 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Final
+
+# Repo root resolved at import time so the .env fallback is CWD-independent.
+# secrets.py lives at src/core/secrets.py — three parents up is the repo root.
+# Any caller can therefore find .env regardless of where the daemon was
+# launched from (launchd, ad-hoc shell, debugger, pytest in tmp dir, etc).
+_REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
+_DEFAULT_DOTENV: Final[Path] = _REPO_ROOT / ".env"
 
 logger = logging.getLogger(__name__)
 
@@ -91,16 +99,35 @@ def get_secret(key: str, default: str = "") -> str:
     return default
 
 
-def _read_dotenv_value(key: str, dotenv_path: str = ".env") -> str:
+def _read_dotenv_value(key: str, dotenv_path: str | Path | None = None) -> str:
     """Read a single key from .env. Returns "" if file missing or key absent.
 
     Hand-rolled (no python-dotenv dep) to keep this module self-contained.
     Handles `KEY=value`, `KEY = value`, ignores comments and blank lines,
     strips surrounding quotes. Stops at the first match — duplicate keys
     in .env take the first occurrence (matches pydantic-settings behavior).
+
+    Path resolution (Apr 21 hardening — see commit 32dd91c follow-up):
+      * `dotenv_path=None` (production default) → repo-root .env, computed
+        from this file's location. CWD-independent so the daemon resolves
+        secrets correctly regardless of where it was launched from.
+      * Explicit relative path → resolved against current CWD (test usage —
+        tests call with "monkeypatch.chdir(tmp_path)" + path=".env").
+      * Explicit absolute path → used as-is.
+
+    Why the CWD-independent default matters: the original Apr 20 fix used a
+    bare relative ".env" path and worked only because launchd's
+    restart-daemon.sh happens to `cd $REPO` first. Anyone restarting the
+    daemon from a different CWD (debugger, ad-hoc shell, ops tool) would
+    silently lose the .env tertiary fallback and be back to "advisor
+    disabled" at 9 AM with no obvious cause.
     """
+    if dotenv_path is None:
+        path: Path = _DEFAULT_DOTENV
+    else:
+        path = Path(dotenv_path)
     try:
-        with open(dotenv_path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for raw in f:
                 line = raw.strip()
                 if not line or line.startswith("#") or "=" not in line:

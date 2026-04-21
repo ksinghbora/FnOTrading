@@ -425,6 +425,33 @@ async def run():
     logger.info(f"Paper Trading: {settings.paper_trading}")
     logger.info("=" * 60)
 
+    # Boot-time secret audit (Apr 21 — see commit 32dd91c follow-up).
+    # Settings is read ONCE at daemon startup and reused all day, so a missing
+    # secret silently breaks features hours later (e.g. advisor at 9 AM, audit
+    # at 4 PM). Surface gaps now, while the operator is still watching the
+    # console / Telegram boot ping.
+    _critical_secrets = {
+        "anthropic_api_key": "morning advisor + nightly audit will be DISABLED",
+        "telegram_bot_token": "no Telegram alerts will be sent",
+        "telegram_chat_id": "Telegram configured but no chat_id set",
+    }
+    _missing_at_boot = [
+        (attr, why) for attr, why in _critical_secrets.items()
+        if not getattr(settings, attr, "")
+    ]
+    if _missing_at_boot:
+        logger.warning("=" * 60)
+        logger.warning("BOOT SECRET AUDIT — gaps found:")
+        for attr, why in _missing_at_boot:
+            logger.warning(f"  [MISSING] {attr.upper()} → {why}")
+        logger.warning(
+            "Resolution order: keychain > os.environ > %s/.env",
+            Path(__file__).resolve().parents[1],
+        )
+        logger.warning("=" * 60)
+    else:
+        logger.info("Boot secret audit: all critical secrets resolved.")
+
     # Auto-authenticate helper — used at startup and scheduled daily
     async def do_auto_auth(reason: str = "startup") -> bool:
         """Authenticate with Kite and update token. Returns True on success."""
