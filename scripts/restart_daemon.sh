@@ -19,7 +19,16 @@
 set -euo pipefail
 
 REPO="/Users/kundanbora/Documents/FnOTrading"
-PIDFILE="$REPO/.fno_main.pid"
+# PID file lives OUTSIDE ~/Documents/ (Apr 21 fix). macOS Tahoe TCC denies
+# launchd-spawned /bin/bash from reading files under ~/Documents/ even when
+# bash has Full Disk Access — see plist comment for why. Symptom: the bash
+# `cat "$PIDFILE"` returned EPERM, the script overwrote a fictitious "stale"
+# entry, and the new daemon collided with the still-running old one on port
+# 8000. The state-dir under ~/Library/Application Support/ is not protected
+# by TCC, so launchd-bash can read it without any per-binary grant.
+STATE_DIR="$HOME/Library/Application Support/fno-trading"
+mkdir -p "$STATE_DIR"
+PIDFILE="$STATE_DIR/fno_main.pid"
 LOGDIR="$REPO/logs"
 UV="/opt/homebrew/bin/uv"
 
