@@ -108,7 +108,10 @@ class DeltaNeutralStrategy(BaseStrategy):
         # VIX filter
         vix_block = self._check_vix_filter()
         if vix_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+            self._log_skip_throttled(
+                "ENTRY_SKIP_VIX",
+                f"[{self.strategy_id}] Entry skipped: {vix_block}",
+            )
             return None
 
         # VIX-adjusted position sizing

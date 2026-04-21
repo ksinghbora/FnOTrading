@@ -119,58 +119,90 @@ class ShortStraddleStrategy(BaseStrategy):
         logger.info(
             f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
         )
+        # Per-tick → per-minute throttling for all entry-skip / SHADOW_BLOCK
+        # logs. Mirrors the parallel changes in short_strangle and iron_condor;
+        # see _log_skip_throttled docstring on BaseStrategy for rationale.
         if score < 60:
             if self._paper_mode:
-                logger.info(
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_SCORE",
                     f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
-                    f"< 60 — proceeding anyway (paper mode)"
+                    f"< 60 — proceeding anyway (paper mode)",
                 )
             else:
-                logger.info(
-                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60"
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_SCORE",
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
                 )
                 return None
 
         # Expiry-day 0DTE block — straddle is ATM, gets crushed worst by gamma vertical
         expiry_block = self._check_expiry_day_block(self.params.underlying)
         if expiry_block:
-            logger.info(f"[{self.strategy_id}] Entry skipped: {expiry_block}")
+            self._log_skip_throttled(
+                "ENTRY_SKIP_EXPIRY",
+                f"[{self.strategy_id}] Entry skipped: {expiry_block}",
+            )
             return None
 
         # VIX filter — skip entry in high-volatility environments
         vix_block = self._check_vix_filter()
         if vix_block:
             if self._paper_mode:
-                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {vix_block}")
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_VIX",
+                    f"[{self.strategy_id}] [SHADOW_BLOCK] {vix_block}",
+                )
             else:
-                logger.info(f"[{self.strategy_id}] Entry skipped: {vix_block}")
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX",
+                    f"[{self.strategy_id}] Entry skipped: {vix_block}",
+                )
                 return None
 
         # Trend filter — skip if market is trending >0.7% from open
         trend_block = self._check_trend_filter(self.params.underlying)
         if trend_block:
             if self._paper_mode:
-                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {trend_block}")
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_TREND",
+                    f"[{self.strategy_id}] [SHADOW_BLOCK] {trend_block}",
+                )
             else:
-                logger.info(f"[{self.strategy_id}] Entry skipped: {trend_block}")
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_TREND",
+                    f"[{self.strategy_id}] Entry skipped: {trend_block}",
+                )
                 return None
 
         # PCR filter
         pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
         if pcr_block:
             if self._paper_mode:
-                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {pcr_block}")
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_PCR",
+                    f"[{self.strategy_id}] [SHADOW_BLOCK] {pcr_block}",
+                )
             else:
-                logger.info(f"[{self.strategy_id}] Entry skipped: {pcr_block}")
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_PCR",
+                    f"[{self.strategy_id}] Entry skipped: {pcr_block}",
+                )
                 return None
 
         # Max pain filter
         mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
         if mp_block:
             if self._paper_mode:
-                logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] {mp_block}")
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_MP",
+                    f"[{self.strategy_id}] [SHADOW_BLOCK] {mp_block}",
+                )
             else:
-                logger.info(f"[{self.strategy_id}] Entry skipped: {mp_block}")
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_MP",
+                    f"[{self.strategy_id}] Entry skipped: {mp_block}",
+                )
                 return None
 
         # Log IV skew and OI levels for research

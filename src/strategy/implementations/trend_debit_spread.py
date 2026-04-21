@@ -166,13 +166,15 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         )
         if score < 60:
             if self._paper_mode:
-                logger.info(
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_SCORE",
                     f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
-                    f"< 60 — proceeding anyway (paper mode)"
+                    f"< 60 — proceeding anyway (paper mode)",
                 )
             else:
-                logger.info(
-                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60"
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_SCORE",
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
                 )
                 return None
 
