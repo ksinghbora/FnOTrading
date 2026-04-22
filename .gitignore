@@ -69,3 +69,7 @@ data/*.dirty-*.csv
 .fno_main.pid
 data/heartbeat/
 data/replay_runs.jsonl
+
+# GDFL real-tick validation artifacts (derived data, ~13 MB)
+data/gdfl_snapshots/
+data/backtest_runs/

@@ -53,9 +53,19 @@ class BacktestClock(MarketClock):
     def __init__(self):
         super().__init__()
         self._sim_now: datetime | None = None
+        self._expiry_override: dict[str, list[date]] = {}  # underlying -> available expiries
 
     def set_time(self, dt: datetime) -> None:
         self._sim_now = dt
+
+    def set_expiries(self, underlying: str, expiries: list[date]) -> None:
+        """Override the calendar-based expiry lookup with real listed expiries.
+
+        Used when GDFL (or other real data) dictates which expiries exist,
+        which can differ from the default Tuesday weekly cadence (e.g. due
+        to holidays or unscheduled shifts).
+        """
+        self._expiry_override[underlying] = sorted(expiries)
 
     def now(self) -> datetime:
         if self._sim_now:
@@ -64,6 +74,15 @@ class BacktestClock(MarketClock):
 
     def is_market_open(self) -> bool:
         return True  # Always open during backtest
+
+    def next_expiry(self, underlying: str) -> date:
+        override = self._expiry_override.get(underlying)
+        if override:
+            today = self.now().date()
+            future = [e for e in override if e >= today]
+            if future:
+                return future[0]
+        return super().next_expiry(underlying)
 
 
 class BacktestEngine:
@@ -80,8 +99,9 @@ class BacktestEngine:
         seed: int = 42,
         tick_interval_minutes: int = 1,
         fat_tails: bool = False,
+        market_source=None,
     ) -> dict:
-        """Run a backtest with synthetic data.
+        """Run a backtest with synthetic data (or real GDFL data if market_source given).
 
         Args:
             strategy_name: Registered strategy name (e.g., 'short_straddle').
@@ -93,6 +113,9 @@ class BacktestEngine:
             seed: Random seed for reproducibility.
             tick_interval_minutes: Minutes between ticks (1=accurate, 5=fast).
             fat_tails: Use Student-t(df=5) instead of Gaussian for returns (heavier tails).
+            market_source: Optional GDFLMarketSource. When provided, real tick
+                data drives the backtest instead of synthetic BS prices. Trading
+                days come from the parquet index unless start_date is explicit.
 
         Returns:
             Dict with metrics, daily_results, equity_curve, trades.
@@ -121,9 +144,19 @@ class BacktestEngine:
         strategy = create_strategy(strategy_name, strategy_id, params)
 
         # ─── Trading days ─────────────────────────────────────────
-        trading_days = _trading_days(start_date, num_days, clock)
-        if not trading_days:
-            return {"error": "No trading days in range"}
+        if market_source is not None:
+            available = market_source.available_days()
+            if not available:
+                return {"error": "GDFL market_source has no available days"}
+            if start_date is not None:
+                available = [d for d in available if d >= start_date]
+            trading_days = available[:num_days]
+            if not trading_days:
+                return {"error": "No GDFL days in requested range"}
+        else:
+            trading_days = _trading_days(start_date, num_days, clock)
+            if not trading_days:
+                return {"error": "No trading days in range"}
 
         # ─── Market setup ─────────────────────────────────────────
         spot_token = _SPOT_TOKENS.get(underlying, NIFTY_SPOT_TOKEN)
@@ -154,8 +187,16 @@ class BacktestEngine:
 
         # Initial expiry and options
         clock.set_time(IST.localize(datetime.combine(trading_days[0], time(9, 15))))
-        expiry = clock.next_expiry(underlying)
-        _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
+        if market_source is not None:
+            # Load day 1 now so we can register options with REAL expiries/strikes
+            market_source.load_day(trading_days[0])
+            option_tokens = market_source.register_options(chain_builder, alloc_token)
+            expiries = market_source.expiries_for_day()
+            clock.set_expiries(underlying, expiries)
+            expiry = expiries[0] if expiries else clock.next_expiry(underlying)
+        else:
+            expiry = clock.next_expiry(underlying)
+            _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
 
         # ─── Wire order callback ──────────────────────────────────
         async def order_callback(signal_obj):
@@ -244,12 +285,22 @@ class BacktestEngine:
 
             # Expiry rollover
             clock.set_time(IST.localize(datetime.combine(day, time(9, 15))))
-            new_expiry = clock.next_expiry(underlying)
-            if new_expiry != expiry:
-                expiry = new_expiry
-                _register_options(
-                    chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token
-                )
+            if market_source is not None:
+                if day_idx > 0:  # day 0 already loaded above
+                    market_source.load_day(day)
+                    new_tokens = market_source.register_options(chain_builder, alloc_token)
+                    option_tokens.update(new_tokens)
+                exps = market_source.expiries_for_day()
+                if exps:
+                    clock.set_expiries(underlying, exps)
+                    expiry = exps[0]
+            else:
+                new_expiry = clock.next_expiry(underlying)
+                if new_expiry != expiry:
+                    expiry = new_expiry
+                    _register_options(
+                        chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token
+                    )
 
             daily_drift = _rand(0.003)
             day_open = spot
@@ -262,32 +313,38 @@ class BacktestEngine:
                 now = IST.localize(start_dt + timedelta(minutes=i))
                 clock.set_time(now)
 
-                # GBM walk for spot
-                vol_mult = 1.0 + 0.5 * (
-                    math.exp(-i / 30) + math.exp(-(375 - i) / 30)
-                )
-                ret = daily_drift / 375 + _rand(0.0003) * vol_mult
-                spot *= (1 + ret)
+                if market_source is not None:
+                    # Real tick data path — market_source writes all caches
+                    gdfl_spot, gdfl_vix = market_source.apply(
+                        now, feed, broker, chain_builder, portfolio, option_tokens,
+                    )
+                    if gdfl_spot is None:
+                        continue  # No data this minute (pre-open, holiday gap)
+                    spot = gdfl_spot
+                    vix = gdfl_vix if gdfl_vix is not None else vix
+                else:
+                    # Synthetic path — unchanged
+                    vol_mult = 1.0 + 0.5 * (
+                        math.exp(-i / 30) + math.exp(-(375 - i) / 30)
+                    )
+                    ret = daily_drift / 375 + _rand(0.0003) * vol_mult
+                    spot *= (1 + ret)
 
-                # OU walk for VIX
-                vix += 0.02 * (14.5 - vix) + _rand(0.15)
-                vix = max(8.0, min(40.0, vix))
+                    vix += 0.02 * (14.5 - vix) + float(rng.normal(0, 0.15))
+                    vix = max(8.0, min(40.0, vix))
 
-                # Time to expiry (decays intraday)
-                T = max(
-                    1 / (365 * 24),
-                    (expiry - day).days / 365 - i / (375 * 365),
-                )
-                iv_base = vix / 100
+                    T = max(
+                        1 / (365 * 24),
+                        (expiry - day).days / 365 - i / (375 * 365),
+                    )
+                    iv_base = vix / 100
 
-                # Update all market data
-                _update_market(
-                    feed, broker, chain_builder, portfolio,
-                    underlying, expiry, spot, vix, now,
-                    spot_token, step, _NUM_STRIKES, T, iv_base,
-                    option_tokens, alloc_token,
-                    day_open=day_open,
-                )
+                    _update_market(
+                        feed, broker, chain_builder, portfolio,
+                        underlying, expiry, spot, vix, now,
+                        spot_token, step, _NUM_STRIKES, T, iv_base,
+                        option_tokens, alloc_token,
+                    )
 
                 # Dispatch to strategy
                 spot_tick = Tick.model_construct(
@@ -301,9 +358,6 @@ class BacktestEngine:
                     high=Decimal("0"), low=Decimal("0"),
                     open=Decimal("0"), close=Decimal("0"),
                 )
-                # Feed spot tick to aggregator for candle building
-                aggregator.process_tick_direct(spot_tick)
-
                 try:
                     signal = await strategy.on_tick(spot_tick)
                     if signal:
@@ -424,19 +478,11 @@ def _update_market(
     underlying, expiry, spot, vix, now,
     spot_token, step, num_strikes, T, iv_base,
     option_tokens, alloc_token,
-    day_open=0.0,
 ):
     """Vectorized market update — batch BS + Greeks via numpy.
 
     Directly populates feed cache, broker LTP, option chain entries,
     and portfolio position LTPs. No EventBus involved.
-
-    IV dynamics model (realistic intraday behavior):
-    - Intraday IV crush: morning premium decays through the day
-    - Expiry day crush: dramatic IV drop on weekly expiry (Tuesday)
-    - Move-dependent expansion: IV spikes on sharp spot moves (asymmetric — down > up)
-    - Moneyness-based bid-ask spreads: tighter ATM, wider OTM
-    - Round-strike OI bias: x000/x500 strikes get higher OI
     """
     spot_dec = Decimal(str(round(spot, 2)))
     r = RISK_FREE_RATE
@@ -508,55 +554,15 @@ def _update_market(
     for idx in range(n):
         strikes_arr[idx] = atm + (idx - num_strikes) * step
 
-    # ─── IV Dynamics (realistic intraday behavior) ──────────
-    # Minutes into trading day (9:15=0, 15:30=375)
-    minutes_into_day = max(0, (now.hour - 9) * 60 + now.minute - 15)
-    t_norm = minutes_into_day / 375  # 0→1 through the day
-
-    is_expiry_day = now.date() == expiry
-
-    # 1. Intraday IV pattern (conservative — calibrated to real NIFTY data)
-    if is_expiry_day:
-        # Expiry day: moderate IV crush — real weekly options lose ~15-20% IV
-        # 92% at open → 75% at close (not as extreme as theoretical)
-        iv_intraday = 0.92 - 0.17 * t_norm
-    else:
-        # Normal day: ~+2% morning premium, settling to ~-1% by close
-        # Real NIFTY IV variation is ~3-4% intraday, not 9%
-        iv_intraday = 1.0 + 0.02 * math.exp(-4 * t_norm) - 0.01 * t_norm
-
-    # 2. Move-dependent IV expansion (fear effect)
-    iv_move = 1.0
-    if day_open > 0:
-        move_pct = (spot - day_open) / day_open
-        abs_move = abs(move_pct)
-        if abs_move > 0.003:  # >0.3% triggers IV expansion
-            # Down moves spike IV 1.5x more than up (skew effect)
-            down_bias = 1.5 if move_pct < 0 else 1.0
-            iv_move = 1.0 + (abs_move - 0.003) * 8 * down_bias
-            iv_move = min(iv_move, 1.25)  # Cap at 25% expansion
-
-    # Apply dynamics to base IV
-    iv_dynamic = iv_base * iv_intraday * iv_move
-
     # Vectorized BS pricing for all strikes at once
     S_arr = np.full(n, spot)
     T_safe = max(T, 1e-10)
-    iv_atm = max(iv_dynamic, 1e-10)
+    sigma_safe = max(iv_base, 1e-10)
     sqrt_T = math.sqrt(T_safe)
     exp_rT = math.exp(-r * T_safe)
 
-    # IV skew model: iv(K) = iv_atm * (1 + alpha * m^2 + beta * m)
-    # alpha=8 (smile curvature — OTM options cost more)
-    # beta=-3 (put skew — OTM puts have higher IV, matching NIFTY market)
-    # Produces: ATM=14%, 500pt OTM PE=~16%, 500pt OTM CE=~13.2%
-    _SKEW_ALPHA = 8.0
-    _SKEW_BETA = -3.0
-    moneyness_arr = (strikes_arr - spot) / spot
-    iv_arr = np.maximum(0.01, iv_atm * (1.0 + _SKEW_ALPHA * moneyness_arr**2 + _SKEW_BETA * moneyness_arr))
-
-    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * iv_arr**2) * T_safe) / (iv_arr * sqrt_T)
-    d2_arr = d1_arr - iv_arr * sqrt_T
+    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * sigma_safe**2) * T_safe) / (sigma_safe * sqrt_T)
+    d2_arr = d1_arr - sigma_safe * sqrt_T
     N_d1 = sp_norm.cdf(d1_arr)
     N_d2 = sp_norm.cdf(d2_arr)
     N_neg_d1 = 1.0 - N_d1
@@ -566,29 +572,24 @@ def _update_market(
     ce_prices_arr = np.maximum(0.05, S_arr * N_d1 - strikes_arr * exp_rT * N_d2)
     pe_prices_arr = np.maximum(0.05, strikes_arr * exp_rT * N_neg_d2 - S_arr * N_neg_d1)
 
-    # Vectorized Greeks (using per-strike IV)
-    gamma_arr = np.minimum(n_d1_pdf / (S_arr * iv_arr * sqrt_T), 1.0)
-    common_theta = -(S_arr * n_d1_pdf * iv_arr) / (2 * sqrt_T)
+    # Vectorized Greeks
+    gamma_arr = np.minimum(n_d1_pdf / (S_arr * sigma_safe * sqrt_T), 1.0)
+    common_theta = -(S_arr * n_d1_pdf * sigma_safe) / (2 * sqrt_T)
     ce_theta_arr = (common_theta - r * strikes_arr * exp_rT * N_d2) / 365
     pe_theta_arr = (common_theta + r * strikes_arr * exp_rT * N_neg_d2) / 365
     vega_arr = S_arr * n_d1_pdf * sqrt_T / 100
     ce_rho_arr = strikes_arr * T_safe * exp_rT * N_d2 / 100
     pe_rho_arr = -strikes_arr * T_safe * exp_rT * N_neg_d2 / 100
 
-    # Synthetic OI (vectorized) — round-strike bias for realistic support/resistance
+    # Synthetic OI (vectorized)
     distance_arr = np.abs(strikes_arr - spot) / spot if spot > 0 else np.zeros(n)
-    oi_base_arr = 50000 * np.exp(-distance_arr * 30)
-    # Round-number strikes attract more OI (market maker pinning, institutional hedging)
-    # x000: 3x, x500: 2x, others: 1x
-    oi_mult_arr = np.ones(n)
-    oi_mult_arr[strikes_arr % 1000 == 0] = 3.0
-    oi_mult_arr[(strikes_arr % 500 == 0) & (strikes_arr % 1000 != 0)] = 2.0
-    oi_arr = np.maximum(1000, (oi_base_arr * oi_mult_arr)).astype(int)
+    oi_arr = np.maximum(1000, 50000 * np.exp(-distance_arr * 30)).astype(int)
 
     # Expiry string (computed once)
     exp_str = expiry.strftime("%y%b").upper()
     _ZERO = Decimal("0")
     _SPREAD_MIN = Decimal("0.05")
+    _SPREAD_FACTOR = Decimal("0.01")
 
     # Populate chain entries from vectorized results
     for idx in range(n):
@@ -615,11 +616,7 @@ def _update_market(
 
             symbol = f"{underlying}{exp_str}{int(strike)}{opt_str}"
             price_dec = Decimal(str(round(price_val, 2)))
-            # Moneyness-based bid-ask: tight ATM (0.5%), wide OTM (up to 8%)
-            m_abs = abs(float(moneyness_arr[idx]))
-            spread_pct = 0.005 + 0.15 * m_abs * m_abs
-            spread_pct = min(spread_pct, 0.08)
-            spread = max(_SPREAD_MIN, Decimal(str(round(float(price_dec) * spread_pct, 2))))
+            spread = max(_SPREAD_MIN, price_dec * _SPREAD_FACTOR)
             bid = max(_SPREAD_MIN, price_dec - spread)
             ask = price_dec + spread
             opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
@@ -630,7 +627,7 @@ def _update_market(
                 theta=round(theta_val, 4),
                 vega=round(float(vega_arr[idx]), 4),
                 rho=round(rho_val, 4),
-                iv=round(float(iv_arr[idx]), 4),
+                iv=round(sigma_safe, 4),
             )
 
             opt_data = OptionData.model_construct(
@@ -672,6 +669,8 @@ def _update_market(
     chain.total_pe_oi = sum(e.pe.oi for e in chain.strikes if e.pe)
     if chain.total_ce_oi > 0:
         chain.pcr_oi = chain.total_pe_oi / chain.total_ce_oi
+    from src.options.chain_analyzer import compute_max_pain
+    chain.max_pain = compute_max_pain(chain)
     chain.updated_at = now
 
     # Update portfolio LTPs for open positions
