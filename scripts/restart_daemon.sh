@@ -79,10 +79,31 @@ if [ -f "$PIDFILE" ]; then
 fi
 
 # ─── 3. Launch fresh daemon ──────────────────────────────────────────
+# Subshell-orphan pattern is REQUIRED on macOS:
+#   - Plain `nohup ... &` from this script left python orphaned to bash's
+#     process group. When bash exited at the end of step 4, python received
+#     SIGTERM (the Apr 22 08:50 incident: uvicorn logged "Shutting down" 1s
+#     after the script said "Restart complete", and the daemon was dead by
+#     09:00 with no trades all morning).
+#   - `setsid` would be cleaner but isn't installed on macOS by default.
+#   - `(cmd &)` runs in a subshell that exits immediately, leaving the
+#     daemon as an orphan owned by launchd/init — which is what we want.
+#   - Stdin redirected from /dev/null so the daemon doesn't inherit a tty
+#     fd that could deliver SIGHUP later.
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/main_$(date +%Y%m%d_%H%M%S).log"
-nohup "$UV" run python -m src.main > "$LOG" 2>&1 &
-NEW_PID=$!
+( nohup "$UV" run python -m src.main > "$LOG" 2>&1 < /dev/null & echo $! > "$PIDFILE.tmp" )
+# Subshell wrote PID asynchronously; brief poll for the file.
+for _ in 1 2 3 4 5; do
+    [ -s "$PIDFILE.tmp" ] && break
+    sleep 0.2
+done
+NEW_PID=$(cat "$PIDFILE.tmp" 2>/dev/null || echo "")
+rm -f "$PIDFILE.tmp"
+if [ -z "$NEW_PID" ]; then
+    log "ERROR: failed to capture new daemon PID."
+    exit 1
+fi
 echo "$NEW_PID" > "$PIDFILE"
 log "Started daemon PID=$NEW_PID, log=$(basename "$LOG")"
 
