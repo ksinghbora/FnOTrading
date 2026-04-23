@@ -21,11 +21,9 @@ Usage::
 """
 
 import logging
-import math
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from decimal import Decimal
 
-import numpy as np
 import pytz
 
 from src.backtest.common import (
@@ -51,7 +49,6 @@ from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
 from src.market_data.simulator import NIFTY_SPOT_TOKEN
-from src.options.skew import ParametricSkew
 from src.portfolio.charges import calculate_charges
 from src.portfolio.manager import PortfolioManager
 from src.strategy.context import StrategyContext
@@ -60,8 +57,9 @@ from src.strategy.registry import create_strategy
 # ─── Backward-compat private aliases ───────────────────────────────
 # A few modules we intentionally don't touch in Phase 1 still import
 # these under their legacy private names from ``src.backtest.engine``.
-# Keep the aliases so those imports continue to resolve; the helpers
-# themselves now live in ``src.backtest.common``.
+# Keep the aliases (and the re-exports from common above) so those
+# imports continue to resolve; the helpers themselves now live in
+# ``src.backtest.common``.
 _import_strategies = import_strategies
 _trading_days = trading_days
 
@@ -73,7 +71,7 @@ _DEFAULT_SPOTS = {"NIFTY": 22500.0, "BANKNIFTY": 48000.0}
 
 
 class BacktestEngine:
-    """Replays synthetic market data through any registered strategy."""
+    """Replays a real-tick ``market_source`` through any registered strategy."""
 
     async def run(
         self,
@@ -85,32 +83,44 @@ class BacktestEngine:
         initial_capital: float = 1_000_000,
         seed: int = 42,
         tick_interval_minutes: int = 1,
-        fat_tails: bool = False,
         market_source=None,
     ) -> dict:
-        """Run a backtest with synthetic data (or real GDFL data if market_source given).
+        """Run a real-tick backtest against ``market_source``.
 
         Args:
-            strategy_name: Registered strategy name (e.g., 'short_straddle').
+            strategy_name: Registered strategy name (e.g., 'portfolio').
             strategy_id: Unique ID (auto-generated if empty).
             strategy_params: Strategy parameter overrides.
-            num_days: Number of trading days to simulate.
-            start_date: First trading day (defaults to ~45 days ago).
+            num_days: Number of trading days to simulate (capped by the
+                number of days available in ``market_source``).
+            start_date: Optional first trading day. If given, skips any
+                earlier days in ``market_source``.
             initial_capital: Starting capital.
-            seed: Random seed for reproducibility.
+            seed: Random seed (kept for reproducibility of any stochastic
+                strategy internals; the market replay itself is deterministic).
             tick_interval_minutes: Minutes between ticks (1=accurate, 5=fast).
-            fat_tails: Use Student-t(df=5) instead of Gaussian for returns (heavier tails).
-            market_source: Optional GDFLMarketSource. When provided, real tick
-                data drives the backtest instead of synthetic BS prices. Trading
-                days come from the parquet index unless start_date is explicit.
+            market_source: REQUIRED. A :class:`GDFLMarketSource` (or equivalent)
+                providing ``available_days()``, ``load_day()``, ``apply()``,
+                ``register_options()``, and ``expiries_for_day()``.
+
+        Raises:
+            ValueError: if ``market_source`` is ``None``. The synthetic
+                Black-Scholes data-generation path has been removed — see
+                Phase 1 of the BS removal refactor.
 
         Returns:
             Dict with metrics, daily_results, equity_curve, trades.
         """
+        if market_source is None:
+            raise ValueError(
+                "BacktestEngine.run() requires market_source — the synthetic "
+                "Black-Scholes path has been removed. Pass a GDFLMarketSource "
+                "(see scripts/run_gdfl_backtest.py for a worked example)."
+            )
+
         strategy_id = strategy_id or f"{strategy_name}_bt"
         params = strategy_params or {}
         underlying = params.get("underlying", "NIFTY")
-        start_date = start_date or (date.today() - timedelta(days=45))
 
         # Ensure strategy modules are registered
         _import_strategies()
@@ -123,91 +133,61 @@ class BacktestEngine:
         chain_builder = OptionChainBuilder(event_bus, clock)
 
         # Quote provider for the paper broker (F2).
-        # Only wired when we have a real market_source (GDFL). Returns
-        # (bid, ask) for a tradingsymbol by reverse-looking-up the
-        # instrument token via chain_builder's symbol_map and reading
-        # the latest tick's bid/ask. When the paper broker sees
-        # non-zero bid/ask it fills BUY @ ask and SELL @ bid, mirroring
-        # how live Kite market orders cross the spread. For the
-        # synthetic BS path we leave quote_provider=None so the tiered
-        # SlippageModel (premium tier × time × VIX × size) is used as
-        # before — BS bid/ask are cosmetic ±1% placeholders and not a
-        # realistic fill model.
-        quote_provider = None
-        if market_source is not None:
-            # Build reverse symbol → token map lazily; the chain
-            # builder populates _symbol_map as options are registered.
-            # Cache the inverse and refresh when we see a symbol we
-            # don't know yet (new strikes appear daily in GDFL).
-            _sym_to_token: dict[str, int] = {}
+        # Returns (bid, ask) for a tradingsymbol by reverse-looking-up
+        # the instrument token via chain_builder's symbol_map and reading
+        # the latest tick's bid/ask. When the paper broker sees non-zero
+        # bid/ask it fills BUY @ ask and SELL @ bid, mirroring how live
+        # Kite market orders cross the spread.
+        _sym_to_token: dict[str, int] = {}
 
-            def _resolve_token(tradingsymbol: str) -> int | None:
-                tok = _sym_to_token.get(tradingsymbol)
-                if tok is not None:
-                    return tok
-                for t, s in chain_builder._symbol_map.items():
-                    if s == tradingsymbol:
-                        _sym_to_token[tradingsymbol] = t
-                        return t
-                return None
+        def _resolve_token(tradingsymbol: str) -> int | None:
+            tok = _sym_to_token.get(tradingsymbol)
+            if tok is not None:
+                return tok
+            for t, s in chain_builder._symbol_map.items():
+                if s == tradingsymbol:
+                    _sym_to_token[tradingsymbol] = t
+                    return t
+            return None
 
-            def _quote_provider(tradingsymbol: str) -> tuple[float | None, float | None]:
-                tok = _resolve_token(tradingsymbol)
-                if tok is None:
-                    return None, None
-                tick = feed._latest_ticks.get(tok)
-                if tick is None:
-                    return None, None
-                bid = float(tick.bid_price) if tick.bid_price else 0.0
-                ask = float(tick.ask_price) if tick.ask_price else 0.0
-                if bid <= 0 or ask <= 0 or ask < bid:
-                    return None, None
-                return bid, ask
-
-            quote_provider = _quote_provider
+        def _quote_provider(tradingsymbol: str) -> tuple[float | None, float | None]:
+            tok = _resolve_token(tradingsymbol)
+            if tok is None:
+                return None, None
+            tick = feed._latest_ticks.get(tok)
+            if tick is None:
+                return None, None
+            bid = float(tick.bid_price) if tick.bid_price else 0.0
+            ask = float(tick.ask_price) if tick.ask_price else 0.0
+            if bid <= 0 or ask <= 0 or ask < bid:
+                return None, None
+            return bid, ask
 
         broker = PaperBrokerClient(
             initial_capital=initial_capital,
-            quote_provider=quote_provider,
+            quote_provider=_quote_provider,
         )
         portfolio = PortfolioManager(event_bus, broker, chain_builder)
-
-        # IV skew — default NIFTY-typical. Refreshed daily from observed
-        # chain IVs via `_fit_daily_skew` if chain has ≥5 valid IV points.
-        skew_model: ParametricSkew = ParametricSkew.nifty_typical()
 
         await broker.connect()
 
         # ─── Create strategy ──────────────────────────────────────
         strategy = create_strategy(strategy_name, strategy_id, params)
 
-        # ─── Trading days ─────────────────────────────────────────
-        if market_source is not None:
-            available = market_source.available_days()
-            if not available:
-                return {"error": "GDFL market_source has no available days"}
-            if start_date is not None:
-                available = [d for d in available if d >= start_date]
-            trading_days = available[:num_days]
-            if not trading_days:
-                return {"error": "No GDFL days in requested range"}
-        else:
-            trading_days = _trading_days(start_date, num_days, clock)
-            if not trading_days:
-                return {"error": "No trading days in range"}
+        # ─── Trading days (from market_source) ────────────────────
+        available = market_source.available_days()
+        if not available:
+            return {"error": "GDFL market_source has no available days"}
+        if start_date is not None:
+            available = [d for d in available if d >= start_date]
+        trading_days = available[:num_days]
+        if not trading_days:
+            return {"error": "No GDFL days in requested range"}
 
         # ─── Market setup ─────────────────────────────────────────
         spot_token = _SPOT_TOKENS.get(underlying, NIFTY_SPOT_TOKEN)
         step = _STRIKE_STEPS.get(underlying, 50)
         spot = _DEFAULT_SPOTS.get(underlying, 22500.0)
-        rng = np.random.default_rng(seed)
-        # Fat tails: Student-t(df=5) scaled to match normal variance
-        _T_DF = 5
-        _T_SCALE = math.sqrt((_T_DF - 2) / _T_DF)  # ~0.775
-        def _rand(sigma: float) -> float:
-            if fat_tails:
-                return float(rng.standard_t(_T_DF)) * _T_SCALE * sigma
-            return float(rng.normal(0, sigma))
         vix = 14.5
 
         chain_builder.register_spot(spot_token, underlying)
@@ -223,18 +203,14 @@ class BacktestEngine:
                 next_token[0] += 1
             return option_tokens[key]
 
-        # Initial expiry and options
+        # Initial expiry and options — load day 1 so we can register
+        # options with REAL expiries/strikes from the market source.
         clock.set_time(IST.localize(datetime.combine(trading_days[0], time(9, 15))))
-        if market_source is not None:
-            # Load day 1 now so we can register options with REAL expiries/strikes
-            market_source.load_day(trading_days[0])
-            option_tokens = market_source.register_options(chain_builder, alloc_token)
-            expiries = market_source.expiries_for_day()
-            clock.set_expiries(underlying, expiries)
-            expiry = expiries[0] if expiries else clock.next_expiry(underlying)
-        else:
-            expiry = clock.next_expiry(underlying)
-            _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
+        market_source.load_day(trading_days[0])
+        option_tokens = market_source.register_options(chain_builder, alloc_token)
+        expiries = market_source.expiries_for_day()
+        clock.set_expiries(underlying, expiries)
+        expiry = expiries[0] if expiries else clock.next_expiry(underlying)
 
         # ─── Wire order callback ──────────────────────────────────
         # F2: No pre-slippage here. The paper broker applies the single
@@ -337,32 +313,19 @@ class BacktestEngine:
                 # Clear intraday candle builders so morning range is fresh
                 aggregator._builders.clear()
 
-            # Expiry rollover
+            # Expiry rollover (GDFL only — the synthetic BS path is gone).
             clock.set_time(IST.localize(datetime.combine(day, time(9, 15))))
-            if market_source is not None:
-                if day_idx > 0:  # day 0 already loaded above
-                    market_source.load_day(day)
-                    new_tokens = market_source.register_options(chain_builder, alloc_token)
-                    option_tokens.update(new_tokens)
-                exps = market_source.expiries_for_day()
-                if exps:
-                    clock.set_expiries(underlying, exps)
-                    expiry = exps[0]
-            else:
-                new_expiry = clock.next_expiry(underlying)
-                if new_expiry != expiry:
-                    expiry = new_expiry
-                    _register_options(
-                        chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token
-                    )
+            if day_idx > 0:  # day 0 already loaded above
+                market_source.load_day(day)
+                new_tokens = market_source.register_options(chain_builder, alloc_token)
+                option_tokens.update(new_tokens)
+            exps = market_source.expiries_for_day()
+            if exps:
+                clock.set_expiries(underlying, exps)
+                expiry = exps[0]
 
-            daily_drift = _rand(0.003)
             day_open = spot
             day_trades_start = len(broker._trades)
-
-            # Attempt to refit skew from yesterday's observed chain IVs.
-            # Falls back to nifty_typical() if chain has <5 valid IVs.
-            skew_model = _fit_daily_skew(chain_builder, underlying, expiry, spot, skew_model)
 
             # Minute-by-minute replay
             start_dt = datetime.combine(day, time(9, 15))
@@ -371,39 +334,14 @@ class BacktestEngine:
                 now = IST.localize(start_dt + timedelta(minutes=i))
                 clock.set_time(now)
 
-                if market_source is not None:
-                    # Real tick data path — market_source writes all caches
-                    gdfl_spot, gdfl_vix = market_source.apply(
-                        now, feed, broker, chain_builder, portfolio, option_tokens,
-                    )
-                    if gdfl_spot is None:
-                        continue  # No data this minute (pre-open, holiday gap)
-                    spot = gdfl_spot
-                    vix = gdfl_vix if gdfl_vix is not None else vix
-                else:
-                    # Synthetic path — unchanged
-                    vol_mult = 1.0 + 0.5 * (
-                        math.exp(-i / 30) + math.exp(-(375 - i) / 30)
-                    )
-                    ret = daily_drift / 375 + _rand(0.0003) * vol_mult
-                    spot *= (1 + ret)
-
-                    vix += 0.02 * (14.5 - vix) + float(rng.normal(0, 0.15))
-                    vix = max(8.0, min(40.0, vix))
-
-                    T = max(
-                        1 / (365 * 24),
-                        (expiry - day).days / 365 - i / (375 * 365),
-                    )
-                    iv_base = vix / 100
-
-                    _update_market(
-                        feed, broker, chain_builder, portfolio,
-                        underlying, expiry, spot, vix, now,
-                        spot_token, step, _NUM_STRIKES, T, iv_base,
-                        option_tokens, alloc_token,
-                        skew_model=skew_model,
-                    )
+                # Real tick data path — market_source writes all caches
+                gdfl_spot, gdfl_vix = market_source.apply(
+                    now, feed, broker, chain_builder, portfolio, option_tokens,
+                )
+                if gdfl_spot is None:
+                    continue  # No data this minute (pre-open, holiday gap)
+                spot = gdfl_spot
+                vix = gdfl_vix if gdfl_vix is not None else vix
 
                 # Dispatch to strategy
                 spot_tick = Tick.model_construct(
