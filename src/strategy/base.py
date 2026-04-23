@@ -288,6 +288,94 @@ class BaseStrategy(ABC):
         )
         return f"Skipping entry — {underlying} expiry today (0DTE risk)"
 
+    # ─── Vol-scaled exit helpers ─────────────────────────────────────
+    # Opt-in behind `params.vol_scaled_exits`. When off, strategies use
+    # their existing hardcoded percentages and these helpers are never
+    # called. When on, the helpers replace a static pct with
+    #
+    #     effective_pct = k * (vix/100) * sqrt(dte/365)
+    #
+    # clamped to [0.10, 0.60] to avoid degenerate values on expiry-day
+    # VIX spikes or zero-DTE denominators. See PortfolioParams /
+    # BaseStrategyParams for calibration math (VIX=15 weekly => k_sl=12.0
+    # reproduces current 25% SL).
+
+    # Clamp values are deliberate process constants — the 10%..60% band
+    # covers the "economically meaningful but not catastrophic" region
+    # seen across current params (10% trail minimum, 60% IC stress max).
+    _VOL_SCALED_EXIT_MIN = 0.10
+    _VOL_SCALED_EXIT_MAX = 0.60
+
+    def _compute_vol_scaled_exit_pct(
+        self, kind: str, dte: int, fallback_pct: float
+    ) -> float:
+        """Compute vol-scaled exit threshold as a percentage (e.g. 25.0 = 25%).
+
+        Args:
+            kind: One of "sl", "pt", "trail" — selects which `*_vol_k`
+                multiplier to use.
+            dte: Days-to-expiry for the active expiry (1 minimum — a
+                sub-1 DTE is treated as 1 day to avoid sqrt(0)).
+            fallback_pct: Hardcoded percentage to return when
+                `vol_scaled_exits=False` OR the helper cannot compute
+                a valid value (VIX unavailable, etc.). Pass the
+                existing `premium_stop_loss_pct` / `trend_profit_target_pct`
+                / etc. Caller semantics are preserved when vol scaling
+                is off.
+
+        Returns:
+            Percentage (matches the caller's existing scale — e.g. 25.0
+            not 0.25) so existing comparisons like
+            `if loss_pct > self.params.stop_loss_pct` keep working
+            whether the RHS is hardcoded or vol-scaled.
+        """
+        if not getattr(self.params, "vol_scaled_exits", False):
+            return fallback_pct
+
+        kind = kind.lower()
+        if kind == "sl":
+            k = float(getattr(self.params, "sl_vol_k", 12.0))
+        elif kind == "pt":
+            k = float(getattr(self.params, "pt_vol_k", 5.8))
+        elif kind == "trail":
+            k = float(getattr(self.params, "trail_vol_k", 4.8))
+        else:
+            raise ValueError(f"Unknown vol-scaled exit kind: {kind}")
+
+        try:
+            vix = float(self.ctx.get_vix())
+        except Exception:
+            vix = 0.0
+        if vix <= 0:
+            # No VIX signal — fall back to hardcoded to avoid silently
+            # running a degenerate 0%-SL.
+            return fallback_pct
+
+        dte_safe = max(1, int(dte))
+        from math import sqrt
+        sigma_t = (vix / 100.0) * sqrt(dte_safe / 365.0)
+        raw = k * sigma_t  # fraction
+        clamped = max(self._VOL_SCALED_EXIT_MIN, min(self._VOL_SCALED_EXIT_MAX, raw))
+
+        effective_pct = clamped * 100.0  # back to percentage scale
+
+        logger.debug(
+            "vol-scaled exit threshold computed",
+            extra={
+                "tag": "VOL_SCALED_EXIT",
+                "strategy": self.strategy_id,
+                "kind": kind,
+                "k": round(k, 3),
+                "vix": round(vix, 2),
+                "dte": dte_safe,
+                "raw_frac": round(raw, 4),
+                "clamped_frac": round(clamped, 4),
+                "effective_pct": round(effective_pct, 2),
+                "fallback_pct": round(fallback_pct, 2),
+            },
+        )
+        return effective_pct
+
     def _can_activate_trail_stop(self, decay_pct: float) -> bool:
         """Two-gate guard before trailing-stop logic fires (Apr 17 fix).
 

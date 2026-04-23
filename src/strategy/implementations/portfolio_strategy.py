@@ -1381,30 +1381,48 @@ class PortfolioStrategy(BaseStrategy):
                         f"Theta efficiency: ratio {theta_gamma:.1f} < {self.params.theta_gamma_min_ratio}"
                     )
 
+        # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
+        # When `vol_scaled_exits=False`, each helper returns the fallback
+        # verbatim so behavior is unchanged by default. The IC high-VIX widen
+        # and the gamma-tightening sl_multiplier are layered on top, same as
+        # before — vol-scaling replaces the *base* threshold, not the modifiers.
+        dte_prem = (
+            (self._expiry - self.ctx.clock.now().date()).days
+            if self._expiry else 7
+        )
+
         # Profit target
-        pt_pct = (
+        pt_fallback = (
             self.params.ic_profit_target_pct if self._prem_mode == "iron_condor"
             else self.params.premium_profit_target_pct
         )
+        pt_pct = self._compute_vol_scaled_exit_pct("pt", dte_prem, fallback_pct=pt_fallback)
         if change_pct < 0 and abs(change_pct) >= pt_pct:
             return self._exit_premium(f"Profit target: premium decayed {abs(change_pct):.1f}%")
 
         # Stop loss (gamma-tightened, VIX-scaled for IC)
         if self._prem_mode == "iron_condor":
-            base_sl = self.params.ic_stop_loss_pct
+            base_sl = self._compute_vol_scaled_exit_pct(
+                "sl", dte_prem, fallback_pct=self.params.ic_stop_loss_pct
+            )
             # IC in high VIX: premiums are fatter so noise is larger — widen stop
             vix_now = self.ctx.get_vix()
             if vix_now > 20:
                 base_sl = min(base_sl * 1.5, 80.0)  # 40% → 60%, capped at 80%
             sl_pct = base_sl * sl_multiplier
         else:
-            sl_pct = self.params.premium_stop_loss_pct * sl_multiplier
+            base_sl = self._compute_vol_scaled_exit_pct(
+                "sl", dte_prem, fallback_pct=self.params.premium_stop_loss_pct
+            )
+            sl_pct = base_sl * sl_multiplier
         if change_pct > sl_pct:
             tag = " (gamma-tightened)" if gamma_tightened else ""
             return self._exit_premium(f"Stop loss: premium up {change_pct:.1f}%{tag}")
 
         # Trailing stop — lock in gains after premium decays meaningfully
-        trail_pct_base = self.params.premium_trail_stop_pct
+        trail_pct_base = self._compute_vol_scaled_exit_pct(
+            "trail", dte_prem, fallback_pct=self.params.premium_trail_stop_pct
+        )
         if trail_pct_base > 0:
             if current_cost < self._peak_premium:
                 self._peak_premium = current_cost
@@ -1550,21 +1568,36 @@ class PortfolioStrategy(BaseStrategy):
         if current_value > self._peak_spread_value:
             self._peak_spread_value = current_value
 
+        # Resolve vol-scaled exits (opt-in) — see _compute_vol_scaled_exit_pct.
+        dte_trend = (
+            (self._expiry - self.ctx.clock.now().date()).days
+            if self._expiry else 7
+        )
+        trend_pt_pct = self._compute_vol_scaled_exit_pct(
+            "pt", dte_trend, fallback_pct=self.params.trend_profit_target_pct
+        )
+        trend_sl_pct = self._compute_vol_scaled_exit_pct(
+            "sl", dte_trend, fallback_pct=self.params.trend_stop_loss_pct
+        )
+        trend_trail_pct = self._compute_vol_scaled_exit_pct(
+            "trail", dte_trend, fallback_pct=self.params.trend_trailing_stop_pct
+        )
+
         # Profit target
         if self._max_spread_value > 0:
             value_pct = float(current_value / self._max_spread_value * 100)
-            if value_pct >= self.params.trend_profit_target_pct:
+            if value_pct >= trend_pt_pct:
                 return self._exit_trend(f"Trend profit: spread at {value_pct:.1f}% of max")
 
         # Stop loss
         if self._entry_debit > 0:
             loss_pct = float((self._entry_debit - current_value) / self._entry_debit * 100)
-            if loss_pct >= self.params.trend_stop_loss_pct:
+            if loss_pct >= trend_sl_pct:
                 return self._exit_trend(f"Trend stop: lost {loss_pct:.1f}%")
 
         # Trailing stop — activates once spread reaches 30% of max profit
         # This prevents giving back large unrealized gains (e.g. Monday's +517 → -1527)
-        if self.params.trend_trailing_stop_pct > 0 and self._max_spread_value > 0:
+        if trend_trail_pct > 0 and self._max_spread_value > 0:
             max_profit = self._max_spread_value - self._entry_debit
             if max_profit > 0:
                 current_profit = current_value - self._entry_debit
@@ -1573,7 +1606,7 @@ class PortfolioStrategy(BaseStrategy):
                         pullback = float(
                             (self._peak_spread_value - current_value) / self._peak_spread_value * 100
                         )
-                        if pullback >= self.params.trend_trailing_stop_pct:
+                        if pullback >= trend_trail_pct:
                             return self._exit_trend(f"Trend trail: pullback {pullback:.1f}%")
 
         return None
