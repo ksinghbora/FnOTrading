@@ -53,6 +53,11 @@ logger = logging.getLogger("validate_strategy")
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--strategy", required=True)
+    p.add_argument(
+        "--train-start", default="",
+        help="Optional ISO date (YYYY-MM-DD) to clip the train window from "
+             "below — useful for smoke tests. Defaults to earliest available.",
+    )
     p.add_argument("--train-end", required=True, help="ISO date (YYYY-MM-DD)")
     p.add_argument("--val-end", required=True)
     p.add_argument("--holdout-end", required=True)
@@ -186,6 +191,9 @@ async def main_async(args: argparse.Namespace) -> int:
     )
 
     train_days = loader.train_days()
+    if args.train_start:
+        ts = date.fromisoformat(args.train_start)
+        train_days = [d for d in train_days if d >= ts]
     val_days = loader.val_days()
     combined = train_days + val_days
     if not combined:
