@@ -915,6 +915,7 @@ class PortfolioStrategy(BaseStrategy):
             candles,
             morning_candles=3,
             confirmation_pct=self.params.breakout_confirmation_pct,
+            atr_multiplier=self.params.breakout_atr_multiplier,
         )
 
         if not breakout.direction:

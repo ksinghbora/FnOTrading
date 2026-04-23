@@ -289,16 +289,20 @@ class PortfolioParams(BaseStrategyParams):
     trend_stop_loss_pct: float = 25.0        # was 20 (Apr 17), reverted to OOS-validated mid
     trend_profit_target_pct: float = 50.0    # was 55 (Apr 17), reverted to OOS-validated mid
     trend_trailing_stop_pct: float = 15.0    # unchanged — protects gains without choking winners
-    # Apr 23 GDFL 246-day analysis: 0.5% triggered on normal intraday noise;
-    # trend leg net -7,334 on solo (premium-silent, low-VIX) days driven by
-    # whipsaws. 0.7% aligns with standalone TrendDebitSpreadParams and the
-    # ~0.5 ATR threshold standard for NIFTY breakouts.
-    breakout_confirmation_pct: float = 0.7
-    # Apr 23 GDFL: trend leg lost -5,768 net across 24 days in Jul-Aug 2025
-    # when VIX=9-12 and premium was correctly VIX-gated off. Breakouts need
-    # realized vol to confirm; sub-12 VIX = range-bound regime where 0.7%
-    # breakouts are noise, not signal. Matches TrendDebitSpreadParams.vix_entry_min.
-    trend_vix_min: float = 12.0
+    # F5 revert (Apr 23 afternoon): the 0.5→0.7 tuning and trend_vix_min=12 were
+    # curve-fit to Jul-Aug 2025 loss days. Expert review + F1/F2 fill fixes made
+    # the holdout loss honest; the next legitimate lever is a regime gate (P1.5),
+    # not a fixed-pct threshold that means different things at VIX=10 vs VIX=18.
+    # Reverted to pre-Apr-23 0.5 and removed the trend_vix_min cutoff so the
+    # regime detector (not a hardcoded param) carries the gating load.
+    breakout_confirmation_pct: float = 0.5
+    trend_vix_min: float = 0.0
+    # F5b: self-calibrating ATR floor. momentum_breakout uses
+    # max(confirmation_pct%, atr_multiplier × ATR14) so the effective
+    # threshold scales with realized vol — tight on VIX=10 days, wide on
+    # VIX=20 days. 1.25× matches the NIFTY opening-range convention
+    # (expert review, trader view). Replaces the fixed-pct curve-fit.
+    breakout_atr_multiplier: float = 1.25
 
     # ─── Event-day hard block + Friday square-off (P1 #11, #12) ──────
     # Apr 23 expert review: RBI/Fed/Budget/CPI days currently receive only a
