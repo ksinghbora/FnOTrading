@@ -6,6 +6,7 @@ in paper mode vs live mode with zero code changes.
 
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 
@@ -15,6 +16,9 @@ from src.core.clock import now_ist
 from src.core.types import OrderSide, OrderType, ProductType
 
 logger = logging.getLogger(__name__)
+
+# Callable returning (bid, ask) for a tradingsymbol, or (None, None) if unknown.
+QuoteProvider = Callable[[str], tuple[float | None, float | None]]
 
 
 class PaperPosition:
@@ -43,6 +47,7 @@ class PaperBrokerClient(BrokerClient):
         self,
         initial_capital: float = 1_000_000,
         slippage: SlippageModel | None = None,
+        quote_provider: QuoteProvider | None = None,
     ):
         self._connected = False
         self._capital = initial_capital
@@ -54,6 +59,13 @@ class PaperBrokerClient(BrokerClient):
         # Pass slippage=None explicitly to disable (e.g., legacy backtest tests).
         self.slippage = slippage if slippage is not None else SlippageModel()
         self._vix: float = 0.0  # Updated by data feed via set_vix()
+        # Optional callable: tradingsymbol -> (bid, ask). When set and a
+        # realistic (>0) bid/ask is returned, fills cross the spread
+        # (BUY @ ask, SELL @ bid) instead of applying the LTP-based
+        # SlippageModel. Used by the GDFL backtest path where real
+        # quotes are available; synthetic path leaves it None and keeps
+        # SlippageModel. See F2 in the roadmap.
+        self.quote_provider: QuoteProvider | None = quote_provider
 
     async def connect(self) -> None:
         self._connected = True
@@ -93,10 +105,75 @@ class PaperBrokerClient(BrokerClient):
             logger.warning(f"[PAPER] No LTP for {tradingsymbol}, cannot fill order")
             raise ValueError(f"No LTP available for {tradingsymbol}")
 
-        # Tiered slippage — closes paper-to-live P&L gap.
-        # Slippage dimensions: liquidity (premium proxy) × time × VIX × size.
         now = now_ist()
-        if self.slippage is not None:
+
+        # ─── Fill model selection (F2) ──────────────────────────────
+        # Prefer crossing the real spread when we have one (GDFL path).
+        # BUY crosses ask, SELL crosses bid. Falls back to the tiered
+        # LTP-based SlippageModel for the synthetic-BS path where
+        # bid/ask are effectively LTP.
+        bid: float | None = None
+        ask: float | None = None
+        if self.quote_provider is not None:
+            try:
+                bid, ask = self.quote_provider(tradingsymbol)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"[PAPER] quote_provider raised for {tradingsymbol}: {exc}")
+                bid = ask = None
+
+        used_spread = False
+        used_limit_in_band = False
+        if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
+            # Real quote available. Fill model depends on order type.
+            #
+            # LIMIT: honour the limit price when it's inside [bid, ask]
+            # (passive fill at your quote, captures the spread the
+            # strategy targeted). When aggressive (BUY ≥ ask / SELL ≤
+            # bid) cross at the opposing edge. When passive beyond the
+            # book (BUY < bid / SELL > ask) a real broker would rest
+            # the order — backtest models this as an aggressive cross
+            # with a warning so we don't silently lose a leg. F1b will
+            # tighten this with a reprice loop.
+            #
+            # MARKET (or LIMIT without a sane price): BUY lifts the
+            # offer, SELL hits the bid.
+            if order_type == OrderType.LIMIT and price > 0:
+                if side == OrderSide.BUY:
+                    if price >= ask:
+                        fill_price = float(ask)
+                    elif price >= bid:
+                        fill_price = float(price)
+                        used_limit_in_band = True
+                    else:
+                        logger.warning(
+                            f"[PAPER] LIMIT BUY {price:.2f} below bid {bid:.2f} "
+                            f"for {tradingsymbol} — filling aggressive at ask {ask:.2f}"
+                        )
+                        fill_price = float(ask)
+                else:  # SELL
+                    if price <= bid:
+                        fill_price = float(bid)
+                    elif price <= ask:
+                        fill_price = float(price)
+                        used_limit_in_band = True
+                    else:
+                        logger.warning(
+                            f"[PAPER] LIMIT SELL {price:.2f} above ask {ask:.2f} "
+                            f"for {tradingsymbol} — filling aggressive at bid {bid:.2f}"
+                        )
+                        fill_price = float(bid)
+            else:
+                if side == OrderSide.BUY:
+                    fill_price = float(ask)
+                else:
+                    fill_price = float(bid)
+            # slip_bps reported relative to LTP so telemetry stays
+            # comparable across paths.
+            slip_bps = abs(fill_price - ltp) / ltp * 10_000.0 if ltp > 0 else 0.0
+            used_spread = True
+        elif self.slippage is not None:
+            # Tiered slippage — closes paper-to-live P&L gap.
+            # Slippage dimensions: liquidity (premium proxy) × time × VIX × size.
             fill_price, slip_bps = self.slippage.apply(
                 ltp, side, self._vix, quantity, now.time()
             )
@@ -122,6 +199,13 @@ class PaperBrokerClient(BrokerClient):
             "exchange_timestamp": now.isoformat(),
             "ltp": ltp,
             "slippage_bps": slip_bps,
+            "fill_source": (
+                "limit_in_band" if used_limit_in_band
+                else "spread" if used_spread
+                else "slippage_model"
+            ),
+            "bid": bid if used_spread else None,
+            "ask": ask if used_spread else None,
         }
 
         self._orders.append(order)
@@ -143,10 +227,18 @@ class PaperBrokerClient(BrokerClient):
         # Update position
         self._update_position(tradingsymbol, exchange, side, quantity, fill_price)
 
-        logger.info(
-            f"[PAPER] {side.value} {quantity} {tradingsymbol} @ {fill_price:.2f} "
-            f"(ltp={ltp:.2f}, slip={slip_bps:.0f}bps, order={order_id})"
-        )
+        if used_spread:
+            src_tag = "limit_in_band" if used_limit_in_band else "spread"
+            logger.info(
+                f"[PAPER] {side.value} {quantity} {tradingsymbol} @ {fill_price:.2f} "
+                f"(ltp={ltp:.2f}, bid={bid:.2f}, ask={ask:.2f}, "
+                f"slip={slip_bps:.0f}bps, src={src_tag}, order={order_id})"
+            )
+        else:
+            logger.info(
+                f"[PAPER] {side.value} {quantity} {tradingsymbol} @ {fill_price:.2f} "
+                f"(ltp={ltp:.2f}, slip={slip_bps:.0f}bps, src=slippage_model, order={order_id})"
+            )
         return order_id
 
     async def modify_order(

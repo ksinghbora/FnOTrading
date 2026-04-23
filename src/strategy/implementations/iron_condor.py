@@ -13,14 +13,14 @@ from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
-from src.core.types import OrderSide
+from src.core.types import OrderSide, OrderType
 from src.strategy.base import BaseStrategy
 from src.strategy.implementations.portfolio_pricing import find_available_wing_strike
 from src.strategy.params import IronCondorParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.scoring import IRON_CONDOR_CONFIG, score_strategy
-from src.strategy.signals import adjust_signal, entry_signal, exit_signal, make_leg
+from src.strategy.signals import adjust_signal, entry_signal, exit_signal
 
 logger = logging.getLogger(__name__)
 
@@ -294,13 +294,30 @@ class IronCondorStrategy(BaseStrategy):
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
         self._entry_credit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
 
+        # F1: LIMIT-at-mid. Every leg must price — a missing wing turns the
+        # IC into a naked short.
+        short_ce_leg = self._build_option_leg(
+            self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity, opt=best_short_ce.ce,
+        )
+        short_pe_leg = self._build_option_leg(
+            self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity, opt=best_short_pe.pe,
+        )
+        long_ce_leg = self._build_option_leg(
+            self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity, opt=long_ce_entry.ce,
+        )
+        long_pe_leg = self._build_option_leg(
+            self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity, opt=long_pe_entry.pe,
+        )
+        if any(leg is None for leg in (short_ce_leg, short_pe_leg, long_ce_leg, long_pe_leg)):
+            logger.warning(f"[{self.strategy_id}] IC BLOCKED: could not price all 4 legs")
+            return None
         legs = [
             # Short legs (sell near OTM)
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity),
+            short_ce_leg,
+            short_pe_leg,
             # Long legs (buy far OTM — wings)
-            make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity),
+            long_ce_leg,
+            long_pe_leg,
         ]
 
         self._entered = True
@@ -439,9 +456,21 @@ class IronCondorStrategy(BaseStrategy):
         old_long_pe_token, old_long_pe_symbol, old_long_pe_strike = self._long_pe_token, self._long_pe_symbol, self._long_pe_strike
 
         if side == "call":
-            # Close existing call spread
-            close_legs.append(make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity))
-            close_legs.append(make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL, self._quantity))
+            # F1: LIMIT-at-mid on close legs. Token-only lookups via
+            # _build_option_leg fall back to the feed's latest tick's bid/ask.
+            close_old_short = self._build_option_leg(
+                self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity,
+            )
+            close_old_wing = self._build_option_leg(
+                self._long_ce_symbol, self._long_ce_token, OrderSide.SELL, self._quantity,
+            )
+            if close_old_short is None or close_old_wing is None:
+                logger.warning(
+                    f"[{self.strategy_id}] IC CALL ADJUST BLOCKED: could not price close legs"
+                )
+                return None
+            close_legs.append(close_old_short)
+            close_legs.append(close_old_wing)
 
             # Find new short CE at current target delta
             best_ce = None
@@ -478,17 +507,42 @@ class IronCondorStrategy(BaseStrategy):
             self._short_ce_token = best_ce.ce.instrument_token
             self._short_ce_symbol = best_ce.ce.tradingsymbol
             self._short_ce_strike = new_short_strike
-            open_legs.append(make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity))
+            open_short_leg = self._build_option_leg(
+                self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity, opt=best_ce.ce,
+            )
 
             self._long_ce_token = wing_entry.ce.instrument_token
             self._long_ce_symbol = wing_entry.ce.tradingsymbol
             self._long_ce_strike = new_long_strike
-            open_legs.append(make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity))
+            open_wing_leg = self._build_option_leg(
+                self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity, opt=wing_entry.ce,
+            )
+            if open_short_leg is None or open_wing_leg is None:
+                logger.warning(
+                    f"[{self.strategy_id}] IC CALL ADJUST BLOCKED: could not price new legs — rolling back"
+                )
+                # Restore old state
+                self._short_ce_token, self._short_ce_symbol, self._short_ce_strike = old_short_ce_token, old_short_ce_symbol, old_short_ce_strike
+                self._long_ce_token, self._long_ce_symbol, self._long_ce_strike = old_long_ce_token, old_long_ce_symbol, old_long_ce_strike
+                return None
+            open_legs.append(open_short_leg)
+            open_legs.append(open_wing_leg)
 
         elif side == "put":
-            # Close existing put spread
-            close_legs.append(make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._quantity))
-            close_legs.append(make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL, self._quantity))
+            # F1: LIMIT-at-mid on close legs.
+            close_old_short = self._build_option_leg(
+                self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._quantity,
+            )
+            close_old_wing = self._build_option_leg(
+                self._long_pe_symbol, self._long_pe_token, OrderSide.SELL, self._quantity,
+            )
+            if close_old_short is None or close_old_wing is None:
+                logger.warning(
+                    f"[{self.strategy_id}] IC PUT ADJUST BLOCKED: could not price close legs"
+                )
+                return None
+            close_legs.append(close_old_short)
+            close_legs.append(close_old_wing)
 
             # Find new short PE at current target delta
             best_pe = None
@@ -525,12 +579,25 @@ class IronCondorStrategy(BaseStrategy):
             self._short_pe_token = best_pe.pe.instrument_token
             self._short_pe_symbol = best_pe.pe.tradingsymbol
             self._short_pe_strike = new_short_strike
-            open_legs.append(make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity))
+            open_short_leg = self._build_option_leg(
+                self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity, opt=best_pe.pe,
+            )
 
             self._long_pe_token = wing_entry.pe.instrument_token
             self._long_pe_symbol = wing_entry.pe.tradingsymbol
             self._long_pe_strike = new_long_strike
-            open_legs.append(make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity))
+            open_wing_leg = self._build_option_leg(
+                self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity, opt=wing_entry.pe,
+            )
+            if open_short_leg is None or open_wing_leg is None:
+                logger.warning(
+                    f"[{self.strategy_id}] IC PUT ADJUST BLOCKED: could not price new legs — rolling back"
+                )
+                self._short_pe_token, self._short_pe_symbol, self._short_pe_strike = old_short_pe_token, old_short_pe_symbol, old_short_pe_strike
+                self._long_pe_token, self._long_pe_symbol, self._long_pe_strike = old_long_pe_token, old_long_pe_symbol, old_long_pe_strike
+                return None
+            open_legs.append(open_short_leg)
+            open_legs.append(open_wing_leg)
 
         # Validate we have exactly 4 legs (2 close + 2 open) for a complete spread roll
         all_legs = close_legs + open_legs
@@ -591,13 +658,29 @@ class IronCondorStrategy(BaseStrategy):
         )
         self._entered = False
         self._stopped_for_day = True
+        # F1: LIMIT-at-mid on exit, with per-leg MARKET fallback to ensure
+        # the position can always be flattened.
+        def _exit_leg(sym: str, tok: int, side: OrderSide) -> SignalLeg:
+            leg = self._build_option_leg(sym, tok, side, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] EXIT fallback to MARKET for {sym} — no bid/ask"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=side,
+                quantity=self._quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
             # Buy back short legs
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._quantity),
+            _exit_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY),
+            _exit_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY),
             # Sell long legs
-            make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL, self._quantity),
+            _exit_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL),
+            _exit_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL),
         ]
         return exit_signal(self.strategy_id, legs, reason)
 

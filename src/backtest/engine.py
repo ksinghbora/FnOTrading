@@ -20,7 +20,6 @@ import pytz
 from scipy.stats import norm as sp_norm
 
 from src.backtest.metrics import calculate_metrics
-from src.backtest.simulator import FillSimulator
 from src.broker.paper.client import PaperBrokerClient
 from src.core.clock import MarketClock
 from src.core.constants import INDIA_VIX_TOKEN, LOT_SIZES, RISK_FREE_RATE
@@ -131,11 +130,58 @@ class BacktestEngine:
         # ─── Create infrastructure ────────────────────────────────
         event_bus = EventBus()  # Not started — only for constructor params
         clock = BacktestClock()
-        broker = PaperBrokerClient(initial_capital=initial_capital)
-        fill_sim = FillSimulator()
         feed = TickFeedManager(event_bus)
         aggregator = OHLCAggregator(event_bus)
         chain_builder = OptionChainBuilder(event_bus, clock)
+
+        # Quote provider for the paper broker (F2).
+        # Only wired when we have a real market_source (GDFL). Returns
+        # (bid, ask) for a tradingsymbol by reverse-looking-up the
+        # instrument token via chain_builder's symbol_map and reading
+        # the latest tick's bid/ask. When the paper broker sees
+        # non-zero bid/ask it fills BUY @ ask and SELL @ bid, mirroring
+        # how live Kite market orders cross the spread. For the
+        # synthetic BS path we leave quote_provider=None so the tiered
+        # SlippageModel (premium tier × time × VIX × size) is used as
+        # before — BS bid/ask are cosmetic ±1% placeholders and not a
+        # realistic fill model.
+        quote_provider = None
+        if market_source is not None:
+            # Build reverse symbol → token map lazily; the chain
+            # builder populates _symbol_map as options are registered.
+            # Cache the inverse and refresh when we see a symbol we
+            # don't know yet (new strikes appear daily in GDFL).
+            _sym_to_token: dict[str, int] = {}
+
+            def _resolve_token(tradingsymbol: str) -> int | None:
+                tok = _sym_to_token.get(tradingsymbol)
+                if tok is not None:
+                    return tok
+                for t, s in chain_builder._symbol_map.items():
+                    if s == tradingsymbol:
+                        _sym_to_token[tradingsymbol] = t
+                        return t
+                return None
+
+            def _quote_provider(tradingsymbol: str) -> tuple[float | None, float | None]:
+                tok = _resolve_token(tradingsymbol)
+                if tok is None:
+                    return None, None
+                tick = feed._latest_ticks.get(tok)
+                if tick is None:
+                    return None, None
+                bid = float(tick.bid_price) if tick.bid_price else 0.0
+                ask = float(tick.ask_price) if tick.ask_price else 0.0
+                if bid <= 0 or ask <= 0 or ask < bid:
+                    return None, None
+                return bid, ask
+
+            quote_provider = _quote_provider
+
+        broker = PaperBrokerClient(
+            initial_capital=initial_capital,
+            quote_provider=quote_provider,
+        )
         portfolio = PortfolioManager(event_bus, broker, chain_builder)
 
         await broker.connect()
@@ -199,6 +245,11 @@ class BacktestEngine:
             _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
 
         # ─── Wire order callback ──────────────────────────────────
+        # F2: No pre-slippage here. The paper broker applies the single
+        # slippage source (cross-spread if quote_provider returns a real
+        # bid/ask, else SlippageModel). Using the fill price reported
+        # back by the broker keeps entry/exit bookkeeping consistent
+        # with what the broker actually booked.
         async def order_callback(signal_obj):
             orders = []
             for leg in signal_obj.legs:
@@ -207,7 +258,8 @@ class BacktestEngine:
                 if price <= 0:
                     continue
 
-                price = fill_sim.simulate_fill(price, leg.order_side)
+                # Keep broker's LTP cache in sync with the theoretical
+                # mark so its fallback path has a value to work with.
                 broker.set_ltp(leg.tradingsymbol, price)
 
                 order_id = await broker.place_order(
@@ -215,8 +267,18 @@ class BacktestEngine:
                     exchange="NFO",
                     side=leg.order_side,
                     quantity=leg.quantity,
+                    order_type=leg.order_type,
                     price=price,
                 )
+
+                # Read back the actual fill price the broker booked so
+                # positions, P&L and charges all use the real post-
+                # slippage number (not the pre-slippage LTP).
+                fill_price = price
+                if broker._trades:
+                    last_trade = broker._trades[-1]
+                    if last_trade.get("order_id") == order_id:
+                        fill_price = float(last_trade.get("average_price", price))
 
                 order = Order(
                     broker_order_id=order_id,
@@ -227,7 +289,7 @@ class BacktestEngine:
                     order_type=leg.order_type,
                     product=ProductType.NRML,
                     quantity=leg.quantity,
-                    fill_price=Decimal(str(round(price, 2))),
+                    fill_price=Decimal(str(round(fill_price, 2))),
                     fill_quantity=leg.quantity,
                     status=OrderStatus.FILLED,
                 )
@@ -237,7 +299,7 @@ class BacktestEngine:
                     "PE" if "PE" in leg.tradingsymbol else "FUT"
                 )
                 charges = calculate_charges(
-                    Decimal(str(round(price, 2))), leg.quantity, leg.order_side, inst
+                    Decimal(str(round(fill_price, 2))), leg.quantity, leg.order_side, inst
                 )
                 portfolio._pnl.add_charges(signal_obj.strategy_id, charges.total)
                 orders.append(order_id)

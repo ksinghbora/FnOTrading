@@ -15,9 +15,9 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
-from src.core.models import Signal, Subscription, Tick
+from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.structured_logger import get_structured_logger
-from src.core.types import OrderSide, Timeframe
+from src.core.types import OrderSide, OrderType, Timeframe
 from src.options.chain_analyzer import get_high_oi_strikes
 from src.strategy.base import BaseStrategy
 from src.strategy.indicators import BreakoutSignal, momentum_breakout, oi_breakout_confirm
@@ -44,7 +44,7 @@ from src.strategy.implementations.portfolio_scoring import (
     score_premium_selling,
     score_trend_following_breakdown,
 )
-from src.strategy.signals import entry_signal, exit_signal, make_leg
+from src.strategy.signals import entry_signal, exit_signal
 from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
@@ -956,10 +956,22 @@ class PortfolioStrategy(BaseStrategy):
             theta=g.get("theta", 0), vega=g.get("vega", 0),
         )
 
-        return entry_signal(self.strategy_id, [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, qty),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, qty),
-        ], f"Portfolio premium strangle: score={self._prem_score}")
+        # F1: LIMIT-at-mid. If either leg can't be priced, abort entry —
+        # a half-built strangle isn't worth the asymmetric risk.
+        ce_leg = self._build_option_leg(
+            self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, qty, opt=best_ce.ce,
+        )
+        pe_leg = self._build_option_leg(
+            self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, qty, opt=best_pe.pe,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] STRANGLE BLOCKED: could not price one or both legs"
+            )
+            self._prem_entered = False
+            return None
+        return entry_signal(self.strategy_id, [ce_leg, pe_leg],
+            f"Portfolio premium strangle: score={self._prem_score}")
 
     def _enter_iron_condor(self, vix: float) -> Signal | None:
         """Enter iron condor with delta shorts + fixed wings."""
@@ -1099,12 +1111,29 @@ class PortfolioStrategy(BaseStrategy):
             theta=g.get("theta", 0), vega=g.get("vega", 0),
         )
 
-        return entry_signal(self.strategy_id, [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, qty),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, qty),
-            make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, qty),
-            make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, qty),
-        ], f"Portfolio premium IC: score={self._prem_score}")
+        # F1: LIMIT-at-mid. All 4 legs must price — an iron condor with a
+        # missing wing is a naked short, so abort on any pricing miss.
+        short_ce_leg = self._build_option_leg(
+            self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, qty, opt=best_ce.ce,
+        )
+        short_pe_leg = self._build_option_leg(
+            self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, qty, opt=best_pe.pe,
+        )
+        long_ce_leg = self._build_option_leg(
+            self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, qty, opt=long_ce_entry.ce,
+        )
+        long_pe_leg = self._build_option_leg(
+            self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, qty, opt=long_pe_entry.pe,
+        )
+        if any(leg is None for leg in (short_ce_leg, short_pe_leg, long_ce_leg, long_pe_leg)):
+            logger.warning(
+                f"[{self.strategy_id}] IC BLOCKED: could not price all 4 legs"
+            )
+            self._prem_entered = False
+            return None
+        return entry_signal(self.strategy_id,
+            [short_ce_leg, short_pe_leg, long_ce_leg, long_pe_leg],
+            f"Portfolio premium IC: score={self._prem_score}")
 
     # ─── Trend Entry ──────────────────────────────────────────
 
@@ -1230,10 +1259,47 @@ class PortfolioStrategy(BaseStrategy):
             theta=g.get("theta", 0), vega=g.get("vega", 0),
         )
 
-        return entry_signal(self.strategy_id, [
-            make_leg(self._trend_buy_symbol, self._trend_buy_token, OrderSide.BUY, self._trend_quantity),
-            make_leg(self._trend_sell_symbol, self._trend_sell_token, OrderSide.SELL, self._trend_quantity),
-        ], f"Portfolio trend {breakout.direction}: score={self._trend_score}")
+        # F1: LIMIT-at-mid for both spread legs. Fall back to the already-
+        # resolved buy/sell prices (via resolve_option_price LTP→mid→quote)
+        # when bid/ask are absent, since the trend-leg ITM option often has
+        # zero bid/ask in the recorded chain but a valid LTP.
+        buy_leg = self._build_option_leg(
+            self._trend_buy_symbol, self._trend_buy_token, OrderSide.BUY, self._trend_quantity, opt=buy_opt,
+        )
+        sell_leg = self._build_option_leg(
+            self._trend_sell_symbol, self._trend_sell_token, OrderSide.SELL, self._trend_quantity, opt=sell_opt,
+        )
+        # Fallback to the resolve_option_price-derived prices (LTP cascade)
+        # when a pure-mid wasn't available — trend legs are the ones with
+        # the stalest bid/ask, and the existing resolve already honoured
+        # side-aware quoting. This keeps trend entries trading on recorded
+        # data where bid/ask are blank but LTP is good.
+        if buy_leg is None and buy_price is not None:
+            buy_leg = SignalLeg(
+                tradingsymbol=self._trend_buy_symbol,
+                instrument_token=self._trend_buy_token,
+                order_side=OrderSide.BUY,
+                quantity=self._trend_quantity,
+                order_type=OrderType.LIMIT,
+                price=Decimal(str(buy_price)),
+            )
+        if sell_leg is None and sell_price is not None:
+            sell_leg = SignalLeg(
+                tradingsymbol=self._trend_sell_symbol,
+                instrument_token=self._trend_sell_token,
+                order_side=OrderSide.SELL,
+                quantity=self._trend_quantity,
+                order_type=OrderType.LIMIT,
+                price=Decimal(str(sell_price)),
+            )
+        if buy_leg is None or sell_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] TREND BLOCKED: could not price spread legs"
+            )
+            self._trend_entered = False
+            return None
+        return entry_signal(self.strategy_id, [buy_leg, sell_leg],
+            f"Portfolio trend {breakout.direction}: score={self._trend_score}")
 
     # ─── Premium Exit ─────────────────────────────────────────
 
@@ -1378,13 +1444,34 @@ class PortfolioStrategy(BaseStrategy):
         pnl = (float(self._entry_premium) - exit_cost) * self._prem_quantity
         self._prem_realized_pnl += pnl
 
+        # F1: LIMIT-at-mid on exit too. We look up the current tick for each
+        # token (feed is already cached). If any leg can't be priced, we
+        # still send MARKET for THAT leg as a safety net — exiting is
+        # time-critical (SL/trail already triggered), and leaving a position
+        # open because a wing went 0-bid is worse than crossing the spread.
+        # This is narrowly scoped: only the missing-quote exit leg degrades.
+        def _exit_leg(sym: str, tok: int, side: OrderSide) -> SignalLeg:
+            leg = self._build_option_leg(sym, tok, side, self._prem_quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] EXIT fallback to MARKET for {sym} "
+                f"— no bid/ask available, exit path must not stall"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=side,
+                quantity=self._prem_quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._prem_quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._prem_quantity),
+            _exit_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY),
+            _exit_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY),
         ]
         if self._prem_mode == "iron_condor" and self._long_ce_token:
-            legs.append(make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL, self._prem_quantity))
-            legs.append(make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL, self._prem_quantity))
+            legs.append(_exit_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL))
+            legs.append(_exit_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL))
 
         logger.info(
             f"[EXIT] strategy={self.strategy_id} leg=PREMIUM mode={self._prem_mode.upper()} "
@@ -1499,9 +1586,27 @@ class PortfolioStrategy(BaseStrategy):
         pnl = (exit_value - float(self._entry_debit)) * self._trend_quantity
         self._trend_realized_pnl += pnl
 
+        # F1: LIMIT-at-mid on exit. Same fallback policy as premium exit —
+        # degrade to MARKET per-leg only when bid/ask isn't available, rather
+        # than block the whole exit.
+        def _trend_exit_leg(sym: str, tok: int, side: OrderSide) -> SignalLeg:
+            leg = self._build_option_leg(sym, tok, side, self._trend_quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] TREND EXIT fallback to MARKET for {sym} "
+                f"— no bid/ask available"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=side,
+                quantity=self._trend_quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
-            make_leg(self._trend_buy_symbol, self._trend_buy_token, OrderSide.SELL, self._trend_quantity),
-            make_leg(self._trend_sell_symbol, self._trend_sell_token, OrderSide.BUY, self._trend_quantity),
+            _trend_exit_leg(self._trend_buy_symbol, self._trend_buy_token, OrderSide.SELL),
+            _trend_exit_leg(self._trend_sell_symbol, self._trend_sell_token, OrderSide.BUY),
         ]
 
         logger.info(

@@ -8,7 +8,7 @@ from src.broker.base import BrokerClient
 from src.core.exceptions import BrokerOrderError, BrokerRateLimitError
 from src.core.models import OrderRequest
 from src.core.structured_logger import get_structured_logger
-from src.core.types import OrderStatus
+from src.core.types import OrderStatus, OrderType
 from src.utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,20 @@ class OrderExecutor:
             f"side={order.order_side.value} qty={order.quantity} "
             f"type={order.order_type.value} price={order.price}"
         )
+
+        # F1 observability: surface any MARKET options order so we can grep
+        # for regressions. Emergency-close / kill-switch paths explicitly
+        # set OrderType.MARKET (see BaseStrategy._emergency_close_positions)
+        # and will show up here tagged with the strategy that triggered them.
+        # If this line appears for a routine entry/exit, that's a bug — the
+        # strategy bypassed the LIMIT-at-mid leg builder.
+        if order.order_type == OrderType.MARKET:
+            logger.warning(
+                f"[F1][MARKET_ORDER] strategy={order.strategy_id} "
+                f"symbol={order.tradingsymbol} side={order.order_side.value} "
+                f"qty={order.quantity} tag={order.tag or '-'} — review: "
+                f"is this an intentional emergency/hedge path?"
+            )
 
         t_start = time.monotonic()
 

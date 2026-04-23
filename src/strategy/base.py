@@ -2,12 +2,14 @@
 
 import logging
 from abc import ABC, abstractmethod
+from decimal import Decimal
 from typing import Any
 
 from src.core.models import OHLC, Order, Signal, Subscription, Tick
-from src.core.types import StrategyState
+from src.core.types import OrderSide, OrderType, StrategyState
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
 from src.strategy.params import BaseStrategyParams
+from src.strategy.signals import mid_from_option, mid_from_quote
 from src.utils.log_tags import Tag
 
 logger = logging.getLogger(__name__)
@@ -127,7 +129,15 @@ class BaseStrategy(ABC):
             )
 
     async def _emergency_close_positions(self, reason: str) -> None:
-        """Force-exit all open positions for this strategy with MARKET orders."""
+        """Force-exit all open positions for this strategy with MARKET orders.
+
+        F1 escape hatch — this is the ONE path that intentionally sends MARKET
+        for options. We accept the full bid-ask crossing cost because we're
+        already in an error state and need the position flat now, not at some
+        optimistic mid that may never fill. Kill-switch / on_error / unhedged-
+        wing recovery all funnel here. Regular strategy exits MUST NOT use
+        MARKET — use LIMIT-at-mid via make_option_leg() / _build_option_leg().
+        """
         from src.core.models import Signal, SignalLeg
         from src.core.types import OrderSide, OrderType, SignalType
 
@@ -162,6 +172,65 @@ class BaseStrategy(ABC):
             f"(reason={reason})"
         )
         await self.ctx.place_signal(signal)
+
+    # ─── Leg pricing helpers (F1 — LIMIT-at-mid) ─────────────────
+
+    def _leg_mid_price_from_token(
+        self, instrument_token: int, tick_size: Decimal = Decimal("0.05")
+    ) -> Decimal | None:
+        """Look up mid (bid+ask)/2 from the latest tick for `instrument_token`.
+
+        Returns None when no tick is cached yet, or when either side is zero.
+        Used by exit/adjust paths that only carry the token, not the full
+        OptionData object. The caller MUST handle None — never fall back
+        to MARKET silently.
+        """
+        tick = self.ctx.get_tick(instrument_token)
+        if tick is None:
+            return None
+        return mid_from_quote(tick.bid_price, tick.ask_price, tick_size=tick_size)
+
+    def _build_option_leg(
+        self,
+        tradingsymbol: str,
+        instrument_token: int,
+        side: OrderSide,
+        quantity: int,
+        *,
+        opt: Any = None,
+    ):
+        """Build a LIMIT-at-mid SignalLeg for an options instrument.
+
+        Resolution order:
+          1. If `opt` (an OptionData) is provided, use its bid/ask.
+          2. Otherwise fetch the latest Tick for `instrument_token` from
+             the feed and use its bid/ask.
+
+        Returns None when no quote is available. Strategies should treat
+        None as a hard skip — don't degrade to MARKET silently, the whole
+        point of F1 is to stop crossing the full spread on thin wings.
+        """
+        mid = None
+        if opt is not None:
+            mid = mid_from_option(opt)
+        if mid is None:
+            mid = self._leg_mid_price_from_token(instrument_token)
+        if mid is None or mid <= 0:
+            logger.info(
+                "[FILL] bid/ask missing for %s — skipping leg "
+                "(strategy=%s side=%s qty=%d token=%d)",
+                tradingsymbol, self.strategy_id, side.value, quantity, instrument_token,
+            )
+            return None
+        from src.core.models import SignalLeg
+        return SignalLeg(
+            tradingsymbol=tradingsymbol,
+            instrument_token=instrument_token,
+            order_side=side,
+            quantity=quantity,
+            order_type=OrderType.LIMIT,
+            price=mid,
+        )
 
     def _log_skip_throttled(
         self, key: str, message: str, *, extra: dict | None = None

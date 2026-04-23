@@ -17,9 +17,9 @@ from src.strategy.base import BaseStrategy
 from src.strategy.params import BaseStrategyParams, IronCondorParams, ShortStrangleParams
 from src.strategy.regime import MarketRegime, RegimeDetector, RegimeSnapshot
 from src.strategy.registry import register_strategy
-from src.strategy.signals import exit_signal, make_leg
+from src.strategy.signals import exit_signal, make_leg  # noqa: F401 — make_leg kept for emergency MARKET path
 
-from src.core.types import OrderSide
+from src.core.types import OrderSide, OrderType
 
 logger = logging.getLogger(__name__)
 
@@ -217,10 +217,22 @@ class AdaptiveStrategy(BaseStrategy):
         self._peak_premium = self._entry_premium
 
         from src.strategy.signals import entry_signal
-        legs = [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity),
-        ]
+        # F1: LIMIT-at-mid pricing via base helper.
+        ce_leg = self._build_option_leg(
+            self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity,
+            opt=best_ce.ce,
+        )
+        pe_leg = self._build_option_leg(
+            self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity,
+            opt=best_pe.pe,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.info(
+                f"[{self.strategy_id}] [FILL] ADAPTIVE STRANGLE BLOCKED — "
+                f"bid/ask missing (ce={ce_leg is not None} pe={pe_leg is not None})"
+            )
+            return None
+        legs = [ce_leg, pe_leg]
 
         self._entered = True
         self._current_strategy_type = "short_strangle"
@@ -306,12 +318,33 @@ class AdaptiveStrategy(BaseStrategy):
         self._peak_premium = self._entry_premium
 
         from src.strategy.signals import entry_signal
-        legs = [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity),
-            make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity),
-        ]
+        # F1: LIMIT-at-mid pricing for all 4 legs; abort if any un-priceable.
+        short_ce_leg = self._build_option_leg(
+            self._short_ce_symbol, self._short_ce_token, OrderSide.SELL, self._quantity,
+            opt=best_short_ce.ce,
+        )
+        short_pe_leg = self._build_option_leg(
+            self._short_pe_symbol, self._short_pe_token, OrderSide.SELL, self._quantity,
+            opt=best_short_pe.pe,
+        )
+        long_ce_leg = self._build_option_leg(
+            self._long_ce_symbol, self._long_ce_token, OrderSide.BUY, self._quantity,
+            opt=long_ce_entry.ce,
+        )
+        long_pe_leg = self._build_option_leg(
+            self._long_pe_symbol, self._long_pe_token, OrderSide.BUY, self._quantity,
+            opt=long_pe_entry.pe,
+        )
+        if any(leg is None for leg in (short_ce_leg, short_pe_leg, long_ce_leg, long_pe_leg)):
+            logger.info(
+                f"[{self.strategy_id}] [FILL] ADAPTIVE IC BLOCKED — one or more "
+                f"legs un-priceable (short_ce={short_ce_leg is not None} "
+                f"short_pe={short_pe_leg is not None} "
+                f"long_ce={long_ce_leg is not None} "
+                f"long_pe={long_pe_leg is not None})"
+            )
+            return None
+        legs = [short_ce_leg, short_pe_leg, long_ce_leg, long_pe_leg]
 
         self._entered = True
         self._current_strategy_type = "iron_condor"
@@ -374,15 +407,30 @@ class AdaptiveStrategy(BaseStrategy):
         return None
 
     def _create_exit_signal(self, reason: str) -> Signal:
-        """Close all legs of the active position."""
+        """Close all legs of the active position.
+
+        F1: prefer LIMIT-at-mid; fall back to MARKET per-leg if quote missing
+        (exits are time-critical — SL/PT hit — so MARKET degrade is safer than
+        stalling).
+        """
+        def _exit_leg(sym: str, tok: int, side: OrderSide):
+            leg = self._build_option_leg(sym, tok, side, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] [FILL] exit leg {sym} missing quote — "
+                f"falling back to MARKET"
+            )
+            return make_leg(sym, tok, side, self._quantity, order_type=OrderType.MARKET)
+
         legs = [
-            make_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._quantity),
+            _exit_leg(self._short_ce_symbol, self._short_ce_token, OrderSide.BUY),
+            _exit_leg(self._short_pe_symbol, self._short_pe_token, OrderSide.BUY),
         ]
         if self._current_strategy_type == "iron_condor" and self._long_ce_token:
             legs.extend([
-                make_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL, self._quantity),
-                make_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL, self._quantity),
+                _exit_leg(self._long_ce_symbol, self._long_ce_token, OrderSide.SELL),
+                _exit_leg(self._long_pe_symbol, self._long_pe_token, OrderSide.SELL),
             ])
 
         self._entered = False

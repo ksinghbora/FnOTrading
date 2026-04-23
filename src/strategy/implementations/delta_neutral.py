@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
 from src.core.models import Order, Signal, SignalLeg, Subscription, Tick
-from src.core.types import OrderSide, OrderStatus
+from src.core.types import OrderSide, OrderStatus, OrderType
 from src.strategy.base import BaseStrategy
 from src.strategy.params import DeltaNeutralParams
 from src.strategy.registry import register_strategy
@@ -190,7 +190,7 @@ class DeltaNeutralStrategy(BaseStrategy):
 
         return self._finalize_entry(f"Strangle CE@{self._ce_strike} PE@{self._pe_strike}")
 
-    def _finalize_entry(self, description: str) -> Signal:
+    def _finalize_entry(self, description: str) -> Signal | None:
         """Build the entry signal and resolve futures instrument."""
         ce_ltp = self.ctx.get_ltp(self._ce_token)
         pe_ltp = self.ctx.get_ltp(self._pe_token)
@@ -199,10 +199,30 @@ class DeltaNeutralStrategy(BaseStrategy):
         # Resolve futures instrument for hedging
         self._resolve_futures_instrument()
 
-        legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity),
-        ]
+        # F1: LIMIT-at-mid for the two short option legs. Futures hedge is
+        # handled separately below and remains MARKET (index futures are liquid
+        # enough that spread crossing is negligible, and hedge execution is
+        # time-critical).
+        chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
+        ce_opt = pe_opt = None
+        if chain and chain.strikes:
+            for entry in chain.strikes:
+                if entry.ce and entry.ce.instrument_token == self._ce_token:
+                    ce_opt = entry.ce
+                if entry.pe and entry.pe.instrument_token == self._pe_token:
+                    pe_opt = entry.pe
+        ce_leg = self._build_option_leg(
+            self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity, opt=ce_opt,
+        )
+        pe_leg = self._build_option_leg(
+            self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity, opt=pe_opt,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] DELTA_NEUTRAL BLOCKED: could not price legs"
+            )
+            return None
+        legs = [ce_leg, pe_leg]
 
         self._entered = True
         self._last_rebalance = self.ctx.clock.now()
@@ -359,8 +379,14 @@ class DeltaNeutralStrategy(BaseStrategy):
         # Track pending hedge — will be confirmed in on_order_update
         self._pending_hedge_qty = hedge_qty if hedge_side == OrderSide.BUY else -hedge_qty
 
+        # F1: Index futures are liquid — MARKET is legitimate here (no options
+        # spread risk). Pass order_type explicitly because make_leg default is
+        # now LIMIT.
         legs = [
-            make_leg(self._fut_symbol, self._fut_token, hedge_side, hedge_qty),
+            make_leg(
+                self._fut_symbol, self._fut_token, hedge_side, hedge_qty,
+                order_type=OrderType.MARKET,
+            ),
         ]
 
         logger.info(
@@ -385,17 +411,38 @@ class DeltaNeutralStrategy(BaseStrategy):
             f"entry_premium={self._entry_premium} exit_premium={exit_premium} "
             f"estimated_pnl={pnl_estimate} hedge_qty={self._hedge_qty}"
         )
+        # F1: LIMIT-at-mid on option exit legs with per-leg MARKET fallback.
+        # Futures hedge stays MARKET (index futures are liquid; execution speed
+        # matters more than a 0.05-0.10 spread).
+        def _opt_exit_leg(sym: str, tok: int, side: OrderSide) -> SignalLeg:
+            leg = self._build_option_leg(sym, tok, side, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] EXIT fallback to MARKET for {sym} — no bid/ask"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=side,
+                quantity=self._quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
+            _opt_exit_leg(self._ce_symbol, self._ce_token, OrderSide.BUY),
+            _opt_exit_leg(self._pe_symbol, self._pe_token, OrderSide.BUY),
         ]
 
-        # Close futures hedge if any
+        # Close futures hedge if any — futures keep MARKET (see above).
         if self._hedge_qty != 0 and self._fut_token and self._fut_symbol:
             fut_close_side = OrderSide.SELL if self._hedge_qty > 0 else OrderSide.BUY
-            legs.append(
-                make_leg(self._fut_symbol, self._fut_token, fut_close_side, abs(self._hedge_qty))
-            )
+            legs.append(SignalLeg(
+                tradingsymbol=self._fut_symbol,
+                instrument_token=self._fut_token,
+                order_side=fut_close_side,
+                quantity=abs(self._hedge_qty),
+                order_type=OrderType.MARKET,
+            ))
 
         self._entered = False
         self._hedge_qty = 0

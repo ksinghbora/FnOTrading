@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
 from src.core.models import Signal, Subscription, Tick
-from src.core.types import OrderSide, Timeframe
+from src.core.types import OrderSide, OrderType, Timeframe
 from src.options.chain_analyzer import get_high_oi_strikes
 from src.strategy.base import BaseStrategy
 from src.strategy.indicators import BreakoutSignal, momentum_breakout, oi_breakout_confirm
@@ -23,7 +23,7 @@ from src.strategy.params import TrendDebitSpreadParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.scoring import TREND_DEBIT_SPREAD_CONFIG, score_strategy
-from src.strategy.signals import entry_signal, exit_signal, make_leg
+from src.strategy.signals import entry_signal, exit_signal, make_leg  # noqa: F401 — make_leg kept for emergency-close path
 
 logger = logging.getLogger(__name__)
 
@@ -341,10 +341,20 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             )
             return None
 
-        legs = [
-            make_leg(self._buy_symbol, self._buy_token, OrderSide.BUY, self._quantity),
-            make_leg(self._sell_symbol, self._sell_token, OrderSide.SELL, self._quantity),
-        ]
+        # F1: LIMIT-at-mid pricing for both spread legs; skip trade if either is un-priceable.
+        buy_leg = self._build_option_leg(
+            self._buy_symbol, self._buy_token, OrderSide.BUY, self._quantity,
+        )
+        sell_leg = self._build_option_leg(
+            self._sell_symbol, self._sell_token, OrderSide.SELL, self._quantity,
+        )
+        if buy_leg is None or sell_leg is None:
+            logger.info(
+                f"[{self.strategy_id}] [FILL] TREND BLOCKED — "
+                f"bid/ask missing (buy={buy_leg is not None} sell={sell_leg is not None})"
+            )
+            return None
+        legs = [buy_leg, sell_leg]
 
         self._entered = True
         self._trades_today += 1
@@ -446,11 +456,26 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         )
 
         self._entered = False
+
+        # F1: exit path — prefer LIMIT-at-mid, but fall back to MARKET per-leg
+        # if quote is missing. Exits are time-critical (SL/PT hit) so we cannot
+        # stall waiting for quotes; degrading to MARKET is safer than holding.
+        def _exit_leg(sym: str, tok: int, side: OrderSide):
+            leg = self._build_option_leg(sym, tok, side, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] [FILL] exit leg {sym} missing quote — "
+                f"falling back to MARKET"
+            )
+            from src.strategy.signals import make_leg as _ml
+            return _ml(sym, tok, side, self._quantity, order_type=OrderType.MARKET)
+
         legs = [
             # Sell the long leg (close buy position)
-            make_leg(self._buy_symbol, self._buy_token, OrderSide.SELL, self._quantity),
+            _exit_leg(self._buy_symbol, self._buy_token, OrderSide.SELL),
             # Buy back the short leg (close sell position)
-            make_leg(self._sell_symbol, self._sell_token, OrderSide.BUY, self._quantity),
+            _exit_leg(self._sell_symbol, self._sell_token, OrderSide.BUY),
         ]
         return exit_signal(self.strategy_id, legs, reason)
 

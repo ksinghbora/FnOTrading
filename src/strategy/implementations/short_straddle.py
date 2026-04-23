@@ -17,7 +17,7 @@ from src.strategy.params import ShortStraddleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.scoring import SHORT_STRADDLE_CONFIG, score_strategy
-from src.strategy.signals import entry_signal, exit_signal, adjust_signal, make_leg
+from src.strategy.signals import entry_signal, exit_signal, adjust_signal
 
 logger = logging.getLogger(__name__)
 
@@ -247,14 +247,35 @@ class ShortStraddleStrategy(BaseStrategy):
         pe_ltp = self.ctx.get_ltp(self._pe_token)
         self._entry_premium = ce_ltp + pe_ltp
 
-        legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity),
-        ]
+        # F1: LIMIT-at-mid. Find the OptionData for the ATM strike so we
+        # can pass bid/ask directly.
+        atm_ce_opt = None
+        atm_pe_opt = None
+        for entry in chain.strikes:
+            if float(entry.strike) == self._atm_strike:
+                atm_ce_opt = entry.ce
+                atm_pe_opt = entry.pe
+                break
+        ce_leg = self._build_option_leg(
+            self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity, opt=atm_ce_opt,
+        )
+        pe_leg = self._build_option_leg(
+            self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity, opt=atm_pe_opt,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] STRADDLE BLOCKED: could not price ATM legs"
+            )
+            return None
+        legs = [ce_leg, pe_leg]
 
         # Add hedge legs if configured
         if self.params.add_hedge:
             hedge_legs = self._create_hedge_legs(chain)
+            if not hedge_legs and self.params.add_hedge:
+                # Hedge was requested but couldn't be priced — continue without it.
+                # _create_hedge_legs already logs its own warnings.
+                pass
             legs.extend(hedge_legs)
 
         self._entered = True
@@ -369,21 +390,46 @@ class ShortStraddleStrategy(BaseStrategy):
         # Find new strike BEFORE mutating state
         new_token = 0
         new_symbol = ""
+        # F1: LIMIT-at-mid for both close + open legs of the adjustment.
         if is_ce_losing:
-            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity))
+            close_leg = self._build_option_leg(
+                self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity,
+            )
+            if close_leg is None:
+                logger.warning(f"[{self.strategy_id}] ADJUST CE BLOCKED: no quote to close old CE")
+                return None
+            legs.append(close_leg)
             for entry in chain.strikes:
                 if float(entry.strike) == new_atm and entry.ce:
                     new_token = entry.ce.instrument_token
                     new_symbol = entry.ce.tradingsymbol
-                    legs.append(make_leg(new_symbol, new_token, OrderSide.SELL, self._quantity))
+                    open_leg = self._build_option_leg(
+                        new_symbol, new_token, OrderSide.SELL, self._quantity, opt=entry.ce,
+                    )
+                    if open_leg is None:
+                        logger.warning(f"[{self.strategy_id}] ADJUST CE BLOCKED: no quote for new CE at {new_atm}")
+                        return None
+                    legs.append(open_leg)
                     break
         else:
-            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity))
+            close_leg = self._build_option_leg(
+                self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity,
+            )
+            if close_leg is None:
+                logger.warning(f"[{self.strategy_id}] ADJUST PE BLOCKED: no quote to close old PE")
+                return None
+            legs.append(close_leg)
             for entry in chain.strikes:
                 if float(entry.strike) == new_atm and entry.pe:
                     new_token = entry.pe.instrument_token
                     new_symbol = entry.pe.tradingsymbol
-                    legs.append(make_leg(new_symbol, new_token, OrderSide.SELL, self._quantity))
+                    open_leg = self._build_option_leg(
+                        new_symbol, new_token, OrderSide.SELL, self._quantity, opt=entry.pe,
+                    )
+                    if open_leg is None:
+                        logger.warning(f"[{self.strategy_id}] ADJUST PE BLOCKED: no quote for new PE at {new_atm}")
+                        return None
+                    legs.append(open_leg)
                     break
 
         if len(legs) != 2:
@@ -434,15 +480,31 @@ class ShortStraddleStrategy(BaseStrategy):
         )
         self._entered = False
         self._stopped_for_day = True
+
+        # F1: LIMIT-at-mid on exit with per-leg MARKET fallback (can't stall exits).
+        def _exit_leg(sym: str, tok: int, side: OrderSide) -> SignalLeg:
+            leg = self._build_option_leg(sym, tok, side, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] EXIT fallback to MARKET for {sym} — no bid/ask"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=side,
+                quantity=self._quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
+            _exit_leg(self._ce_symbol, self._ce_token, OrderSide.BUY),
+            _exit_leg(self._pe_symbol, self._pe_token, OrderSide.BUY),
         ]
         # Close hedge legs if they exist
         if self._hedge_ce_token:
-            legs.append(make_leg(self._hedge_ce_symbol, self._hedge_ce_token, OrderSide.SELL, self._quantity))
+            legs.append(_exit_leg(self._hedge_ce_symbol, self._hedge_ce_token, OrderSide.SELL))
         if self._hedge_pe_token:
-            legs.append(make_leg(self._hedge_pe_symbol, self._hedge_pe_token, OrderSide.SELL, self._quantity))
+            legs.append(_exit_leg(self._hedge_pe_symbol, self._hedge_pe_token, OrderSide.SELL))
         return exit_signal(self.strategy_id, legs, reason)
 
     def _create_hedge_legs(self, chain) -> list[SignalLeg]:
@@ -495,10 +557,37 @@ class ShortStraddleStrategy(BaseStrategy):
             f"[{self.strategy_id}] Hedge legs: CE={ce_symbol} @ {hedge_ce_strike}, "
             f"PE={pe_symbol} @ {hedge_pe_strike}"
         )
-        return [
-            make_leg(ce_symbol, ce_token, OrderSide.BUY, self._quantity),
-            make_leg(pe_symbol, pe_token, OrderSide.BUY, self._quantity),
-        ]
+        # F1: LIMIT-at-mid for hedge legs. If either can't be priced (far OTM
+        # often has 0 bid), skip the whole hedge — a one-sided hedge is worse
+        # than no hedge (asymmetric risk). Matches the existing "both or
+        # neither" invariant above.
+        hedge_ce_opt = None
+        hedge_pe_opt = None
+        for entry in chain.strikes:
+            if float(entry.strike) == hedge_ce_strike:
+                hedge_ce_opt = entry.ce
+            if float(entry.strike) == hedge_pe_strike:
+                hedge_pe_opt = entry.pe
+        ce_leg = self._build_option_leg(
+            ce_symbol, ce_token, OrderSide.BUY, self._quantity, opt=hedge_ce_opt,
+        )
+        pe_leg = self._build_option_leg(
+            pe_symbol, pe_token, OrderSide.BUY, self._quantity, opt=hedge_pe_opt,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] Hedge legs un-priceable at strikes "
+                f"({hedge_ce_strike}, {hedge_pe_strike}) — dropping hedge rather than "
+                f"accepting asymmetric protection"
+            )
+            # Reset the stored hedge tokens so the exit path doesn't try to
+            # close legs that never opened.
+            self._hedge_ce_token = 0
+            self._hedge_ce_symbol = ""
+            self._hedge_pe_token = 0
+            self._hedge_pe_symbol = ""
+            return []
+        return [ce_leg, pe_leg]
 
     async def on_stop(self) -> None:
         if self._entered:

@@ -8,13 +8,13 @@ from decimal import Decimal
 
 from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
-from src.core.types import OrderSide, SignalType
+from src.core.types import OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
 from src.strategy.params import ShortStrangleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.scoring import SHORT_STRANGLE_CONFIG, score_strategy
-from src.strategy.signals import adjust_signal, entry_signal, exit_signal, make_leg
+from src.strategy.signals import adjust_signal, entry_signal, exit_signal
 
 logger = logging.getLogger(__name__)
 
@@ -246,10 +246,19 @@ class ShortStrangleStrategy(BaseStrategy):
         self._entry_premium = ce_ltp + pe_ltp
         self._peak_premium = self._entry_premium
 
-        legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity),
-        ]
+        # F1: LIMIT-at-mid. If either leg can't be priced, abort entry.
+        ce_leg = self._build_option_leg(
+            self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity, opt=best_ce.ce,
+        )
+        pe_leg = self._build_option_leg(
+            self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity, opt=best_pe.pe,
+        )
+        if ce_leg is None or pe_leg is None:
+            logger.warning(
+                f"[{self.strategy_id}] STRANGLE BLOCKED: could not price legs"
+            )
+            return None
+        legs = [ce_leg, pe_leg]
 
         self._entered = True
         ce_delta = best_ce.ce.greeks.delta if best_ce.ce else 0
@@ -397,14 +406,25 @@ class ShortStrangleStrategy(BaseStrategy):
                 logger.debug(f"[{self.strategy_id}] CE roll skipped: same strike")
                 return None
 
-            # Close existing CE
-            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity))
+            # F1: LIMIT-at-mid for both close + open legs of the roll.
+            close_leg = self._build_option_leg(
+                self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity,
+            )
 
             old_strike = self._ce_strike
             self._ce_token = best.ce.instrument_token
             self._ce_symbol = best.ce.tradingsymbol
             self._ce_strike = float(best.strike)
-            legs.append(make_leg(self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity))
+            open_leg = self._build_option_leg(
+                self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity, opt=best.ce,
+            )
+            if close_leg is None or open_leg is None:
+                logger.warning(
+                    f"[{self.strategy_id}] CE ROLL BLOCKED: could not price close/open legs"
+                )
+                return None
+            legs.append(close_leg)
+            legs.append(open_leg)
 
             logger.info(
                 f"[{self.strategy_id}] ROLL CE: {old_strike} -> {self._ce_strike} "
@@ -430,14 +450,25 @@ class ShortStrangleStrategy(BaseStrategy):
                 logger.debug(f"[{self.strategy_id}] PE roll skipped: same strike")
                 return None
 
-            # Close existing PE
-            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity))
+            # F1: LIMIT-at-mid for both close + open legs of the roll.
+            close_leg = self._build_option_leg(
+                self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity,
+            )
 
             old_strike = self._pe_strike
             self._pe_token = best.pe.instrument_token
             self._pe_symbol = best.pe.tradingsymbol
             self._pe_strike = float(best.strike)
-            legs.append(make_leg(self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity))
+            open_leg = self._build_option_leg(
+                self._pe_symbol, self._pe_token, OrderSide.SELL, self._quantity, opt=best.pe,
+            )
+            if close_leg is None or open_leg is None:
+                logger.warning(
+                    f"[{self.strategy_id}] PE ROLL BLOCKED: could not price close/open legs"
+                )
+                return None
+            legs.append(close_leg)
+            legs.append(open_leg)
 
             logger.info(
                 f"[{self.strategy_id}] ROLL PE: {old_strike} -> {self._pe_strike} "
@@ -480,9 +511,26 @@ class ShortStrangleStrategy(BaseStrategy):
             exit_reason=reason,
             outcome_pnl=outcome_pnl,
         )
+        # F1: LIMIT-at-mid on exit, with per-leg MARKET fallback. Exiting is
+        # time-critical (SL/trail fired); better to cross the spread on a
+        # single leg than leave the position half-open.
+        def _exit_leg(sym: str, tok: int) -> "SignalLeg":
+            leg = self._build_option_leg(sym, tok, OrderSide.BUY, self._quantity)
+            if leg is not None:
+                return leg
+            logger.warning(
+                f"[{self.strategy_id}] EXIT fallback to MARKET for {sym} — no bid/ask"
+            )
+            return SignalLeg(
+                tradingsymbol=sym,
+                instrument_token=tok,
+                order_side=OrderSide.BUY,
+                quantity=self._quantity,
+                order_type=OrderType.MARKET,
+            )
         legs = [
-            make_leg(self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity),
-            make_leg(self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity),
+            _exit_leg(self._ce_symbol, self._ce_token),
+            _exit_leg(self._pe_symbol, self._pe_token),
         ]
         self._entered = False
         self._stopped_for_day = True

@@ -81,7 +81,14 @@ class OrderValidator:
                 return
 
     def _check_limit_price(self, order: OrderRequest) -> None:
-        """Reject LIMIT/SL orders that have no price set."""
+        """Reject LIMIT/SL orders that have no price set.
+
+        F1 invariant — with LIMIT-at-mid now the default for options, a
+        strategy that forgets to plumb the mid price through will trip
+        this check and fail fast at validation time rather than silently
+        placing a Rs 0 limit (which Kite treats as "closes immediately at
+        best price", i.e. effectively MARKET).
+        """
         if order.order_type in (OrderType.LIMIT, OrderType.SL) and order.price <= 0:
             raise OrderValidationError(
                 f"{order.order_type.value} order for {order.tradingsymbol} "
