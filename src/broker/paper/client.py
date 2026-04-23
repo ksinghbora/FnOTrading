@@ -446,6 +446,15 @@ class PaperBrokerClient(BrokerClient):
         else:
             fill_source = "slippage_model"
 
+        # ─── Per-fill validation metadata (cost/capacity harness) ─────
+        # spread_half: absolute price units (always positive). Falls back
+        # to 0.5% of premium if only one side is known; 0.0 if neither.
+        # book_snapshot: up to 5 levels per side, or single level for the
+        # GDFL top-of-book path. None when no quote is available.
+        spread_half, book_snapshot = self._build_fill_metadata(
+            bid, ask, fill_price, depth_quote,
+        )
+
         order = {
             "order_id": order_id,
             "tradingsymbol": tradingsymbol,
@@ -475,6 +484,10 @@ class PaperBrokerClient(BrokerClient):
             "book_walk_levels": [
                 {"price": round(p, 2), "size": int(s)} for p, s in consumed_levels
             ] if consumed_levels else [],
+            # Consumed downstream by the cost-sensitivity / capacity
+            # validation harness; callers that don't need them can ignore.
+            "spread_half": spread_half,
+            "book_snapshot": book_snapshot,
         }
 
         self._orders.append(order)
@@ -489,6 +502,8 @@ class PaperBrokerClient(BrokerClient):
             "quantity": quantity,
             "average_price": fill_price,
             "fill_timestamp": now.isoformat(),
+            "spread_half": spread_half,
+            "book_snapshot": book_snapshot,
         })
         if len(self._trades) > self.MAX_TRADE_HISTORY:
             self._trades = self._trades[-self.MAX_TRADE_HISTORY:]
@@ -655,6 +670,62 @@ class PaperBrokerClient(BrokerClient):
             best, quantity, side, lot_size=lot_size,
         )
         return fill, consumed, False, True
+
+    @staticmethod
+    def _build_fill_metadata(
+        bid: float | None,
+        ask: float | None,
+        fill_price: float,
+        depth_quote: DepthQuote | None,
+    ) -> tuple[float, dict | None]:
+        """Return (spread_half, book_snapshot) for the fill record.
+
+        Inputs mirror what the place_order path already captured:
+        ``bid``/``ask`` may be None when no quote was available,
+        ``depth_quote`` is the full N-level snapshot when a depth_provider
+        is wired. Output is always serialisable (no numpy/Decimal leaks).
+        """
+        bid_f: float | None = float(bid) if bid and bid > 0 else None
+        ask_f: float | None = float(ask) if ask and ask > 0 else None
+
+        # spread_half — absolute price units, always >= 0.
+        # Real two-sided quote → exact half-spread.
+        # One-sided (rare: crossed book, single-leg halts) → 0.5% of
+        # premium as a conservative floor. No quote at all (broker fell
+        # through to SlippageModel) → 0.0; the validation harness
+        # interprets that as "no observed spread".
+        if bid_f is not None and ask_f is not None and ask_f >= bid_f:
+            spread_half = (ask_f - bid_f) / 2.0
+        elif bid_f is not None or ask_f is not None:
+            ref = fill_price if fill_price > 0 else (bid_f or ask_f or 0.0)
+            spread_half = 0.005 * float(ref)
+        else:
+            spread_half = 0.0
+        spread_half = max(0.0, float(spread_half))
+
+        # book_snapshot — up to 5 levels per side. None when we have no
+        # quote at all (broker fell through to SlippageModel / LTP).
+        book_snapshot: dict | None = None
+        if depth_quote is not None and (
+            depth_quote.bid_levels or depth_quote.ask_levels
+        ):
+            book_snapshot = {
+                "bids": [
+                    (float(lvl.price), int(lvl.size))
+                    for lvl in depth_quote.bid_levels[:5]
+                ],
+                "asks": [
+                    (float(lvl.price), int(lvl.size))
+                    for lvl in depth_quote.ask_levels[:5]
+                ],
+            }
+        elif bid_f is not None or ask_f is not None:
+            book_snapshot = {
+                "bids": [(bid_f, 0)] if bid_f is not None else [],
+                "asks": [(ask_f, 0)] if ask_f is not None else [],
+            }
+
+        return spread_half, book_snapshot
 
     def _update_position(
         self,

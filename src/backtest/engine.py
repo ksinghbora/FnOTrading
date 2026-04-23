@@ -21,7 +21,7 @@ Usage::
 """
 
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 import pytz
@@ -40,7 +40,7 @@ from src.backtest.common import (
     trading_days,
 )
 from src.backtest.metrics import calculate_metrics
-from src.broker.paper.client import PaperBrokerClient
+from src.broker.paper.client import BookLevel, DepthQuote, PaperBrokerClient
 from src.core.constants import INDIA_VIX_TOKEN, LOT_SIZES
 from src.core.events import EventBus
 from src.core.models import Order, Tick
@@ -163,9 +163,34 @@ class BacktestEngine:
                 return None, None
             return bid, ask
 
+        def _depth_provider(tradingsymbol: str) -> DepthQuote | None:
+            # GDFL exposes only top-of-book; wrap each side as a single
+            # BookLevel so the broker can emit a book_snapshot with
+            # bid_qty/ask_qty. Falls through to quote_provider (top-of-
+            # book with tick-per-lot penalty) when qty is missing.
+            tok = _resolve_token(tradingsymbol)
+            if tok is None:
+                return None
+            tick = feed._latest_ticks.get(tok)
+            if tick is None:
+                return None
+            bid = float(tick.bid_price) if tick.bid_price else 0.0
+            ask = float(tick.ask_price) if tick.ask_price else 0.0
+            if bid <= 0 or ask <= 0 or ask < bid:
+                return None
+            bid_qty = int(tick.bid_qty or 0)
+            ask_qty = int(tick.ask_qty or 0)
+            if bid_qty <= 0 and ask_qty <= 0:
+                return None
+            return DepthQuote(
+                bid_levels=[BookLevel(price=bid, size=bid_qty)] if bid_qty > 0 else [],
+                ask_levels=[BookLevel(price=ask, size=ask_qty)] if ask_qty > 0 else [],
+            )
+
         broker = PaperBrokerClient(
             initial_capital=initial_capital,
             quote_provider=_quote_provider,
+            depth_provider=_depth_provider,
         )
         portfolio = PortfolioManager(event_bus, broker, chain_builder)
 
@@ -417,6 +442,10 @@ class BacktestEngine:
             "daily_results": daily_results,
             "equity_curve": equity_curve,
             "final_pnl": round(float(running_pnl), 2),
+            # Per-fill records with spread_half + book_snapshot metadata.
+            # Consumed by the validation harness (cost sensitivity +
+            # capacity modules) without re-reading GDFL parquet files.
+            "trades": list(broker._trades),
         }
 
         logger.info(
