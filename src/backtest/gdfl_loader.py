@@ -32,6 +32,7 @@ import pyarrow.parquet as pq
 import pytz
 
 from src.core.constants import RISK_FREE_RATE
+from src.data.india_vix_loader import IndiaVIXLoader
 from src.options.iv import compute_iv
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,7 @@ def _pick_reconstruction_expiry(expiries: list[date], trade_date: date) -> date:
 def _reconstruct_spot_and_vix(
     contracts: dict[ContractMeta, pd.DataFrame],
     trade_date: date,
+    india_vix_loader: IndiaVIXLoader | None = None,
 ) -> pd.DataFrame:
     """Derive per-minute spot and VIX proxy from the option chain.
 
@@ -220,7 +222,12 @@ def _reconstruct_spot_and_vix(
     Spot: put-call parity median over top-5 nearest-to-ATM strikes:
         S = K + (C_mid - P_mid) * exp(r * T)
 
-    VIX proxy: ATM IV × 100, clamped to [5, 80] to reject numerical outliers.
+    VIX: when ``india_vix_loader`` is provided and has a close for
+    ``trade_date``, broadcast that daily close across every minute of the
+    session (real NSE India VIX is a day-level print). Otherwise fall back
+    to the ATM-IV × 100 proxy — kept for backward compatibility but the
+    Apr 23 expert review flagged the proxy as wrong methodology (see F3 on
+    the roadmap).
     """
     if not contracts:
         return pd.DataFrame()
@@ -281,31 +288,49 @@ def _reconstruct_spot_and_vix(
     spot_series = spot_series.ffill().bfill()
     spot = spot_series.values
 
-    # VIX proxy: ATM IV on reconstruction expiry
-    vix_proxy = np.full_like(spot, np.nan)
-    for i in range(len(minute_idx)):
-        s = spot[i]
-        if not np.isfinite(s) or s <= 0:
-            continue
-        atm_k_idx = int(np.argmin(np.abs(K_arr - s)))
-        atm_k = K_arr[atm_k_idx]
-        c = ce[i, atm_k_idx]
-        p = pe[i, atm_k_idx]
-        if not (np.isfinite(c) and np.isfinite(p) and c > 0 and p > 0):
-            continue
-        iv_ce = compute_iv(float(c), float(s), float(atm_k), float(T_vec[i]),
-                           RISK_FREE_RATE, "CE")
-        iv_pe = compute_iv(float(p), float(s), float(atm_k), float(T_vec[i]),
-                           RISK_FREE_RATE, "PE")
-        ivs = [v for v in (iv_ce, iv_pe) if v is not None and 0.03 < v < 1.0]
-        if ivs:
-            vix_proxy[i] = float(np.mean(ivs)) * 100.0
+    # VIX: prefer real India VIX close if the loader has it for this day.
+    vix_source = "proxy"
+    real_vix: float | None = None
+    if india_vix_loader is not None:
+        try:
+            real_vix = india_vix_loader.get_vix(trade_date)
+        except Exception as exc:  # defensive — never let VIX loading break ingest
+            logger.warning("[VIX_SOURCE] loader error for %s: %s", trade_date, exc)
+            real_vix = None
 
-    # Clamp to realistic India VIX range [5, 80], forward-fill gaps
-    vix_series = pd.Series(vix_proxy, index=minute_idx)
-    vix_series = vix_series.where((vix_series >= 5) & (vix_series <= 80))
-    vix_series = vix_series.ffill().bfill()
+    if real_vix is not None and 5.0 <= real_vix <= 80.0:
+        vix_source = "real"
+        vix_series = pd.Series(real_vix, index=minute_idx, dtype="float64")
+    else:
+        # Fallback proxy: ATM IV on reconstruction expiry
+        vix_proxy = np.full_like(spot, np.nan)
+        for i in range(len(minute_idx)):
+            s = spot[i]
+            if not np.isfinite(s) or s <= 0:
+                continue
+            atm_k_idx = int(np.argmin(np.abs(K_arr - s)))
+            atm_k = K_arr[atm_k_idx]
+            c = ce[i, atm_k_idx]
+            p = pe[i, atm_k_idx]
+            if not (np.isfinite(c) and np.isfinite(p) and c > 0 and p > 0):
+                continue
+            iv_ce = compute_iv(float(c), float(s), float(atm_k), float(T_vec[i]),
+                               RISK_FREE_RATE, "CE")
+            iv_pe = compute_iv(float(p), float(s), float(atm_k), float(T_vec[i]),
+                               RISK_FREE_RATE, "PE")
+            ivs = [v for v in (iv_ce, iv_pe) if v is not None and 0.03 < v < 1.0]
+            if ivs:
+                vix_proxy[i] = float(np.mean(ivs)) * 100.0
 
+        # Clamp to realistic India VIX range [5, 80], forward-fill gaps
+        vix_series = pd.Series(vix_proxy, index=minute_idx)
+        vix_series = vix_series.where((vix_series >= 5) & (vix_series <= 80))
+        vix_series = vix_series.ffill().bfill()
+
+    logger.info(
+        f"[VIX_SOURCE] {trade_date}: source={vix_source} "
+        f"value={float(vix_series.iloc[0]) if not vix_series.empty else float('nan'):.2f}"
+    )
     logger.info(
         f"[GDFL] {trade_date}: recon_expiry={recon_expiry} (DTE={dte_days}), "
         f"spot_range=[{np.nanmin(spot):.0f},{np.nanmax(spot):.0f}], "
@@ -325,17 +350,22 @@ def build_minute_snapshots(
     trade_date: date,
     max_strikes_per_side: int = 20,
     max_expiries: int = 2,
+    india_vix_loader: IndiaVIXLoader | None = None,
 ) -> pd.DataFrame:
     """Build a long-format per-minute snapshot DataFrame for a single trading day.
 
     Output columns:
         time, expiry, strike, option_type, ltp, bid, ask, oi, volume, spot, vix
+
+    If ``india_vix_loader`` is provided and has a close for ``trade_date``,
+    the VIX column uses the real NSE India VIX close. Otherwise it falls
+    back to the single-ATM IV proxy (see F3 on the roadmap).
     """
     contracts = _load_day_contracts(day_zip_path, underlying, trade_date, max_expiries)
     if not contracts:
         return pd.DataFrame()
 
-    spot_df = _reconstruct_spot_and_vix(contracts, trade_date)
+    spot_df = _reconstruct_spot_and_vix(contracts, trade_date, india_vix_loader)
     if spot_df.empty:
         return pd.DataFrame()
 
@@ -417,6 +447,7 @@ def extract_and_write_day(
     out_dir: Path,
     max_strikes_per_side: int = 20,
     max_expiries: int = 2,
+    india_vix_loader: IndiaVIXLoader | None = None,
 ) -> Path | None:
     """End-to-end: pull one day from the master archive and write its parquet.
 
@@ -447,6 +478,7 @@ def extract_and_write_day(
             tmp_path, underlying, trade_date,
             max_strikes_per_side=max_strikes_per_side,
             max_expiries=max_expiries,
+            india_vix_loader=india_vix_loader,
         )
         if df.empty:
             logger.warning(f"[GDFL] No data for {trade_date} {underlying}")
