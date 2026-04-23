@@ -42,11 +42,13 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
+
+from src.core.clock import now_ist
 
 if TYPE_CHECKING:
     from src.backtest.gdfl_market_source import GDFLMarketSource
@@ -230,7 +232,7 @@ class SplitLoader:
 
         # Always record access — including burns.
         entry["count"] = count + 1
-        entry["last_access"] = datetime.now().isoformat()
+        entry["last_access"] = now_ist().isoformat()
         state[key] = entry
         self._write_state(state)
 
