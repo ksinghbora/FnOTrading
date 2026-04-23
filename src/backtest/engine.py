@@ -30,6 +30,7 @@ from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
 from src.market_data.simulator import BANKNIFTY_SPOT_TOKEN, NIFTY_SPOT_TOKEN
+from src.options.skew import ParametricSkew
 from src.portfolio.charges import calculate_charges
 from src.portfolio.manager import PortfolioManager
 from src.strategy.context import StrategyContext
@@ -183,6 +184,10 @@ class BacktestEngine:
             quote_provider=quote_provider,
         )
         portfolio = PortfolioManager(event_bus, broker, chain_builder)
+
+        # IV skew — default NIFTY-typical. Refreshed daily from observed
+        # chain IVs via `_fit_daily_skew` if chain has ≥5 valid IV points.
+        skew_model: ParametricSkew = ParametricSkew.nifty_typical()
 
         await broker.connect()
 
@@ -368,6 +373,10 @@ class BacktestEngine:
             day_open = spot
             day_trades_start = len(broker._trades)
 
+            # Attempt to refit skew from yesterday's observed chain IVs.
+            # Falls back to nifty_typical() if chain has <5 valid IVs.
+            skew_model = _fit_daily_skew(chain_builder, underlying, expiry, spot, skew_model)
+
             # Minute-by-minute replay
             start_dt = datetime.combine(day, time(9, 15))
 
@@ -406,6 +415,7 @@ class BacktestEngine:
                         underlying, expiry, spot, vix, now,
                         spot_token, step, _NUM_STRIKES, T, iv_base,
                         option_tokens, alloc_token,
+                        skew_model=skew_model,
                     )
 
                 # Dispatch to strategy
@@ -539,17 +549,85 @@ def _register_options(chain_builder, underlying, spot, step, num_strikes, expiry
 _FUT_TOKEN = 500_000  # Fixed token for synthetic futures
 
 
+def _fit_daily_skew(
+    chain_builder,
+    underlying: str,
+    expiry: date,
+    spot: float,
+    fallback: "ParametricSkew",
+) -> "ParametricSkew":
+    """Fit `ParametricSkew` from the current chain's observed IVs.
+
+    The backtest currently synthesises IVs from a flat ATM and the skew
+    itself, so fitting from synthetic data is a no-op (recovers fallback).
+    The hook is here for the GDFL/replay paths which feed real observed
+    IVs into the chain builder — they will get a per-day calibrated skew.
+
+    Falls back to `fallback` (or `nifty_typical`) if the chain has fewer
+    than 5 valid OTM strike IVs.
+    """
+    try:
+        chain = chain_builder.get_chain(underlying, expiry)
+    except Exception:
+        return fallback or ParametricSkew.nifty_typical()
+    if chain is None:
+        return fallback or ParametricSkew.nifty_typical()
+
+    strikes: list[float] = []
+    ivs: list[float] = []
+    atm_iv_samples: list[float] = []
+    atm_strike = float(chain.atm_strike) if chain.atm_strike else spot
+    for entry in getattr(chain, "strikes", []):
+        try:
+            k = float(entry.strike)
+        except Exception:
+            continue
+        for opt in (entry.ce, entry.pe):
+            if opt is None or not getattr(opt, "greeks", None):
+                continue
+            iv = float(opt.greeks.iv or 0.0)
+            if iv <= 0:
+                continue
+            strikes.append(k)
+            ivs.append(iv)
+            if abs(k - atm_strike) < 1e-6:
+                atm_iv_samples.append(iv)
+
+    if not strikes:
+        return fallback or ParametricSkew.nifty_typical()
+    atm_iv = (
+        sum(atm_iv_samples) / len(atm_iv_samples)
+        if atm_iv_samples
+        else sum(ivs) / len(ivs)
+    )
+    return ParametricSkew.fit_from_observed(
+        strikes=strikes,
+        ivs=ivs,
+        atm_iv=atm_iv,
+        spot=spot,
+    )
+
+
 def _update_market(
     feed, broker, chain_builder, portfolio,
     underlying, expiry, spot, vix, now,
     spot_token, step, num_strikes, T, iv_base,
     option_tokens, alloc_token,
+    *,
+    skew_model: "ParametricSkew | None" = None,
 ):
     """Vectorized market update — batch BS + Greeks via numpy.
 
     Directly populates feed cache, broker LTP, option chain entries,
     and portfolio position LTPs. No EventBus involved.
+
+    Args:
+        skew_model: Optional `ParametricSkew` for per-strike IV. Defaults
+            to `ParametricSkew.nifty_typical()` if None (same shape as the
+            legacy `1 + 8m^2 - 3m` formula, so the arg is a drop-in).
     """
+    if skew_model is None:
+        skew_model = ParametricSkew.nifty_typical()
     spot_dec = Decimal(str(round(spot, 2)))
     r = RISK_FREE_RATE
 
@@ -620,15 +698,19 @@ def _update_market(
     for idx in range(n):
         strikes_arr[idx] = atm + (idx - num_strikes) * step
 
-    # Vectorized BS pricing for all strikes at once
+    # Vectorized BS pricing for all strikes at once.
+    # Per-strike IV from parametric skew (iv_atm anchor = iv_base).
     S_arr = np.full(n, spot)
     T_safe = max(T, 1e-10)
-    sigma_safe = max(iv_base, 1e-10)
+    atm_iv = max(iv_base, 1e-10)
+    sigma_arr = np.maximum(skew_model.apply_vec(atm_iv, strikes_arr, spot), 1e-10)
     sqrt_T = math.sqrt(T_safe)
     exp_rT = math.exp(-r * T_safe)
 
-    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * sigma_safe**2) * T_safe) / (sigma_safe * sqrt_T)
-    d2_arr = d1_arr - sigma_safe * sqrt_T
+    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * sigma_arr ** 2) * T_safe) / (
+        sigma_arr * sqrt_T
+    )
+    d2_arr = d1_arr - sigma_arr * sqrt_T
     N_d1 = sp_norm.cdf(d1_arr)
     N_d2 = sp_norm.cdf(d2_arr)
     N_neg_d1 = 1.0 - N_d1
@@ -638,9 +720,12 @@ def _update_market(
     ce_prices_arr = np.maximum(0.05, S_arr * N_d1 - strikes_arr * exp_rT * N_d2)
     pe_prices_arr = np.maximum(0.05, strikes_arr * exp_rT * N_neg_d2 - S_arr * N_neg_d1)
 
-    # Vectorized Greeks
-    gamma_arr = np.minimum(n_d1_pdf / (S_arr * sigma_safe * sqrt_T), 1.0)
-    common_theta = -(S_arr * n_d1_pdf * sigma_safe) / (2 * sqrt_T)
+    # Vectorized Greeks — no gamma cap (see src/options/greeks.py).
+    gamma_denom = S_arr * sigma_arr * sqrt_T
+    gamma_arr = np.where(
+        gamma_denom < 1e-8, np.inf, n_d1_pdf / np.where(gamma_denom < 1e-8, 1.0, gamma_denom)
+    )
+    common_theta = -(S_arr * n_d1_pdf * sigma_arr) / (2 * sqrt_T)
     ce_theta_arr = (common_theta - r * strikes_arr * exp_rT * N_d2) / 365
     pe_theta_arr = (common_theta + r * strikes_arr * exp_rT * N_neg_d2) / 365
     vega_arr = S_arr * n_d1_pdf * sqrt_T / 100
@@ -687,13 +772,14 @@ def _update_market(
             ask = price_dec + spread
             opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
 
+            gamma_val = float(gamma_arr[idx])
             greeks = Greeks(
                 delta=round(delta_val, 4),
-                gamma=round(float(gamma_arr[idx]), 6),
+                gamma=gamma_val if math.isinf(gamma_val) else round(gamma_val, 6),
                 theta=round(theta_val, 4),
                 vega=round(float(vega_arr[idx]), 4),
                 rho=round(rho_val, 4),
-                iv=round(sigma_safe, 4),
+                iv=round(float(sigma_arr[idx]), 4),
             )
 
             opt_data = OptionData.model_construct(
