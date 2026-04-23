@@ -300,6 +300,29 @@ class PortfolioParams(BaseStrategyParams):
     # breakouts are noise, not signal. Matches TrendDebitSpreadParams.vix_entry_min.
     trend_vix_min: float = 12.0
 
+    # ─── Event-day hard block + Friday square-off (P1 #11, #12) ──────
+    # Apr 23 expert review: RBI/Fed/Budget/CPI days currently receive only a
+    # score penalty (-5/-15/-25) in _evaluate_premium. Soft penalties have not
+    # prevented the 3-5 blow-up days/year where short premium loses 5-10×
+    # daily expected P&L. `event_day_hard_block_enabled` flips the behaviour
+    # to a hard skip on HARD_BLOCK-severity events (see
+    # `src/strategy/event_calendar.py`). Trend leg is not blocked — directional
+    # debit spreads benefit from event-day moves.
+    #
+    # Set `event_day_soft_penalty_only = True` to keep the legacy score-
+    # penalty-only path for A/B testing or emergency revert.
+    event_day_hard_block_enabled: bool = True
+    event_day_soft_penalty_only: bool = False
+    event_calendar_path: str = "data/event_days.csv"
+
+    # Friday premium square-off (P1 #12): weekend gap risk is unmodelled by
+    # minute-cadence backtest. Force-flat all premium legs at
+    # `friday_squareoff_time` on Fridays. Trend debit spreads are exempt
+    # because their risk is directional, not weekend-gap-driven, and their
+    # max loss is capped at debit paid.
+    friday_premium_squareoff_enabled: bool = True
+    friday_squareoff_time: time = time(14, 55)
+
 
 class TrendDebitSpreadParams(BaseStrategyParams):
     """Parameters for Trend Debit Spread strategy.

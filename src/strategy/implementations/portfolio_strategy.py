@@ -31,6 +31,7 @@ from src.advisor.confluence import (
 )
 from src.advisor.models import DayBias
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+from src.strategy.event_calendar import EventCalendar
 from src.strategy.implementations import portfolio_strikes as _strikes
 from src.strategy.implementations.portfolio_pricing import (
     find_available_wing_strike,
@@ -139,6 +140,15 @@ class PortfolioStrategy(BaseStrategy):
         self._confluence_enabled: bool = False
         self._confluence_weight: float = 1.0
 
+        # ─── Event calendar (P1 #11 hard block) ─────────────────
+        # Loaded in on_start so the CSV read doesn't happen inside __init__
+        # (keeps pickle/import-time side effects at zero). None when the
+        # hard-block flag is off so downstream code can cheap-check is None.
+        self._event_calendar: EventCalendar | None = None
+        # Friday square-off dedup — fire the log once per session, not per
+        # tick from 14:55 to 15:15.
+        self._friday_squareoff_logged: bool = False
+
         # ─── Day-level leg P&L tracking ─────────────────────────
         self._prem_realized_pnl: float = 0.0
         self._trend_realized_pnl: float = 0.0
@@ -241,13 +251,36 @@ class PortfolioStrategy(BaseStrategy):
 
         # Load AI advisor day bias (if available)
         self._load_day_bias()
+
+        # Load event calendar when the hard-block flag is on. We keep the
+        # instance None when disabled so the per-tick check is a single
+        # attribute compare rather than a CSV-in-memory walk.
+        if (
+            getattr(self.params, "event_day_hard_block_enabled", False)
+            and not getattr(self.params, "event_day_soft_penalty_only", False)
+        ):
+            try:
+                self._event_calendar = EventCalendar(
+                    csv_path=getattr(
+                        self.params, "event_calendar_path", "data/event_days.csv",
+                    ),
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"[{self.strategy_id}] Event calendar load failed — "
+                    f"falling back to soft-penalty path only: {exc}"
+                )
+                self._event_calendar = None
+
         logger.info(
             f"[{self.strategy_id}] Portfolio strategy started: "
             f"underlying={self.params.underlying} expiry={self._expiry} "
             f"premium_threshold={self.params.signal_threshold} "
             f"trend_threshold={self.params.trend_signal_threshold} "
             f"advisor={'active' if self._confluence_enabled else 'shadow'} "
-            f"day_bias={'loaded' if self._day_bias else 'none'}"
+            f"day_bias={'loaded' if self._day_bias else 'none'} "
+            f"event_cal={'loaded' if self._event_calendar else 'off'} "
+            f"friday_squareoff={'on' if getattr(self.params, 'friday_premium_squareoff_enabled', False) else 'off'}"
         )
 
     async def on_tick(self, tick: Tick) -> Signal | None:
@@ -354,6 +387,29 @@ class PortfolioStrategy(BaseStrategy):
                 return self._exit_trend("Expiry-day force-exit")
             # No positions — fall through.
 
+        # ─── Friday 14:55 premium square-off (P1 #12) ──────────────
+        # Force-flat all premium positions (strangle / IC / straddle) just
+        # before 15:00 on Fridays. Weekend gap risk — event-driven Monday-
+        # open jumps can move NIFTY >1% overnight (FOMC decisions announced
+        # 23:30 IST Wed/Thu, RBI emergency actions, geopolitical shocks).
+        # Minute-cadence backtests cannot model this cleanly, so we lean
+        # on a hard time gate. Trend debit spreads are exempt because the
+        # risk is directional (capped at debit paid), not gap-vulnerable.
+        if (
+            getattr(self.params, "friday_premium_squareoff_enabled", False)
+            and EventCalendar.is_friday_for_premium(now.date())
+            and now.time() >= getattr(self.params, "friday_squareoff_time", time(14, 55))
+            and self._prem_entered
+        ):
+            if not self._friday_squareoff_logged:
+                logger.info(
+                    f"[{self.strategy_id}] [FRIDAY_SQUAREOFF] "
+                    f"force-flat premium at {now.time().isoformat()} "
+                    f"(mode={self._prem_mode})"
+                )
+                self._friday_squareoff_logged = True
+            return self._exit_premium("Friday 14:55 square-off (weekend gap risk)")
+
         # Time exit — close all open legs
         if now.time() >= self.params.exit_time:
             if self._prem_entered:
@@ -422,6 +478,31 @@ class PortfolioStrategy(BaseStrategy):
         vix = self.ctx.get_vix()
         if spot <= 0 or vix <= 0:
             return None
+
+        # ─── Event-day hard block (P1 #11) ────────────────────────
+        # The legacy soft-penalty (see ~line 550 below) only reduces the
+        # entry score by -5/-15/-25. That has never prevented the 3-5
+        # blow-up days/year where short premium loses 5-10× daily expected
+        # P&L on RBI/Fed/Budget shock moves. When the hard-block flag is on
+        # and the calendar has a HARD_BLOCK entry for today, we skip the
+        # premium leg entirely. Trend leg is NOT blocked — directional
+        # debit spreads actually benefit from event-day volatility.
+        if self._event_calendar is not None:
+            hard, event_type = self._event_calendar.is_hard_blocked(now.date())
+            if hard:
+                self._log_skip_throttled(
+                    f"EVENT_BLOCK:{event_type}",
+                    f"[{self.strategy_id}] [EVENT_BLOCK] PREMIUM blocked — "
+                    f"{event_type} on {now.date().isoformat()}",
+                    extra={
+                        "tag": Tag.FILTER,
+                        "strategy": self.strategy_id,
+                        "filter": "event_day_hard_block",
+                        "event_type": event_type,
+                        "action": "BLOCK",
+                    },
+                )
+                return None
 
         # Per-day cap (Apr 18 2026 chain-replay diagnosis): without this,
         # the premium leg re-entered 14× on 2026-04-17 hour 11 when each
@@ -2315,6 +2396,9 @@ class PortfolioStrategy(BaseStrategy):
         self._prem_trades_today = 0
         self._trend_trades_today = 0
         self._last_monitor_minute = -1
+        # Friday square-off fires once per session; reset the dedup flag so
+        # tomorrow's log is clean (matters especially on Fri→Mon reset).
+        self._friday_squareoff_logged = False
 
         # Reset per-session signal context (Apr 18 trend-improvements port):
         # VIX history is a 60-min lookback buffer for the rising/falling
