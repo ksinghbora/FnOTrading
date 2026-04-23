@@ -712,6 +712,21 @@ class PortfolioStrategy(BaseStrategy):
         if spot <= 0 or vix <= 0:
             return None
 
+        if vix < self.params.trend_vix_min:
+            if not self._paper_mode:
+                self._log_skip_throttled(
+                    "TREND_VIX_LOW",
+                    f"[{self.strategy_id}] [VIX_GATE] TREND blocked: VIX={vix:.1f} "
+                    f"< trend_vix_min={self.params.trend_vix_min} (no vol, breakouts whipsaw)",
+                )
+                return None
+            else:
+                self._log_skip_throttled(
+                    "SHADOW_BLOCK_TREND_VIX",
+                    f"[{self.strategy_id}] [SHADOW_BLOCK] TREND VIX={vix:.1f} "
+                    f"< trend_vix_min={self.params.trend_vix_min} — entering anyway (paper mode)",
+                )
+
         breakout, oi_confirmed, trend_duration = self._assess_trend(spot)
 
         # Hard gate (Apr 2026): require ≥45min sustained — 30min "sustained"

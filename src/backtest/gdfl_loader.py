@@ -136,7 +136,7 @@ def _load_day_contracts(
         names = [n for n in zf.namelist() if n.endswith(".csv")]
         metas: list[tuple[str, ContractMeta]] = []
         for n in names:
-            fname = n.rsplit("/", 1)[-1]
+            fname = n.replace("\\", "/").rsplit("/", 1)[-1]
             meta = parse_symbol(fname)
             if meta is None or meta.underlying != underlying:
                 continue

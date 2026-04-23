@@ -53,11 +53,18 @@ def iter_trading_days(start: date, end: date) -> list[date]:
 
 def main():
     args = parse_args()
+
+    log_dir = Path("data/backtest_logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"gdfl_extract_{date.today().isoformat()}.log"
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
+        handlers=[logging.FileHandler(log_file, mode="a"), logging.StreamHandler()],
     )
+    print(f"Logs: {log_file}")
 
     archive = Path(args.archive).expanduser()
     if not archive.exists():

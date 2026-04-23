@@ -91,14 +91,25 @@ def print_summary(strategy: str, results: dict) -> None:
 
 def main():
     args = parse_args()
+
+    log_dir = Path("data/backtest_logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    tag = "all" if args.all else args.strategy
+    log_file = log_dir / f"gdfl_{tag}_{date.today().isoformat()}.log"
+
+    handlers = [logging.FileHandler(log_file, mode="w")]
+    if args.verbose:
+        handlers.append(logging.StreamHandler())
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
+        handlers=handlers,
     )
     if not args.verbose:
         for noisy in ("src.portfolio.positions", "src.portfolio.pnl", "src.broker.paper"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
+    print(f"Logs: {log_file}")
 
     _import_strategies()
     registered = set(list_strategies())

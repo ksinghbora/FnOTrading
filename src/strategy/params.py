@@ -259,7 +259,16 @@ class PortfolioParams(BaseStrategyParams):
     trend_stop_loss_pct: float = 25.0        # was 20 (Apr 17), reverted to OOS-validated mid
     trend_profit_target_pct: float = 50.0    # was 55 (Apr 17), reverted to OOS-validated mid
     trend_trailing_stop_pct: float = 15.0    # unchanged — protects gains without choking winners
-    breakout_confirmation_pct: float = 0.5
+    # Apr 23 GDFL 246-day analysis: 0.5% triggered on normal intraday noise;
+    # trend leg net -7,334 on solo (premium-silent, low-VIX) days driven by
+    # whipsaws. 0.7% aligns with standalone TrendDebitSpreadParams and the
+    # ~0.5 ATR threshold standard for NIFTY breakouts.
+    breakout_confirmation_pct: float = 0.7
+    # Apr 23 GDFL: trend leg lost -5,768 net across 24 days in Jul-Aug 2025
+    # when VIX=9-12 and premium was correctly VIX-gated off. Breakouts need
+    # realized vol to confirm; sub-12 VIX = range-bound regime where 0.7%
+    # breakouts are noise, not signal. Matches TrendDebitSpreadParams.vix_entry_min.
+    trend_vix_min: float = 12.0
 
 
 class TrendDebitSpreadParams(BaseStrategyParams):

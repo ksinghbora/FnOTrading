@@ -358,6 +358,10 @@ class BacktestEngine:
                     high=Decimal("0"), low=Decimal("0"),
                     open=Decimal("0"), close=Decimal("0"),
                 )
+                # Feed spot tick into candle aggregator so breakout / M5
+                # indicators receive real OHLC data (else trend leg never fires).
+                aggregator.process_tick_direct(spot_tick)
+
                 try:
                     signal = await strategy.on_tick(spot_tick)
                     if signal:
