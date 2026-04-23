@@ -14,6 +14,7 @@ from src.risk.circuit_breaker import CircuitBreaker
 from src.risk.greeks_risk import GreeksRiskMonitor
 from src.risk.kill_switch import KillSwitch
 from src.risk.limits import RiskLimits
+from src.risk.portfolio_budget import PortfolioGammaBudget
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class RiskManager:
     - CircuitBreaker (system-level halt)
     - KillSwitch (emergency stop)
     - GreeksRiskMonitor (portfolio Greeks)
+    - PortfolioGammaBudget (aggregate gamma × 1%-spot PnL)
     """
 
     def __init__(
@@ -36,6 +38,8 @@ class RiskManager:
         greeks_monitor: GreeksRiskMonitor,
         portfolio: PortfolioManager,
         event_bus: EventBus,
+        gamma_budget: PortfolioGammaBudget | None = None,
+        chain_builder=None,
     ):
         self._limits = limits
         self._circuit_breaker = circuit_breaker
@@ -44,6 +48,8 @@ class RiskManager:
         self._portfolio = portfolio
         self._event_bus = event_bus
         self._order_manager = None  # Injected after creation
+        self._gamma_budget = gamma_budget
+        self._chain_builder = chain_builder
 
     def set_order_manager(self, order_manager) -> None:
         """Inject order manager for open order count checks."""
@@ -132,6 +138,24 @@ class RiskManager:
                 f"Greeks limits breached: {'; '.join(breaches)}"
             )
 
+        # Check portfolio gamma × 1%-spot budget
+        # (Skips on exits so we can always flatten convexity.)
+        if self._gamma_budget is not None and not risk_reducing:
+            exposure = self._gamma_budget.current_exposure(
+                open_positions, self._chain_builder,
+            )
+            additional = self._gamma_budget.estimate_incremental_dollar_gamma(
+                order, self._chain_builder,
+            )
+            ok, reason = self._gamma_budget.can_open(additional, exposure)
+            if not ok:
+                logger.warning(
+                    f"[GAMMA_BUDGET_BREACH] strategy={order.strategy_id} "
+                    f"symbol={order.tradingsymbol} qty={order.quantity} "
+                    f"{reason}"
+                )
+                raise RiskLimitBreachError(f"Gamma budget breach: {reason}")
+
         # Update circuit breaker with current P&L
         self._circuit_breaker.check_pnl(day_pnl)
 
@@ -217,6 +241,80 @@ class RiskManager:
         positions = self._portfolio.get_open_positions()
         self._greeks_monitor.update(positions)
 
+    def monitor_gamma_budget(self) -> dict:
+        """Periodic monitor hook — returns snapshot and triggers emergency.
+
+        Call every ~60s from the operational summary loop.
+        Returns a dict useful for logging / API; additionally logs a
+        structured `[GAMMA_BUDGET]` line. When utilization blows through
+        the config's emergency threshold, schedules a kill-switch flatten
+        of the largest-gamma position.
+        """
+        if self._gamma_budget is None:
+            return {}
+
+        positions = self._portfolio.get_open_positions()
+        exposure = self._gamma_budget.current_exposure(
+            positions, self._chain_builder,
+        )
+
+        emergency = exposure.utilization >= self._gamma_budget.config.emergency_utilization
+        level = "CRITICAL" if emergency else (
+            "WARNING" if exposure.utilization > 0.8 else "INFO"
+        )
+        msg = (
+            f"[GAMMA_BUDGET] util={exposure.utilization:.2f} "
+            f"dollar_gamma_1pct={exposure.dollar_gamma_1pct:,.0f} "
+            f"budget={exposure.budget:,.0f} "
+            f"total_gamma={exposure.total_gamma:+.4f} "
+            f"spot={exposure.spot:.2f} "
+            f"positions={len(exposure.per_position)}"
+        )
+        if level == "CRITICAL":
+            logger.critical(msg)
+        elif level == "WARNING":
+            logger.warning(msg)
+        else:
+            logger.info(msg)
+
+        snapshot = {
+            "total_gamma": exposure.total_gamma,
+            "dollar_gamma_1pct": exposure.dollar_gamma_1pct,
+            "budget": exposure.budget,
+            "utilization": exposure.utilization,
+            "spot": exposure.spot,
+            "breaches": list(exposure.breaches),
+            "emergency_triggered": False,
+        }
+
+        if emergency:
+            target = self._gamma_budget.largest_gamma_position(
+                positions, self._chain_builder,
+            )
+            if target is not None:
+                snapshot["emergency_triggered"] = True
+                snapshot["flatten_symbol"] = target.tradingsymbol
+                logger.critical(
+                    f"[GAMMA_BUDGET] emergency flatten scheduled: "
+                    f"symbol={target.tradingsymbol} qty={target.quantity} "
+                    f"util={exposure.utilization:.2f}"
+                )
+                import asyncio
+                try:
+                    asyncio.get_running_loop()
+                    asyncio.create_task(
+                        self._kill_switch.activate(
+                            reason=(
+                                f"Gamma budget breach util={exposure.utilization:.2f} "
+                                f"(target={target.tradingsymbol})"
+                            )
+                        )
+                    )
+                except RuntimeError:
+                    # No running loop — caller is in a sync context (tests).
+                    pass
+        return snapshot
+
     @property
     def circuit_breaker(self) -> CircuitBreaker:
         return self._circuit_breaker
@@ -228,3 +326,7 @@ class RiskManager:
     @property
     def limits(self) -> RiskLimits:
         return self._limits
+
+    @property
+    def gamma_budget(self) -> PortfolioGammaBudget | None:
+        return self._gamma_budget
