@@ -67,6 +67,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cpcv-folds", type=int, default=10)
     p.add_argument("--cpcv-n-test-folds", type=int, default=2)
     p.add_argument("--cpcv-max-paths", type=int, default=50)
+    p.add_argument(
+        "--workers", type=int, default=1,
+        help=(
+            "Number of parallel CPCV worker subprocesses. 1 = sequential "
+            "(default; reproduces legacy behaviour). 4 = saturate the M4's "
+            "performance cores. Workers each spawn a fresh Python interpreter, "
+            "reconstruct the engine + market source from primitive args, and "
+            "run with FNO_DISABLE_DECISIONS=1 to avoid CSV write races. "
+            "Determinism is enforced by tests/integration/test_parallel_cpcv_determinism.py "
+            "— same seed produces bit-identical CPCV stats regardless of worker count."
+        ),
+    )
     p.add_argument("--wf-train-days", type=int, default=90)
     p.add_argument("--wf-test-days", type=int, default=30)
     p.add_argument("--wf-step-days", type=int, default=15)
@@ -152,14 +164,18 @@ def build_runner(
                 "trades": [],
                 "daily_results": [],
             }
+        # Apr 25 2026: pass the EXPLICIT day list (not start+num_days).
+        # CPCV produces non-contiguous train indices like [0,1,5,6,7,...]
+        # with gaps for held-out test folds. Without an explicit list, the
+        # engine would silently expand to a contiguous slice and leak test
+        # days into train. The ``days`` parameter is the audit-clean path.
         result = await engine.run(
             strategy_name=strategy_name,
             strategy_params=dict(params),
-            num_days=len(days_filtered),
-            start_date=days_filtered[0],
             initial_capital=initial_capital,
             seed=seed,
             market_source=source,
+            days=days_filtered,
         )
         return result
 
@@ -228,8 +244,26 @@ async def main_async(args: argparse.Namespace) -> int:
         max_paths=args.cpcv_max_paths,
         seed=args.seed,
     )
-    logger.info("[VALIDATE] Running CPCV on %d days", len(combined))
-    cpcv_result = await cpcv.evaluate(baseline_params, runner, combined)
+    logger.info(
+        "[VALIDATE] Running CPCV on %d days (workers=%d)",
+        len(combined), args.workers,
+    )
+    # Build a RunnerSpec for parallel mode. Sequential mode (workers=1)
+    # ignores the spec and uses the closure ``runner`` defined above.
+    from src.backtest.validation.parallel_runner import RunnerSpec
+    runner_spec = RunnerSpec(
+        strategy_name=args.strategy,
+        parquet_dir=str(parquet_dir),
+        underlying=args.underlying,
+        spot_token=args.spot_token,
+        initial_capital=args.initial_capital,
+        base_seed=args.seed,
+    )
+    cpcv_result = await cpcv.evaluate(
+        baseline_params, runner, combined,
+        runner_spec=runner_spec,
+        n_workers=args.workers,
+    )
 
     # ─── Walk-forward on train ∪ val ───────────────────────────────
     wf = WalkForwardValidator(
@@ -240,19 +274,42 @@ async def main_async(args: argparse.Namespace) -> int:
     logger.info("[VALIDATE] Running walk-forward on %d days", len(combined))
     wf_report = await wf.run(combined, runner, baseline_params, optimizer_fn=None)
 
-    # ─── Regime stratification ─────────────────────────────────────
-    decisions = loader.load_decisions(combined)
-    event_dates = load_event_dates()
-    regime_stats = stratify(decisions, event_dates=event_dates)
+    # ─── Wipe decisions for the validation window ──────────────────
+    # Apr 25 2026 audit Bug 4: CPCV + WF paths above each ran the
+    # engine which APPENDED decision rows to the per-day CSVs. Without
+    # wiping, the stratifier would see ~40× duplicated decisions (each
+    # day appears in many CPCV paths × WF windows × historical runs).
+    # Past validation reports had inflated trade counts for this reason.
+    # The full-window run below is the SINGLE source of truth for
+    # stratification — wipe everything else first.
+    decisions_dir = Path("data/decisions")
+    if decisions_dir.exists():
+        wiped = 0
+        for d in combined:
+            path = decisions_dir / f"decisions_{d.isoformat()}.csv"
+            if path.exists():
+                path.unlink()
+                wiped += 1
+        if wiped:
+            logger.info(
+                "[VALIDATE] wiped %d decisions CSVs for the %d-day validation window "
+                "(prevents Bug 4 duplication: stratifier reads only the full-window run's decisions)",
+                wiped, len(combined),
+            )
 
     # ─── Full-window run to collect trades for cost + capacity ─────
     logger.info(
-        "[VALIDATE] Running full-window backtest on %d days to collect trades",
+        "[VALIDATE] Running full-window backtest on %d days to collect trades + decisions",
         len(combined),
     )
     full_result = await runner(combined, baseline_params)
     trades = list(full_result.get("trades", []))
     logger.info("[VALIDATE] collected %d trades", len(trades))
+
+    # ─── Regime stratification (must run AFTER full-window write) ──
+    decisions = loader.load_decisions(combined)
+    event_dates = load_event_dates()
+    regime_stats = stratify(decisions, event_dates=event_dates)
 
     # ─── Cost sensitivity ──────────────────────────────────────────
     shifts = tuple(float(x) for x in args.shifts.split(",") if x.strip())

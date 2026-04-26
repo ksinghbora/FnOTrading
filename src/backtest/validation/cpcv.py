@@ -219,8 +219,28 @@ class CombinatorialPurgedCV:
         param_set: dict[str, Any],
         runner_fn: Callable[[list[date], dict[str, Any]], Awaitable[dict[str, Any]]],
         dates: list[date],
+        runner_spec: "RunnerSpec | None" = None,
+        n_workers: int = 1,
     ) -> dict[str, Any]:
-        """Run ``runner_fn(train_dates, param_set)`` per path and aggregate.
+        """Run one CPCV path per fold-combination and aggregate.
+
+        Two execution modes:
+
+        1. **Sequential (default).** Calls ``runner_fn(train_dates,
+           param_set)`` for each path in order. ``runner_fn`` must be an
+           async callable. Used when ``n_workers <= 1`` or
+           ``runner_spec`` is None.
+
+        2. **Parallel.** When ``runner_spec`` is given AND ``n_workers
+           > 1``, paths are dispatched to a process pool via
+           ``parallel_evaluate_paths``. Each worker reconstructs its own
+           ``BacktestEngine`` from the spec, derives a per-path RNG seed
+           (``base_seed * 2654435761 + path_id``), and writes nothing
+           to the shared decisions CSV (FNO_DISABLE_DECISIONS=1). The
+           determinism test
+           (``tests/integration/test_parallel_cpcv_determinism.py``)
+           guarantees that ``n_workers=1`` and ``n_workers=N`` produce
+           identical CPCV path metrics for the same ``base_seed``.
 
         Returns:
             Dict with ``paths`` (list[CPCVPath]), Sharpe distribution
@@ -230,30 +250,68 @@ class CombinatorialPurgedCV:
         """
         paths: list[CPCVPath] = []
 
+        # Materialise all paths up-front so both modes use the same
+        # data. Sequential mode iterates this list; parallel mode hands
+        # it to the pool.
+        all_paths: list[tuple[int, list[date], list[date], tuple[int, ...]]] = []
         for path_id, (train_idx, test_idx, fold_ids) in enumerate(self.split(dates)):
             train_dates = [dates[i] for i in train_idx]
             test_dates = [dates[i] for i in test_idx]
+            all_paths.append((path_id, train_dates, test_dates, fold_ids))
 
-            # Defensive: don't let path logic mutate caller's param dict
-            params_copy = dict(param_set)
-            result = await runner_fn(train_dates, params_copy)
-            metrics = dict(result.get("metrics", {}))
+        if runner_spec is not None and n_workers > 1:
+            # Lazy import — keeps cpcv.py from depending on the parallel
+            # runner module (and its multiprocessing import) when not used.
+            from src.backtest.validation.parallel_runner import parallel_evaluate_paths
 
-            num_trades = int(metrics.get("num_trades", 0))
-            if num_trades < 30:
-                logger.warning(
-                    "[CPCV] path_id=%d fold_ids=%s: num_trades=%d (< 30) — "
-                    "small-sample Sharpe is unreliable",
-                    path_id, fold_ids, num_trades,
+            results = await parallel_evaluate_paths(
+                spec=runner_spec,
+                paths_args=all_paths,
+                param_set=param_set,
+                n_workers=n_workers,
+            )
+            # Iterate path_id in order so the returned ``paths`` list is
+            # deterministic regardless of completion order in the pool.
+            for path_id, train_dates, test_dates, fold_ids in all_paths:
+                _, _, _, metrics = results.get(
+                    path_id, (train_dates, test_dates, fold_ids, {})
                 )
+                num_trades = int(metrics.get("num_trades", 0))
+                if num_trades < 30:
+                    logger.warning(
+                        "[CPCV] path_id=%d fold_ids=%s: num_trades=%d (< 30) — "
+                        "small-sample Sharpe is unreliable",
+                        path_id, fold_ids, num_trades,
+                    )
+                paths.append(CPCVPath(
+                    path_id=path_id,
+                    test_fold_ids=fold_ids,
+                    train_dates=train_dates,
+                    test_dates=test_dates,
+                    metrics=metrics,
+                ))
+        else:
+            for path_id, train_dates, test_dates, fold_ids in all_paths:
+                # Defensive: don't let path logic mutate caller's param dict
+                params_copy = dict(param_set)
+                result = await runner_fn(train_dates, params_copy)
+                metrics = dict(result.get("metrics", {}))
 
-            paths.append(CPCVPath(
-                path_id=path_id,
-                test_fold_ids=fold_ids,
-                train_dates=train_dates,
-                test_dates=test_dates,
-                metrics=metrics,
-            ))
+                num_trades = int(metrics.get("num_trades", 0))
+                if num_trades < 30:
+                    logger.warning(
+                        "[CPCV] path_id=%d fold_ids=%s: num_trades=%d (< 30) — "
+                        "small-sample Sharpe is unreliable",
+                        path_id, fold_ids, num_trades,
+                    )
+
+                paths.append(CPCVPath(
+                    path_id=path_id,
+                    test_fold_ids=fold_ids,
+                    train_dates=train_dates,
+                    test_dates=test_dates,
+                    metrics=metrics,
+                ))
 
         if not paths:
             logger.warning("[CPCV] No paths generated — returning empty distribution")
