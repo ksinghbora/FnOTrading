@@ -391,8 +391,14 @@ class BacktestEngine:
             if day_idx > 0:
                 strategy.reset_day_state()
                 portfolio.reset_daily()
-                # Clear intraday candle builders so morning range is fresh
-                aggregator._builders.clear()
+                # Clear ALL aggregator per-day state — both in-progress
+                # builders AND completed candles. Apr 25 2026 audit:
+                # without clearing the completed list, callers that take
+                # ``candles[:N]`` (oldest of last N) silently mix
+                # yesterday's late-afternoon candles into today's morning
+                # window, corrupting move_from_open_pct, the trend
+                # filter, and the trend-leg's morning range detection.
+                aggregator.clear_day()
 
             # Expiry rollover (GDFL only — the synthetic BS path is gone).
             clock.set_time(IST.localize(datetime.combine(day, time(9, 15))))

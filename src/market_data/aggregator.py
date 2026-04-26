@@ -213,3 +213,22 @@ class OHLCAggregator:
         if timeframe is not None:
             candles = [c for c in candles if c.timeframe == timeframe]
         return candles[-limit:]
+
+    def clear_day(self) -> None:
+        """Reset all per-day state at the trading-day boundary.
+
+        Both the in-progress builders **and** the completed-candle history
+        are wiped. Apr 25 2026 audit (``memory/validation_audit_apr25.md``)
+        found that callers like ``BaseStrategy._move_from_open_pct`` and
+        ``momentum_breakout`` take ``candles[:N]`` (oldest of a limit-N
+        slice) assuming those are today's first candles. Without clearing
+        the completed list at day start, the slice mixes yesterday's
+        late-afternoon candles with today's first — silently corrupting
+        ``move_from_open_pct``, the trend filter, the trend leg's morning
+        range, and any feature that asks "what's today's range so far?"
+
+        Engine callers should invoke this in the day-boundary reset block
+        BEFORE the first tick of the new day is processed.
+        """
+        self._builders.clear()
+        self._completed_candles.clear()
