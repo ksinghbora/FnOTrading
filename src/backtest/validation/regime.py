@@ -240,10 +240,22 @@ def stratify(
 ) -> dict[str, RegimeStats]:
     """Slice ``decisions`` by regime and return a stat card per bucket.
 
-    Operates in a single pass:
-      1. normalise a ``date`` column from whatever is available.
-      2. assign each row its list of bucket labels via ``bucket_row``.
-      3. for each regime in REGIMES, filter and compute stats.
+    Trades are bucketed by their **entry-time** features. When a frame
+    carries ENTER/EXIT decision rows (real decisions CSV), we pair them so
+    each trade contributes exactly once with ENTRY-row vix/move/dte and
+    EXIT-row outcome_pnl. When the frame is a synthetic test fixture with
+    only outcome_pnl rows (no ``decision`` column), we fall through to the
+    legacy per-row labelling — same row holds features and pnl.
+
+    Why entry-time matters: the harness exists to flag regimes where a
+    runtime gate could intervene. EXIT-time labelling conflates "trade
+    lost in regime X" with "regime X label appeared because the trade
+    lost" (e.g., a +0.7% intraday move grows to +1.2% by exit, flipping
+    the trade from ``range_bound`` at entry to ``trending`` at exit).
+    Apr 25 2026 verified the bug end-to-end: harness reported high_vix
+    Sharpe -2.32, entry-time view +3.64; harness reported trending
+    n=1017, entry-time n=4. Gating at entry can never fire on labels
+    that only crystallise at exit.
     """
     if event_dates is None:
         event_dates = load_event_dates()
@@ -252,6 +264,16 @@ def stratify(
         return {r: _stats_for_bucket(decisions, r) for r in REGIMES}
 
     df = _ensure_date_column(decisions)
+
+    # Pair ENTER+EXIT rows when the schema indicates a real decisions log.
+    # ``decision`` values from BaseStrategy._record_decision are 'ENTER'
+    # and 'EXIT' (case-insensitive guard). The pairing key is
+    # (strategy_id, leg, cumcount per decision) — the same defensive zip
+    # used by scripts/diagnose_trend_leg.py that has been audited against
+    # the real CSVs. If pairing fails (no ENTER rows, missing columns)
+    # we fall back to the legacy single-row mode.
+    if "decision" in df.columns:
+        df = _pair_enter_exit(df)
 
     # Per-row bucket labels (list column). Keep in memory — the typical
     # decisions frame is <1M rows so iterrows-free apply is fine.
@@ -263,3 +285,46 @@ def stratify(
         sub = df[mask]
         out[regime] = _stats_for_bucket(sub, regime)
     return out
+
+
+def _pair_enter_exit(df: pd.DataFrame) -> pd.DataFrame:
+    """Pair ENTER and EXIT rows; return one row per trade with entry-time
+    features + exit outcome_pnl. Falls through unchanged if pairing isn't
+    possible (e.g., no ENTER rows, or missing pairing key columns).
+    """
+    decision = df["decision"].astype(str).str.upper()
+    enter_mask = decision == "ENTER"
+    exit_mask = decision == "EXIT"
+    if not enter_mask.any() or not exit_mask.any():
+        return df
+
+    required = {"strategy_id", "leg"}
+    if not required.issubset(df.columns):
+        return df
+
+    work = df.copy()
+    # Stable per-row index within (strategy_id, leg, decision) groups so
+    # the i-th ENTER pairs with the i-th EXIT. CSV write order = trade
+    # order in the harness, so cumcount is the natural pairing key.
+    work["_pair_idx"] = work.groupby(
+        ["strategy_id", "leg", decision], sort=False
+    ).cumcount()
+
+    enters = work[enter_mask].copy()
+    exits_pnl = (
+        work[exit_mask][["strategy_id", "leg", "_pair_idx", "outcome_pnl"]]
+        .rename(columns={"outcome_pnl": "_exit_pnl"})
+    )
+    merged = enters.merge(
+        exits_pnl,
+        on=["strategy_id", "leg", "_pair_idx"],
+        how="inner",
+    )
+    if merged.empty:
+        # Pairing produced no hits — defensively return the original frame
+        # so the caller still sees something instead of an empty stats card.
+        return df
+
+    merged["outcome_pnl"] = merged["_exit_pnl"]
+    merged = merged.drop(columns=["_pair_idx", "_exit_pnl"])
+    return merged

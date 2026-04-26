@@ -272,6 +272,121 @@ def test_stratify_accepts_timestamp_column():
     assert out["mid_vix"].num_trades == 2
 
 
+# ─── stratify ENTER/EXIT pairing (entry-time labelling) ──────────────
+
+
+def _enter_row(
+    d: date,
+    *,
+    vix: float,
+    move: float,
+    is_expiry: int = 0,
+    dte: int = 5,
+    leg: str = "PREMIUM",
+    strategy_id: str = "portfolio_bt",
+) -> dict:
+    """ENTER row: entry-time vix/move/dte. outcome_pnl is NaN by convention."""
+    return {
+        "date": d,
+        "decision": "ENTER",
+        "strategy_id": strategy_id,
+        "leg": leg,
+        "vix": vix,
+        "is_expiry": is_expiry,
+        "dte": dte,
+        "move_from_open_pct": move,
+        "outcome_pnl": float("nan"),
+    }
+
+
+def _exit_row(
+    d: date,
+    *,
+    vix: float,
+    move: float,
+    pnl: float,
+    is_expiry: int = 0,
+    dte: int = 5,
+    leg: str = "PREMIUM",
+    strategy_id: str = "portfolio_bt",
+) -> dict:
+    """EXIT row: exit-time vix/move; carries the realized pnl."""
+    return {
+        "date": d,
+        "decision": "EXIT",
+        "strategy_id": strategy_id,
+        "leg": leg,
+        "vix": vix,
+        "is_expiry": is_expiry,
+        "dte": dte,
+        "move_from_open_pct": move,
+        "outcome_pnl": pnl,
+    }
+
+
+def test_stratify_pairs_enter_exit_uses_entry_time_labels():
+    """A trade entering at mid_vix/range_bound and exiting at high_vix/trending
+    must be counted in the ENTRY-time buckets, not the exit-time ones.
+    This is the contract that makes runtime regime gating measurable.
+    """
+    d = date(2025, 1, 6)
+    rows = [
+        # Entered at vix=14 (mid_vix), move=0.3 (range_bound).
+        # Exited at vix=18 (high_vix), move=1.5 (trending). pnl=-1500.
+        _enter_row(d, vix=14.0, move=0.3),
+        _exit_row(d, vix=18.0, move=1.5, pnl=-1500.0),
+    ]
+    df = pd.DataFrame(rows)
+    out = stratify(df, event_dates={})
+    # Entry-time buckets: this trade is counted here with its -1500 pnl.
+    assert out["mid_vix"].num_trades == 1
+    assert out["mid_vix"].total_pnl == -1500.0
+    assert out["range_bound"].num_trades == 1
+    assert out["range_bound"].total_pnl == -1500.0
+    # Exit-time buckets: must NOT see this trade — entry never satisfied.
+    assert out["high_vix"].num_trades == 0
+    assert out["high_vix"].total_pnl == 0.0
+    assert out["trending"].num_trades == 0
+    assert out["trending"].total_pnl == 0.0
+
+
+def test_stratify_pairs_per_leg_independently():
+    """Two trades on different legs at the same timestamp must pair within
+    their own (strategy_id, leg) groups — premium and trend don't cross.
+    """
+    d = date(2025, 1, 6)
+    rows = [
+        _enter_row(d, vix=14.0, move=0.3, leg="PREMIUM"),
+        _enter_row(d, vix=20.0, move=1.5, leg="TREND"),  # different entry regime
+        _exit_row(d, vix=14.5, move=0.4, pnl=+100.0, leg="PREMIUM"),
+        _exit_row(d, vix=20.5, move=1.6, pnl=-300.0, leg="TREND"),
+    ]
+    df = pd.DataFrame(rows)
+    out = stratify(df, event_dates={})
+    # PREMIUM trade: mid_vix + range_bound at entry, +100 pnl.
+    # TREND trade: high_vix + trending at entry, -300 pnl.
+    assert out["mid_vix"].total_pnl == 100.0
+    assert out["range_bound"].total_pnl == 100.0
+    assert out["high_vix"].total_pnl == -300.0
+    assert out["trending"].total_pnl == -300.0
+
+
+def test_stratify_legacy_fixture_without_decision_column_unchanged():
+    """Synthetic test rows without a ``decision`` column fall through to
+    the original per-row labelling behaviour. Locks in backwards-compat
+    for the bulk of the existing regime test suite.
+    """
+    rows = [
+        _make_row(date(2025, 1, 6) + timedelta(days=i), vix=20.0, move=0.2, pnl=10.0)
+        for i in range(5)
+    ]
+    df = pd.DataFrame(rows)
+    assert "decision" not in df.columns
+    out = stratify(df, event_dates={})
+    assert out["high_vix"].num_trades == 5
+    assert out["high_vix"].total_pnl == 50.0
+
+
 # ─── load_event_dates ────────────────────────────────────────────────
 
 
