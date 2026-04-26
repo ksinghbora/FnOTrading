@@ -83,6 +83,20 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--wf-test-days", type=int, default=30)
     p.add_argument("--wf-step-days", type=int, default=15)
     p.add_argument(
+        "--wf-workers", type=int, default=1,
+        help=(
+            "Number of parallel walk-forward worker subprocesses. 1 = sequential "
+            "(default; reproduces legacy behaviour). > 1 dispatches each window's "
+            "train+test runs to a ProcessPoolExecutor. Each worker reconstructs "
+            "the engine + market source from primitive args and runs with "
+            "FNO_DISABLE_DECISIONS=1 to avoid CSV write races. "
+            "Determinism: per-window seed = base_seed * 2654435761 + window_idx; "
+            "same seed → bit-identical WF metrics regardless of worker count. "
+            "Requires parquet data (--parquet-dir) — falls back to sequential "
+            "if runner_spec cannot be built."
+        ),
+    )
+    p.add_argument(
         "--shifts", default="-1,-0.5,-0.25,0,0.25,0.5,1.0",
         help="Comma-separated spread shift multiples",
     )
@@ -271,8 +285,15 @@ async def main_async(args: argparse.Namespace) -> int:
         test_window_days=args.wf_test_days,
         step_days=args.wf_step_days,
     )
-    logger.info("[VALIDATE] Running walk-forward on %d days", len(combined))
-    wf_report = await wf.run(combined, runner, baseline_params, optimizer_fn=None)
+    logger.info(
+        "[VALIDATE] Running walk-forward on %d days (wf-workers=%d)",
+        len(combined), args.wf_workers,
+    )
+    wf_report = await wf.run(
+        combined, runner, baseline_params, optimizer_fn=None,
+        workers=args.wf_workers,
+        runner_spec=runner_spec if args.wf_workers > 1 else None,
+    )
 
     # ─── Wipe decisions for the validation window ──────────────────
     # Apr 25 2026 audit Bug 4: CPCV + WF paths above each ran the

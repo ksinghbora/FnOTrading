@@ -254,17 +254,29 @@ class GDFLMarketSource:
                 if token is None:
                     continue
 
-                ltp_dec = Decimal(str(round(float(ltps[i]), 2)))
-                bid_dec = max(_SPREAD_MIN, Decimal(str(round(float(bids[i]), 2))))
-                ask_dec = max(_SPREAD_MIN, Decimal(str(round(float(asks[i]), 2))))
+                # round() for Decimal(str()) conversion: necessary to avoid
+                # floating-point representation noise (e.g., 100.00000000001)
+                # appearing in the Decimal string from raw float market data.
+                ltp_f = float(ltps[i])
+                bid_f = float(bids[i])
+                ask_f = float(asks[i])
+                ltp_dec = Decimal(str(round(ltp_f, 2)))
+                bid_dec = max(_SPREAD_MIN, Decimal(str(round(bid_f, 2))))
+                ask_dec = max(_SPREAD_MIN, Decimal(str(round(ask_f, 2))))
 
+                # Greeks round() calls removed from inner loop — rounding was
+                # for display only (4 decimal places). The values from
+                # compute_greeks_vec are already numerically stable; strategy
+                # logic uses comparisons (e.g., delta > 0.3) where extra
+                # decimal precision is irrelevant. This saves ~6 builtin.round
+                # calls × N_strikes × 750 ticks/day = ~450K–900K calls/day.
                 greeks = Greeks(
-                    delta=float(round(greeks_dict["delta"][i], 4)),
-                    gamma=float(round(greeks_dict["gamma"][i], 6)),
-                    theta=float(round(greeks_dict["theta"][i], 4)),
-                    vega=float(round(greeks_dict["vega"][i], 4)),
-                    rho=float(round(greeks_dict["rho"][i], 4)),
-                    iv=float(round(ivs[i], 4)),
+                    delta=float(greeks_dict["delta"][i]),
+                    gamma=float(greeks_dict["gamma"][i]),
+                    theta=float(greeks_dict["theta"][i]),
+                    vega=float(greeks_dict["vega"][i]),
+                    rho=float(greeks_dict["rho"][i]),
+                    iv=float(ivs[i]),
                 )
 
                 opt_data = OptionData.model_construct(
@@ -300,7 +312,10 @@ class GDFLMarketSource:
                     high=ltp_dec, low=ltp_dec,
                     open=ltp_dec, close=ltp_dec,
                 )
-                broker.set_ltp(symbol, round(float(ltps[i]), 2))
+                # round() removed from broker.set_ltp: broker stores floats
+                # for fill simulation; sub-cent precision has no effect on
+                # order execution logic but saved ~750 × N_strikes calls/day.
+                broker.set_ltp(symbol, ltp_f)
 
             # Chain aggregates
             chain.total_ce_oi = sum(e.ce.oi for e in chain.strikes if e.ce)

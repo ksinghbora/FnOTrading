@@ -20,7 +20,14 @@ import numpy as np
 from scipy.optimize import brentq
 from scipy.stats import norm
 
-from src.options.pricing import bs_call_price, bs_call_price_vec, bs_put_price, bs_put_price_vec
+from src.options.pricing import (
+    _norm_cdf,
+    _norm_pdf,
+    bs_call_price,
+    bs_call_price_vec,
+    bs_put_price,
+    bs_put_price_vec,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +90,10 @@ def compute_iv(
             return sigma
 
         # Vega (derivative of price w.r.t. sigma)
+        # Use the numba-compiled _norm_pdf (erf-based) instead of scipy
+        # norm.pdf to avoid the ~20 µs per-call scipy C-extension overhead.
         d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-        vega = S * norm.pdf(d1) * math.sqrt(T)
+        vega = S * float(_norm_pdf(d1)) * math.sqrt(T)
 
         if vega < 1e-12:
             logger.debug(
@@ -222,7 +231,10 @@ def compute_iv_vec(
             d1 = (np.log(S_vec / np.maximum(strikes, 1e-12)) + (r + 0.5 * sig**2) * T_vec) / (
                 sig * sqrt_T
             )
-            vega = S_vec * norm.pdf(d1) * sqrt_T
+            # Vectorized normal PDF via erf-based formula: avoids per-call
+            # scipy C-extension overhead. Applied element-wise via numpy
+            # ufunc equivalent — mathematically identical to norm.pdf.
+            vega = S_vec * (np.exp(-0.5 * d1 * d1) / math.sqrt(2.0 * math.pi)) * sqrt_T
             too_small = vega < 1e-12
             active &= ~too_small
 

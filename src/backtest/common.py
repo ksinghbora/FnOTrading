@@ -405,14 +405,22 @@ def _update_market(
             ask = price_dec + spread
             opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
 
+            # round() calls removed from Greeks construction in the inner loop.
+            # Rounding was for display only (4/6 decimal places). Strategy logic
+            # uses comparisons (delta > 0.3) where sub-0.0001 precision is
+            # irrelevant. Saves ~6 builtins.round × 2 sides × N_strikes × 750
+            # ticks/day ≈ 270K–540K calls per backtest day.
+            # gamma special case: inf is preserved for 0DTE near-expiry; finite
+            # values no longer rounded since they feed only into budget checks
+            # that compare against broad thresholds (not exact equality).
             gamma_val = float(gamma_arr[idx])
             greeks = Greeks(
-                delta=round(delta_val, 4),
-                gamma=gamma_val if math.isinf(gamma_val) else round(gamma_val, 6),
-                theta=round(theta_val, 4),
-                vega=round(float(vega_arr[idx]), 4),
-                rho=round(rho_val, 4),
-                iv=round(float(sigma_arr[idx]), 4),
+                delta=delta_val,
+                gamma=gamma_val,
+                theta=theta_val,
+                vega=float(vega_arr[idx]),
+                rho=rho_val,
+                iv=float(sigma_arr[idx]),
             )
 
             opt_data = OptionData.model_construct(
@@ -447,7 +455,9 @@ def _update_market(
                 high=price_dec, low=price_dec,
                 open=price_dec, close=price_dec,
             )
-            broker.set_ltp(symbol, round(price_val, 2))
+            # round() removed: broker stores price as float for fill simulation;
+            # sub-cent precision doesn't affect execution logic.
+            broker.set_ltp(symbol, price_val)
 
     # Chain aggregates
     chain.total_ce_oi = sum(e.ce.oi for e in chain.strikes if e.ce)
