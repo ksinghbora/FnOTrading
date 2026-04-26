@@ -235,10 +235,21 @@ class PortfolioStrategy(BaseStrategy):
         self._regime_detector = RegimeDetector(
             self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder
         )
-        # IV Rank baseline — precomputed once from 6-month VIX CSV. Empty
-        # tuple is safe; compute_iv_rank() returns None and the shadow
-        # logger emits "iv_rank=unavailable" without affecting any score.
-        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline()
+        # IV Rank baseline — precomputed once from VIX CSV.
+        # Apr 25 2026 audit (independent reviewer): pass ``as_of_date``
+        # so a backtest starting in Sep 2024 doesn't compute the 52w
+        # window from data through 2026 (silent forward-looking leak
+        # that would matter the moment the IV-Rank shadow signal is
+        # promoted to a real score). Empty tuple is safe;
+        # compute_iv_rank() returns None and shadow logging emits
+        # "iv_rank=unavailable" without affecting any score. The
+        # as-of date is the strategy's current trading day at on_start —
+        # for a multi-day backtest this is conservative (slightly stale
+        # toward end-of-window) but never leaks future data.
+        as_of = self.ctx.clock.now().date() if self.ctx.clock else None
+        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline(
+            as_of_date=as_of,
+        )
         if self._iv_rank_52w_high > 0:
             logger.info(
                 f"[{self.strategy_id}] IV Rank baseline loaded: "
