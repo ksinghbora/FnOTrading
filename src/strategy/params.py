@@ -87,6 +87,24 @@ class BaseStrategyParams(BaseModel):
     pt_vol_k: float = 5.8
     trail_vol_k: float = 4.8
 
+    # ─── P1.5 regime gate ─────────────────────────────────────────────
+    # Block new entries when the current tick classifies into any of these
+    # regime labels. Labels use the EXACT thresholds from the harness
+    # stratifier (src/backtest/validation/regime.py `bucket_row`):
+    #   high_vix  : VIX > 15
+    #   mid_vix   : 13 <= VIX <= 15
+    #   low_vix   : VIX < 13
+    #   expiry_week : dte <= 2 or is_expiry
+    #   event_day : today ∈ data/event_days.csv (HARD_BLOCK|SOFT_CAUTION)
+    #   trending  : |move_from_open_pct| > 1.0
+    #   range_bound : |move_from_open_pct| <= 0.5
+    # Empty list (default) = no regime gating, backward-compatible.
+    # Set to e.g. ["high_vix", "trending"] to have the strategy skip
+    # entries when either label is active — mirrors the harness regime
+    # gate 1:1 so a blocked-at-runtime bucket cannot appear in the
+    # stratified report.
+    blocked_regimes: list[str] = []
+
 
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""
@@ -326,6 +344,35 @@ class PortfolioParams(BaseStrategyParams):
     # max loss is capped at debit paid.
     friday_premium_squareoff_enabled: bool = True
     friday_squareoff_time: time = time(14, 55)
+
+    # ─── P1.5 regime gate (per-leg blocklists) ────────────────────────
+    # Short-baseline validation flagged high_vix (Sharpe -0.95, n=513) and
+    # trending (Sharpe -5.83, n=160) as decisively losing buckets — see
+    # reports/validation/short_baseline_portfolio.md. Those losses are
+    # driven by the premium leg (short theta bleeds on every tail move);
+    # the trend leg's economics are the opposite — debit spreads are BUY-
+    # premium, directional, and the whole point of the leg is to profit
+    # when the market trends. Blocking both legs on "trending" would kill
+    # the intended hedge.
+    #
+    # Default: block premium on high_vix + trending; leave trend open.
+    # Empty list on either leg = no gating for that leg.
+    #
+    # Labels must match src/backtest/validation/regime.bucket_row exactly.
+    # BaseStrategy._current_regime_labels replicates those thresholds; if
+    # the harness shifts the VIX band or trend cutoff, update both places
+    # together or the runtime gate stops corresponding to the measured
+    # bucket.
+    # P1.5 regime gate — DISABLED by default after Apr 25 2026 validation
+    # showed gate is net-negative on 82-day window (median Sharpe +0.99 →
+    # -0.14, cost@+0.00 total pnl +9,692 → +2,340). The blocked premium
+    # trades in high_vix/trending were "less bad" than the trend-leg
+    # trades in the same regimes, so removing premium left only the worst
+    # performers. The binding constraint is the trend leg losing -7.38
+    # Sharpe in "trending" (its designed regime) — NOT regime selection.
+    # Infrastructure retained: flip to ["high_vix","trending"] to re-enable.
+    premium_blocked_regimes: list[str] = []
+    trend_blocked_regimes: list[str] = []
 
 
 class TrendDebitSpreadParams(BaseStrategyParams):

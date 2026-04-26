@@ -515,6 +515,23 @@ class PortfolioStrategy(BaseStrategy):
                 )
                 return None
 
+        # ─── P1.5 regime gate (premium leg) ───────────────────────────
+        # Short-baseline validation flagged high_vix + trending as the
+        # two losing buckets for premium. Block entry using labels that
+        # mirror the harness stratifier VERBATIM, so the post-hoc regime
+        # report measures exactly what was gated at runtime.
+        regime_block = self._check_blocked_regime(
+            self.params.underlying,
+            self._expiry,
+            blocked=self.params.premium_blocked_regimes,
+        )
+        if regime_block:
+            self._log_skip_throttled(
+                "PREMIUM_REGIME_BLOCK",
+                f"[{self.strategy_id}] PREMIUM blocked: {regime_block}",
+            )
+            return None
+
         # Per-day cap (Apr 18 2026 chain-replay diagnosis): without this,
         # the premium leg re-entered 14× on 2026-04-17 hour 11 when each
         # entry hit the -29.9% stop. Trend leg already has the same cap.
@@ -818,6 +835,24 @@ class PortfolioStrategy(BaseStrategy):
                     f"[{self.strategy_id}] [SHADOW_BLOCK] TREND VIX={vix:.1f} "
                     f"< trend_vix_min={self.params.trend_vix_min} — entering anyway (paper mode)",
                 )
+
+        # ─── P1.5 regime gate (trend leg) ─────────────────────────────
+        # Default blocklist is EMPTY — the whole point of the trend leg is
+        # to profit from the "trending" regime that crushes premium. The
+        # hook is wired in for symmetry and so operators can disable trend
+        # in specific regimes (e.g. "event_day") via param overrides
+        # without touching the code.
+        regime_block = self._check_blocked_regime(
+            self.params.underlying,
+            self._expiry,
+            blocked=self.params.trend_blocked_regimes,
+        )
+        if regime_block:
+            self._log_skip_throttled(
+                "TREND_REGIME_BLOCK",
+                f"[{self.strategy_id}] TREND blocked: {regime_block}",
+            )
+            return None
 
         breakout, oi_confirmed, trend_duration = self._assess_trend(spot)
 
