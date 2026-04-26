@@ -152,6 +152,16 @@ class IronCondorParams(BaseStrategyParams):
     profit_target_pct: float = 25.0          # Tightened from 30 — lock profits earlier
 
 
+class IronButterflyParams(IronCondorParams):
+    """Parameters for Iron Butterfly strategy — Iron Condor with ATM body."""
+
+    # ATM short body (delta ~0.5) instead of OTM. Larger credit, tighter
+    # break-even zone, higher gamma/vega than IC. All other defaults
+    # inherited from IronCondorParams; tune via STRATEGIES env var if needed.
+    short_call_delta: float = 0.5
+    short_put_delta: float = -0.5
+
+
 class DeltaNeutralParams(BaseStrategyParams):
     """Parameters for Delta Neutral strategy."""
 

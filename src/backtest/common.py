@@ -94,6 +94,7 @@ def import_strategies() -> None:
     import src.strategy.implementations.short_strangle  # noqa: F401
     try:
         import src.strategy.implementations.iron_condor  # noqa: F401
+        import src.strategy.implementations.iron_butterfly  # noqa: F401
         import src.strategy.implementations.delta_neutral  # noqa: F401
         import src.strategy.implementations.trend_debit_spread  # noqa: F401
         import src.strategy.implementations.portfolio_strategy  # noqa: F401

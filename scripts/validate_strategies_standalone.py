@@ -42,6 +42,7 @@ DEFAULT_STRATEGIES = [
     "short_strangle",
     "iron_condor",
     "short_straddle",
+    "iron_butterfly",
 ]
 
 # Splits — locked here so all strategies use the same windows.
