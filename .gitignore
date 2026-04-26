@@ -74,3 +74,30 @@ data/replay_runs.jsonl
 data/gdfl_snapshots/
 data/backtest_runs/
 data/backtest_logs/
+
+# Recorded chain snapshots — daily growth, kept locally for analysis but
+# not suitable for git (binary-like CSV bloat). The truth-up scripts
+# regenerate analysis from these on demand.
+data/chain_snapshots/
+
+# Decision logs — per-day CSV trail of strategy decisions, grows daily
+# during paper/live trading. Already de-duplicated post Apr 25 audit
+# Bug 4 fix; logs are valuable as live trail but not as repo artifact.
+data/decisions/
+
+# Recorded VIX minute history — daily-growth IV reference data
+data/india_vix_recorded/
+
+# Per-tick capture for backtest replay
+data/ticks/
+
+# Latest audit JSON — regenerated on every nightly_audit.py run
+data/latest_audit.json
+
+# Validation profiling artifacts (from cProfile / py-spy runs)
+reports/validation/*.pstats
+reports/validation/*.bak
+reports/validation/profile_*.txt
+
+# Claude Code project metadata (worktrees, session caches)
+.claude/
