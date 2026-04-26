@@ -20,17 +20,23 @@
 | Parallel CPCV | ~3.5× speedup, deterministic | Apr 25 2026 ([test_parallel_cpcv_determinism](../tests/integration/test_parallel_cpcv_determinism.py)) |
 | Test suite | 858 passing (3 pre-existing replay_engine failures, unrelated) | Apr 26 2026 |
 | Last validation verdict (200d wide_baseline) | FAIL aggregate; Iron Condor +1.06 standalone PASS | Apr 26 2026 ([recost_wide_baseline_v1.md](../reports/phase3_pre/recost_wide_baseline_v1.md)) |
+| **Phase 3a-revised standalone validation** | **All 4 strategies FAIL gates** — iron_condor closest (6/2, mean Sharpe +2.30, DSR 0.998); strangle borderline (5/3); butterfly bimodal (3/5); straddle structurally broken (2/6) | Apr 26 2026 ([SUMMARY.md](../reports/standalone_v1/SUMMARY.md)) |
+| **Validation perf branch merged** | Numba @njit on pricing/IV (5.8× component) + msgspec for Greeks (11×) + parallel walk-forward + round() audit. ~1.5–2× end-to-end wall-time speedup verified | Apr 26 2026 (commit 9a0c54f) |
 
 ## 2. Strategies
 
-### Alive — pending standalone validation on full 18-month corpus
+### Validated standalone Apr 26 2026 — all FAIL, ranked by closeness to PASS
 
-| Strategy | Status | Last data |
-|---|---|---|
-| Iron Condor | **PASS standalone** in 200d wide_baseline subset (n=27, +1.06 Sharpe, +₹267/trade net) | Apr 26 2026 |
-| Iron Butterfly | NEW — proposed addition (max ATM theta) | not yet validated |
-| Long Calendar | NEW — proposed addition (positive vega diversifier) | not yet validated |
-| NIFTY/BANKNIFTY relative-vol | OPTIONAL Phase 3+ (post-Nov-2024 dislocation) | not yet validated |
+| Strategy | Phase 3a-revised verdict | Mean CPCV Sharpe | DSR | Cost @+0.5× | Pass/Fail gates |
+|---|---|---|---|---|---|
+| **Iron Condor** | **FAIL but real edge — keeper hypothesis.** Misses only wf_decay (1.20) and wf_coverage (62%). | **+2.30** | **0.998** | **+0.50** | **6/2** |
+| Short Strangle | FAIL — borderline. Misses cpcv_stability (0.48) and wf_coverage (62%) by tiny margins. | +0.43 | 0.031 | +0.26 | 5/3 |
+| Iron Butterfly | FAIL — bimodal high-variance. ATM body fails cost sensitivity. | -0.34 | 0.000 | -0.05 | 3/5 |
+| Short Straddle | FAIL — structurally broken. Loses at zero costs. | -3.23 | 0.000 | -0.23 | 2/6 |
+| Long Calendar | NEW — proposed positive-vega diversifier | not yet implemented | — | — | — |
+| NIFTY/BANKNIFTY relative-vol | OPTIONAL Phase 3+ (post-Nov-2024 dislocation) | not yet validated | — | — | — |
+
+**Key finding:** Apr-Jun 2025 post-election regime is the killer window for short-vol — windows 4 & 5 of walk-forward show universal losses except iron_condor's wing protection (window 5 +8.08 Sharpe vs everyone else's negative).
 
 ### Investigating — needs standalone validation before judgment
 
@@ -63,24 +69,32 @@ materially different per-trade gross than backtest:
   (short vol with futures hedge). Not a true diversifier. Reviewer-
   recommended retirement.
 
-## 3. Open questions awaiting answers
+## 3. Open questions awaiting answers (Phase 3b research priorities)
 
-1. **Standalone strategy validation** — does individual Strangle /
-   Straddle / IC / Long Calendar / Iron Butterfly survive cost
-   truth on the full 18-month corpus when run standalone (not as
-   part of the combined Portfolio strategy)?
+1. **Cost-model audit (HIGHEST ROI).** Phase 3a-revised confirmed the
+   200× backtest-vs-live divergence on Strangle isn't combined-strategy
+   suppression — standalone strangle backtest shows ~₹50–100/trade
+   gross, between the suspect ₹1.10 (combined) and live paper's ₹257.
+   So **the combined portfolio WAS suppressing entries (0.4× standalone)
+   AND the cost model is over-pessimistic by 3–5× vs real broker fills**.
+   Reconcile GDFL parquet bid/ask spreads against the n=3 live paper
+   trades. If costs are over-modeled by 2–3×, multiple strategies flip.
 
-2. **Why does backtest Strangle (₹1.10/trade gross) diverge from
-   live paper Strangle (₹257/trade gross)?** Three hypotheses:
-   - GDFL parquet bid/ask is unrealistically wide on OTM strikes
-   - Combined Portfolio strategy decision logic interferes with
-     standalone Strangle conditions
-   - Strategy params tuned in backtest are not what live runs
+2. **Regime gate for iron_condor.** Phase 3a-revised showed iron_condor
+   PASSES cpcv_stability + DSR + cost_sensitivity + regime, but FAILS
+   wf_decay (1.20) + wf_coverage (62%, needs 70%). The 3 losing WF
+   windows are (a) Feb-Apr 2025 small n=12, (b) Apr-May 2025 high vol
+   regime, (c) Jun-Jul 2025 zero entries (VIX out of band). A
+   VIX-of-VIX or realized-vol-vs-implied gate that disables entries
+   in regime (b) + an entry-band fix for (c) might flip wf_coverage
+   to 75-87% and clear the gate. **Pre-register before retesting.**
 
-3. **Iron Condor PASS at n=27 — is it real?** 95% CI on mean is
-   ₹-238 to ₹+772 (statistically borderline). Need n=120+ for
-   confident inference. Full-corpus standalone backtest can give
-   that sample.
+3. **Capacity-aware position sizing.** Even iron_condor (best) and
+   strangle (next best) decline from +87/+71 ₹/lot at 75 lots to
+   +20/+25 at 1500 lots — slippage destroys 70-77% of edge at scale.
+   Real-money cap is ~300-750 lots before edge dissolves. Need
+   capacity-aware sizing algorithm that clamps lot count to where
+   slippage stays below per-lot edge.
 
 4. **System-hygiene Bug 5 candidate** — `data/decisions/` directory
    mixes live and backtest decision rows because the `DecisionLogger`
@@ -109,7 +123,10 @@ materially different per-trade gross than backtest:
 | 2026-04-25 | P1.5 regime gate disabled by default | Net-negative on 82-day window; infrastructure retained for future | [memory/p15_regime_gate.md](../../.claude/projects/-Users-kundanbora-Documents-FnOTrading/memory/p15_regime_gate.md) |
 | 2026-04-26 | INSUFFICIENT_DATA on chain-window v0 truth-up | Effective N≤5 due to correlated strategies | [reports/phase3_pre/independent_review_v1.md](../reports/phase3_pre/independent_review_v1.md) |
 | 2026-04-26 | FAIL aggregate on wide-baseline re-cost; IC standalone PASS | 211 trades with date-aware charges | [reports/phase3_pre/recost_wide_baseline_v1.md](../reports/phase3_pre/recost_wide_baseline_v1.md) |
-| 2026-04-26 | Merge audit + parallel CPCV to FnO-v3; create FnO-v4 for strategy research | Audit fixes are correctness improvements safe for production | this commit |
+| 2026-04-26 | Merge audit + parallel CPCV to FnO-v3; create FnO-v4 for strategy research | Audit fixes are correctness improvements safe for production | dff8ff8 etc. |
+| 2026-04-26 | Phase 3a-revised: all 4 strategies FAIL standalone gates; iron_condor identified as keeper | First proper standalone CPCV+WF on full Sep24-Jul25 corpus across 4 strategies; failure modes correctly differentiated by harness | [reports/standalone_v1/SUMMARY.md](../reports/standalone_v1/SUMMARY.md) |
+| 2026-04-26 | Validation perf optimizations merged (Numba+msgspec+parallel WF+round audit) | ~1.5–2× end-to-end speedup verified; 5.8×/11× on hot pricing/Greeks; tests pass; determinism preserved | commit 9a0c54f |
+| 2026-04-26 | Mac Pro project moved from `iCloud Drive (Archive)/` back to `~/Documents/FnOTrading` | iCloud Drive disabled by user; venv rebuilt at new path; LaunchAgent installed for caffeinate | this update |
 
 ## 6. DO NOT REVERSE these decisions without explicit operator approval
 
@@ -134,22 +151,28 @@ materially different per-trade gross than backtest:
 
 ## 7. Next concrete action (proposed)
 
-**Phase 3a-revised: Per-strategy standalone validation on full corpus.**
+**Phase 3b research — three workstreams in priority order:**
 
-For each strategy in [Strangle, IC, Straddle, Long Calendar,
-Iron Butterfly]:
-1. Run standalone backtest on Sep 2024 → Feb 2026 (370 days)
-2. Compute net P&L with date-aware charges
-3. Per-month breakdown
-4. Per-VIX-bucket breakdown
-5. Per-day-of-week breakdown
-6. Standalone verdict (PASS / YELLOW / FAIL / INSUFFICIENT_DATA)
+1. **Cost-model audit** (highest ROI). Compare GDFL parquet bid/ask
+   spreads on the 3 live paper Strangle trades vs the actual broker
+   fills. Quantify the over-pessimism factor. If 2-3×, justifies
+   re-running standalone validation on a corrected cost model.
 
-Expected runtime: ~5-7 days at 4 workers parallel CPCV per strategy
-(or ~$30 cloud at c7i.4xlarge). Output: per-strategy verdict
-matrix that informs the actual Phase 3 roster.
+2. **Iron Condor regime gate research.** Analyze WF windows 4-5
+   (Apr-Jun 2025 vol spike) — what regime indicator (VIX-of-VIX,
+   realized-vs-implied, term-structure inversion) would have flagged
+   "skip entries"? Propose specific gate, pre-register hypothesis,
+   then validate on FRESH window (don't reuse Phase 3a-revised's
+   train+val).
 
-**Awaiting operator confirmation before launching.**
+3. **Capacity-aware sizing algorithm.** Design lot-size clamper
+   based on slippage curve. Validate on iron_condor's capacity table.
+
+Phase 3a-revised standalone validation infra now runs ~1.5-2× faster
+thanks to Numba+msgspec+parallel WF — ~6h end-to-end on a 4-strategy
+batch with the 2-machine setup. **Holdout (Aug 2025 → Feb 2026) is
+preserved per discipline §VII.2 — burn ONCE only after a strategy
+clears all gates on a fresh validation.**
 
 ## 8. Branch references
 
@@ -187,4 +210,4 @@ canonical living dashboard for this branch. All other memory and
 docs files become historical archive once superseded — they are
 read-only after their creation date unless explicitly amended.
 
-Last updated: 2026-04-26 (initial creation on FnO-v4-strategy-research)
+Last updated: 2026-04-26 23:30 IST (post Phase 3a-revised + perf merge + Pro project relocation)
