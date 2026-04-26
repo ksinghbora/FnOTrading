@@ -84,7 +84,12 @@ class TestExpiryExerciseCharges:
     """Test expiry-day auto-exercise charges (ITM options held to settlement)."""
 
     def test_expiry_exercise_uses_higher_stt_rate(self):
-        # Long-side exercise on intrinsic value: 0.125% (vs 0.0625% sell-side)
+        # Apr 25 2026 audit: sell-side STT was raised to 0.10% on Oct 1
+        # 2024 per Union Budget 2024; exercise stayed at 0.125% until
+        # Apr 1 2026 when Union Budget 2026 raised it to 0.15%. The
+        # exercise:sell ratio is no longer a fixed 2:1 — assert against
+        # the configured rates rather than the legacy ratio.
+        from src.core.constants import CHARGES
         intrinsic = Decimal("100")
         qty = 75
         exercise = calculate_charges(
@@ -94,8 +99,16 @@ class TestExpiryExerciseCharges:
         normal_sell = calculate_charges(
             price=intrinsic, quantity=qty, side=OrderSide.SELL, instrument_type="CE",
         )
-        # Exercise STT should be exactly 2x the regular sell-side STT (0.125 vs 0.0625)
-        assert exercise.stt == normal_sell.stt * 2
+        expected_exercise_stt = (
+            intrinsic * qty * CHARGES["stt"]["options_exercise_pct"] / 100
+        )
+        expected_sell_stt = (
+            intrinsic * qty * CHARGES["stt"]["options_sell_pct"] / 100
+        )
+        assert exercise.stt.quantize(Decimal("0.01")) == expected_exercise_stt.quantize(Decimal("0.01"))
+        assert normal_sell.stt.quantize(Decimal("0.01")) == expected_sell_stt.quantize(Decimal("0.01"))
+        # The whole point of the rule still holds: exercise > normal sell.
+        assert exercise.stt > normal_sell.stt
 
     def test_expiry_exercise_no_brokerage(self):
         charges = calculate_charges(
