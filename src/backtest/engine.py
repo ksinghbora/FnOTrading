@@ -67,6 +67,42 @@ logger = logging.getLogger(__name__)
 
 IST = pytz.timezone("Asia/Kolkata")
 
+
+def _select_trading_days(
+    available: list[date],
+    days: list[date] | None,
+    start_date: date | None,
+    num_days: int,
+) -> tuple[list[date], list[date]]:
+    """Select trading days for a backtest run.
+
+    Two modes:
+
+    1. **Explicit list** — when ``days`` is given, return *exactly* those
+       days (filtered to ``available``), preserving order **and gaps**.
+       This is the audit-correct path for CPCV/non-contiguous splits.
+
+    2. **Legacy slice** — when ``days`` is None, return the first
+       ``num_days`` of ``available`` after applying ``start_date``.
+       Contiguous; matches the pre-Apr-25-2026 behaviour for callers
+       that just want "first N available days".
+
+    Returns ``(trading_days, missing_days)``. ``missing_days`` is non-empty
+    only when an explicit list contained dates that aren't in
+    ``available`` — the engine logs them at WARNING but otherwise drops
+    them so the run can proceed deterministically.
+    """
+    if days is not None:
+        available_set = set(available)
+        trading_days_out = [d for d in days if d in available_set]
+        missing = [d for d in days if d not in available_set]
+        return trading_days_out, missing
+
+    filtered = available
+    if start_date is not None:
+        filtered = [d for d in filtered if d >= start_date]
+    return filtered[:num_days], []
+
 _DEFAULT_SPOTS = {"NIFTY": 22500.0, "BANKNIFTY": 48000.0}
 
 
@@ -84,6 +120,7 @@ class BacktestEngine:
         seed: int = 42,
         tick_interval_minutes: int = 1,
         market_source=None,
+        days: list[date] | None = None,
     ) -> dict:
         """Run a real-tick backtest against ``market_source``.
 
@@ -92,9 +129,12 @@ class BacktestEngine:
             strategy_id: Unique ID (auto-generated if empty).
             strategy_params: Strategy parameter overrides.
             num_days: Number of trading days to simulate (capped by the
-                number of days available in ``market_source``).
+                number of days available in ``market_source``). **Ignored
+                when ``days`` is provided** — kept for backward compat with
+                callers that just want "first N available days".
             start_date: Optional first trading day. If given, skips any
-                earlier days in ``market_source``.
+                earlier days in ``market_source``. **Ignored when ``days``
+                is provided.**
             initial_capital: Starting capital.
             seed: Random seed (kept for reproducibility of any stochastic
                 strategy internals; the market replay itself is deterministic).
@@ -102,6 +142,16 @@ class BacktestEngine:
             market_source: REQUIRED. A :class:`GDFLMarketSource` (or equivalent)
                 providing ``available_days()``, ``load_day()``, ``apply()``,
                 ``register_options()``, and ``expiries_for_day()``.
+            days: Optional explicit list of trading days to replay. When
+                supplied this overrides ``start_date`` + ``num_days`` and
+                the engine iterates **exactly the given days in order** —
+                including non-contiguous lists with gaps. Required for
+                CPCV correctness (Apr 25 2026): without it, CPCV passes
+                non-contiguous train indices like ``[0,1,5,6,7,…]`` and
+                the engine silently runs the contiguous slice
+                ``[0,1,2,3,4,5,6,7,…]``, leaking test days into train.
+                Days must already be filtered to ``market_source.available_days()``;
+                missing days are dropped with a warning.
 
         Raises:
             ValueError: if ``market_source`` is ``None``. The synthetic
@@ -203,9 +253,15 @@ class BacktestEngine:
         available = market_source.available_days()
         if not available:
             return {"error": "GDFL market_source has no available days"}
-        if start_date is not None:
-            available = [d for d in available if d >= start_date]
-        trading_days = available[:num_days]
+        trading_days, missing = _select_trading_days(
+            available=available, days=days, start_date=start_date, num_days=num_days,
+        )
+        if missing:
+            logger.warning(
+                "[BACKTEST] explicit days: %d of %d days missing in market_source — "
+                "dropping (e.g. %s)",
+                len(missing), len(days or []), missing[:3],
+            )
         if not trading_days:
             return {"error": "No GDFL days in requested range"}
 
