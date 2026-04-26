@@ -57,6 +57,54 @@ class BaseStrategyParams(BaseModel):
     trail_stop_activate_after_time: time = time(10, 15)
     trail_stop_min_decay_pct: float = 5.0
 
+    # ─── Vol-scaled exits (opt-in, OFF by default) ─────────────────────
+    # Problem: hardcoded SL/PT/trail percentages are tuned to one VIX
+    # regime. At VIX=11 a 25% SL = ~2 ticks of normal noise; at VIX=22 it
+    # = ~25 ticks of normal noise. Same parameter, contradictory behavior
+    # across regimes — a known curve-fit seed.
+    #
+    # Fix: scale the effective % by expected one-sigma premium move over
+    # DTE, using `sl_vol_k × (vix/100) × sqrt(dte/365)` where `k` is the
+    # multiplier calibrated to reproduce current behavior at VIX=15 weekly.
+    #
+    # Calibration (VIX=15, weekly expiry mid T=7/365):
+    #   sigma * sqrt(T) = 0.15 * sqrt(7/365)
+    #                   = 0.15 * 0.1384
+    #                   = 0.02077
+    # Current 25% SL => k = 0.25 / 0.02077 ~= 12.0
+    # Current 12% PT => k_pt ~= 5.8
+    # Current 10% trail => k_trail ~= 4.8
+    # These defaults reproduce the existing behavior at VIX=15 weekly.
+    #
+    # Effective % is clamped to [0.10, 0.60] to prevent absurd values on
+    # expiry-day VIX spikes or near-zero DTE denominators.
+    #
+    # Opt-in via `vol_scaled_exits=True` on the concrete params instance.
+    # A/B in shadow mode BEFORE flipping the default — this is a behavior
+    # change on every existing backtest result in memory files.
+    vol_scaled_exits: bool = False
+    sl_vol_k: float = 12.0
+    pt_vol_k: float = 5.8
+    trail_vol_k: float = 4.8
+
+    # ─── P1.5 regime gate ─────────────────────────────────────────────
+    # Block new entries when the current tick classifies into any of these
+    # regime labels. Labels use the EXACT thresholds from the harness
+    # stratifier (src/backtest/validation/regime.py `bucket_row`):
+    #   high_vix  : VIX > 15
+    #   mid_vix   : 13 <= VIX <= 15
+    #   low_vix   : VIX < 13
+    #   expiry_week : dte <= 2 or is_expiry
+    #   event_day : today ∈ data/event_days.csv (HARD_BLOCK|SOFT_CAUTION)
+    #   trending  : |move_from_open_pct| > 1.0
+    #   range_bound : |move_from_open_pct| <= 0.5
+    # Empty list (default) = no regime gating, backward-compatible.
+    # Set to e.g. ["high_vix", "trending"] to have the strategy skip
+    # entries when either label is active — mirrors the harness regime
+    # gate 1:1 so a blocked-at-runtime bucket cannot appear in the
+    # stratified report.
+    blocked_regimes: list[str] = []
+
 
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""
@@ -259,16 +307,72 @@ class PortfolioParams(BaseStrategyParams):
     trend_stop_loss_pct: float = 25.0        # was 20 (Apr 17), reverted to OOS-validated mid
     trend_profit_target_pct: float = 50.0    # was 55 (Apr 17), reverted to OOS-validated mid
     trend_trailing_stop_pct: float = 15.0    # unchanged — protects gains without choking winners
-    # Apr 23 GDFL 246-day analysis: 0.5% triggered on normal intraday noise;
-    # trend leg net -7,334 on solo (premium-silent, low-VIX) days driven by
-    # whipsaws. 0.7% aligns with standalone TrendDebitSpreadParams and the
-    # ~0.5 ATR threshold standard for NIFTY breakouts.
-    breakout_confirmation_pct: float = 0.7
-    # Apr 23 GDFL: trend leg lost -5,768 net across 24 days in Jul-Aug 2025
-    # when VIX=9-12 and premium was correctly VIX-gated off. Breakouts need
-    # realized vol to confirm; sub-12 VIX = range-bound regime where 0.7%
-    # breakouts are noise, not signal. Matches TrendDebitSpreadParams.vix_entry_min.
-    trend_vix_min: float = 12.0
+    # F5 revert (Apr 23 afternoon): the 0.5→0.7 tuning and trend_vix_min=12 were
+    # curve-fit to Jul-Aug 2025 loss days. Expert review + F1/F2 fill fixes made
+    # the holdout loss honest; the next legitimate lever is a regime gate (P1.5),
+    # not a fixed-pct threshold that means different things at VIX=10 vs VIX=18.
+    # Reverted to pre-Apr-23 0.5 and removed the trend_vix_min cutoff so the
+    # regime detector (not a hardcoded param) carries the gating load.
+    breakout_confirmation_pct: float = 0.5
+    trend_vix_min: float = 0.0
+    # F5b: self-calibrating ATR floor. momentum_breakout uses
+    # max(confirmation_pct%, atr_multiplier × ATR14) so the effective
+    # threshold scales with realized vol — tight on VIX=10 days, wide on
+    # VIX=20 days. 1.25× matches the NIFTY opening-range convention
+    # (expert review, trader view). Replaces the fixed-pct curve-fit.
+    breakout_atr_multiplier: float = 1.25
+
+    # ─── Event-day hard block + Friday square-off (P1 #11, #12) ──────
+    # Apr 23 expert review: RBI/Fed/Budget/CPI days currently receive only a
+    # score penalty (-5/-15/-25) in _evaluate_premium. Soft penalties have not
+    # prevented the 3-5 blow-up days/year where short premium loses 5-10×
+    # daily expected P&L. `event_day_hard_block_enabled` flips the behaviour
+    # to a hard skip on HARD_BLOCK-severity events (see
+    # `src/strategy/event_calendar.py`). Trend leg is not blocked — directional
+    # debit spreads benefit from event-day moves.
+    #
+    # Set `event_day_soft_penalty_only = True` to keep the legacy score-
+    # penalty-only path for A/B testing or emergency revert.
+    event_day_hard_block_enabled: bool = True
+    event_day_soft_penalty_only: bool = False
+    event_calendar_path: str = "data/event_days.csv"
+
+    # Friday premium square-off (P1 #12): weekend gap risk is unmodelled by
+    # minute-cadence backtest. Force-flat all premium legs at
+    # `friday_squareoff_time` on Fridays. Trend debit spreads are exempt
+    # because their risk is directional, not weekend-gap-driven, and their
+    # max loss is capped at debit paid.
+    friday_premium_squareoff_enabled: bool = True
+    friday_squareoff_time: time = time(14, 55)
+
+    # ─── P1.5 regime gate (per-leg blocklists) ────────────────────────
+    # Short-baseline validation flagged high_vix (Sharpe -0.95, n=513) and
+    # trending (Sharpe -5.83, n=160) as decisively losing buckets — see
+    # reports/validation/short_baseline_portfolio.md. Those losses are
+    # driven by the premium leg (short theta bleeds on every tail move);
+    # the trend leg's economics are the opposite — debit spreads are BUY-
+    # premium, directional, and the whole point of the leg is to profit
+    # when the market trends. Blocking both legs on "trending" would kill
+    # the intended hedge.
+    #
+    # Default: block premium on high_vix + trending; leave trend open.
+    # Empty list on either leg = no gating for that leg.
+    #
+    # Labels must match src/backtest/validation/regime.bucket_row exactly.
+    # BaseStrategy._current_regime_labels replicates those thresholds; if
+    # the harness shifts the VIX band or trend cutoff, update both places
+    # together or the runtime gate stops corresponding to the measured
+    # bucket.
+    # P1.5 regime gate — DISABLED by default after Apr 25 2026 validation
+    # showed gate is net-negative on 82-day window (median Sharpe +0.99 →
+    # -0.14, cost@+0.00 total pnl +9,692 → +2,340). The blocked premium
+    # trades in high_vix/trending were "less bad" than the trend-leg
+    # trades in the same regimes, so removing premium left only the worst
+    # performers. The binding constraint is the trend leg losing -7.38
+    # Sharpe in "trending" (its designed regime) — NOT regime selection.
+    # Infrastructure retained: flip to ["high_vix","trending"] to re-enable.
+    premium_blocked_regimes: list[str] = []
+    trend_blocked_regimes: list[str] = []
 
 
 class TrendDebitSpreadParams(BaseStrategyParams):

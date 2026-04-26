@@ -35,6 +35,7 @@ from src.risk.greeks_risk import GreeksRiskMonitor
 from src.risk.kill_switch import KillSwitch
 from src.risk.limits import RiskLimits
 from src.risk.manager import RiskManager
+from src.risk.portfolio_budget import GammaBudgetConfig, PortfolioGammaBudget
 from src.strategy.runner import StrategyRunner
 from src.utils.log_tags import Tag
 from src.utils.logging import setup_logging
@@ -319,8 +320,16 @@ async def create_app(settings: Settings):
     )
     kill_switch = KillSwitch(broker, event_bus)
     greeks_monitor = GreeksRiskMonitor()
+    gamma_budget = PortfolioGammaBudget(
+        GammaBudgetConfig(
+            max_gamma_1pct_pnl_pct_of_capital=settings.gamma_budget_pct_capital,
+            capital=settings.gamma_budget_capital,
+        )
+    )
     risk_manager = RiskManager(
-        limits, circuit_breaker, kill_switch, greeks_monitor, portfolio, event_bus
+        limits, circuit_breaker, kill_switch, greeks_monitor, portfolio, event_bus,
+        gamma_budget=gamma_budget,
+        chain_builder=chain_builder,
     )
     order_manager.set_risk_manager(risk_manager)
     risk_manager.set_order_manager(order_manager)
@@ -679,6 +688,13 @@ async def run():
                 cb_state = risk_mgr.circuit_breaker.state.value
                 pending_orders = app["tracker"].pending_count
                 queue_depth = app["event_bus"]._queue.qsize()
+
+                # Portfolio gamma × 1%-spot PnL budget — logs [GAMMA_BUDGET]
+                # and triggers kill-switch flatten on emergency utilization.
+                try:
+                    risk_mgr.monitor_gamma_budget()
+                except Exception:
+                    logger.exception("Error monitoring gamma budget")
 
                 logger.info(
                     "operational summary",

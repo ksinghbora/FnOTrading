@@ -4,10 +4,22 @@ Writes one CSV row per ENTER/EXIT/SKIP decision. Designed for ML training:
 each row = features at decision time + outcome P&L (backfilled on exit).
 
 CSV files: data/decisions/decisions_YYYY-MM-DD.csv
+
+Apr 25 2026 audit (parallel-safety):
+    Setting the environment variable ``FNO_DISABLE_DECISIONS=1`` makes
+    every ``DecisionLogger.log`` call a no-op. Required for parallel
+    CPCV workers — without it, multiple subprocesses race on
+    ``not path.exists()`` header checks and interleave rows mid-file,
+    breaking the (timestamp, leg, decision, cumcount) pairing the
+    stratifier (regime.py:_pair_enter_exit) relies on. The validation
+    harness already wipes decisions before its single full-window run,
+    so workers' decision data was always going to be discarded; this
+    just stops them writing it in the first place.
 """
 
 import csv
 import logging
+import os
 from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +29,18 @@ from src.core.clock import now_ist
 logger = logging.getLogger(__name__)
 
 DECISIONS_DIR = Path("data/decisions")
+
+# Env var that, when truthy, disables decision logging entirely. Read
+# **at every log() call** (not at __init__), so a parent process that
+# spawns workers with the var set sees no writes from those workers
+# while still logging from its own non-disabled path after the workers
+# return.
+_DISABLE_ENV_VAR = "FNO_DISABLE_DECISIONS"
+
+
+def _decisions_disabled() -> bool:
+    val = os.environ.get(_DISABLE_ENV_VAR, "").strip().lower()
+    return val not in ("", "0", "false", "no")
 
 # CSV column order (fixed for ML pipeline stability — APPEND new columns
 # at the end, never reorder, so old parsers and downstream tools keep
@@ -197,7 +221,16 @@ class DecisionLogger:
         self._truncated_dates: set[str] = set()
 
     def log(self, snap: DecisionSnapshot) -> None:
-        """Write one decision row to today's CSV."""
+        """Write one decision row to today's CSV.
+
+        No-op when ``FNO_DISABLE_DECISIONS`` is truthy in the env. Used
+        by parallel CPCV workers to avoid file-system races and
+        interleaved rows that would corrupt the stratifier's
+        cumcount-based ENTER/EXIT pairing. The check is per-call (not
+        cached on init) so toggling the var mid-process behaves cleanly.
+        """
+        if _decisions_disabled():
+            return
         try:
             today = snap.timestamp[:10] if snap.timestamp else now_ist().strftime("%Y-%m-%d")
             self._ensure_file(today)

@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     max_open_orders: int = 20
     max_orders_per_second: int = 5
 
+    # Portfolio gamma × 1%-spot PnL budget as fraction of capital.
+    # 0.01 means "a 1% adverse spot move is capped at 1% of capital in
+    # convexity PnL from options". See src/risk/portfolio_budget.py.
+    gamma_budget_pct_capital: float = 0.01
+    # Capital base for the gamma budget. Should match PaperBrokerClient's
+    # initial_capital. Kept independent so env overrides don't leak into
+    # broker behaviour.
+    gamma_budget_capital: float = 1_000_000.0
+
     # ─── Application ─────────────────────────────────────────────────
     log_level: str = "INFO"
     environment: str = "development"

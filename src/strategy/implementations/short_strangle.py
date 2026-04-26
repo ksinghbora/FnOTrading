@@ -299,29 +299,42 @@ class ShortStrangleStrategy(BaseStrategy):
 
         change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
 
+        # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
+        # `_compute_vol_scaled_exit_pct` returns `fallback_pct` verbatim when
+        # `vol_scaled_exits=False`, so behavior is unchanged by default.
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 7
+        pt_target_pct = self._compute_vol_scaled_exit_pct(
+            "pt", dte, fallback_pct=self.params.profit_target_pct
+        )
+        sl_threshold_pct = self._compute_vol_scaled_exit_pct(
+            "sl", dte, fallback_pct=self.params.stop_loss_pct
+        )
+
         # Profit target — exit when premium has decayed enough
-        if self.params.profit_target_pct > 0:
+        if pt_target_pct > 0:
             decay_pct = float((self._entry_premium - current_premium) / self._entry_premium * 100)
-            if decay_pct >= self.params.profit_target_pct:
+            if decay_pct >= pt_target_pct:
                 logger.info(
                     f"[{self.strategy_id}] PROFIT TARGET: premium decayed {decay_pct:.1f}% "
-                    f"(target: {self.params.profit_target_pct}%)"
+                    f"(target: {pt_target_pct}%)"
                 )
                 self._stopped_for_day = True
                 return self._create_exit_signal(f"Profit target: premium decayed {decay_pct:.1f}%")
 
         # Stop loss check
-        if change_pct > self.params.stop_loss_pct:
+        if change_pct > sl_threshold_pct:
             logger.info(
                 f"[{self.strategy_id}] STOP LOSS: premium up {change_pct:.1f}% "
-                f"(threshold: {self.params.stop_loss_pct}%)"
+                f"(threshold: {sl_threshold_pct}%)"
             )
             self._stopped_for_day = True
             return self._create_exit_signal(f"Stop loss: +{change_pct:.1f}%")
 
         # Trailing stop — lock in profits as premium decays
         # Tighten trail stop after 2pm (gamma risk increases near close)
-        trail_pct = self.params.trail_stop_pct
+        trail_pct = self._compute_vol_scaled_exit_pct(
+            "trail", dte, fallback_pct=self.params.trail_stop_pct
+        )
         if trail_pct > 0:
             now_time = self.ctx.clock.now().time()
             if now_time >= time(14, 0):

@@ -288,6 +288,94 @@ class BaseStrategy(ABC):
         )
         return f"Skipping entry — {underlying} expiry today (0DTE risk)"
 
+    # ─── Vol-scaled exit helpers ─────────────────────────────────────
+    # Opt-in behind `params.vol_scaled_exits`. When off, strategies use
+    # their existing hardcoded percentages and these helpers are never
+    # called. When on, the helpers replace a static pct with
+    #
+    #     effective_pct = k * (vix/100) * sqrt(dte/365)
+    #
+    # clamped to [0.10, 0.60] to avoid degenerate values on expiry-day
+    # VIX spikes or zero-DTE denominators. See PortfolioParams /
+    # BaseStrategyParams for calibration math (VIX=15 weekly => k_sl=12.0
+    # reproduces current 25% SL).
+
+    # Clamp values are deliberate process constants — the 10%..60% band
+    # covers the "economically meaningful but not catastrophic" region
+    # seen across current params (10% trail minimum, 60% IC stress max).
+    _VOL_SCALED_EXIT_MIN = 0.10
+    _VOL_SCALED_EXIT_MAX = 0.60
+
+    def _compute_vol_scaled_exit_pct(
+        self, kind: str, dte: int, fallback_pct: float
+    ) -> float:
+        """Compute vol-scaled exit threshold as a percentage (e.g. 25.0 = 25%).
+
+        Args:
+            kind: One of "sl", "pt", "trail" — selects which `*_vol_k`
+                multiplier to use.
+            dte: Days-to-expiry for the active expiry (1 minimum — a
+                sub-1 DTE is treated as 1 day to avoid sqrt(0)).
+            fallback_pct: Hardcoded percentage to return when
+                `vol_scaled_exits=False` OR the helper cannot compute
+                a valid value (VIX unavailable, etc.). Pass the
+                existing `premium_stop_loss_pct` / `trend_profit_target_pct`
+                / etc. Caller semantics are preserved when vol scaling
+                is off.
+
+        Returns:
+            Percentage (matches the caller's existing scale — e.g. 25.0
+            not 0.25) so existing comparisons like
+            `if loss_pct > self.params.stop_loss_pct` keep working
+            whether the RHS is hardcoded or vol-scaled.
+        """
+        if not getattr(self.params, "vol_scaled_exits", False):
+            return fallback_pct
+
+        kind = kind.lower()
+        if kind == "sl":
+            k = float(getattr(self.params, "sl_vol_k", 12.0))
+        elif kind == "pt":
+            k = float(getattr(self.params, "pt_vol_k", 5.8))
+        elif kind == "trail":
+            k = float(getattr(self.params, "trail_vol_k", 4.8))
+        else:
+            raise ValueError(f"Unknown vol-scaled exit kind: {kind}")
+
+        try:
+            vix = float(self.ctx.get_vix())
+        except Exception:
+            vix = 0.0
+        if vix <= 0:
+            # No VIX signal — fall back to hardcoded to avoid silently
+            # running a degenerate 0%-SL.
+            return fallback_pct
+
+        dte_safe = max(1, int(dte))
+        from math import sqrt
+        sigma_t = (vix / 100.0) * sqrt(dte_safe / 365.0)
+        raw = k * sigma_t  # fraction
+        clamped = max(self._VOL_SCALED_EXIT_MIN, min(self._VOL_SCALED_EXIT_MAX, raw))
+
+        effective_pct = clamped * 100.0  # back to percentage scale
+
+        logger.debug(
+            "vol-scaled exit threshold computed",
+            extra={
+                "tag": "VOL_SCALED_EXIT",
+                "strategy": self.strategy_id,
+                "kind": kind,
+                "k": round(k, 3),
+                "vix": round(vix, 2),
+                "dte": dte_safe,
+                "raw_frac": round(raw, 4),
+                "clamped_frac": round(clamped, 4),
+                "effective_pct": round(effective_pct, 2),
+                "fallback_pct": round(fallback_pct, 2),
+            },
+        )
+        return effective_pct
+
     def _can_activate_trail_stop(self, decay_pct: float) -> bool:
         """Two-gate guard before trailing-stop logic fires (Apr 17 fix).
 
@@ -566,6 +654,153 @@ class BaseStrategy(ABC):
                 f"({session_open:.0f} -> {float(spot):.0f})"
             )
         return None
+
+    # ─── P1.5 regime gate ─────────────────────────────────────────────
+    #
+    # Runtime regime classifier whose thresholds are a *verbatim* copy of
+    # ``src/backtest/validation/regime.bucket_row``. The harness validation
+    # report slices post-hoc decisions by those exact labels, so gating on
+    # them at runtime provably removes trades from the matching bucket —
+    # if we invented our own thresholds, the stratifier gate could still
+    # fail even after "blocking" a regime. See
+    # reports/validation/short_baseline_portfolio.md for the gate outputs.
+    #
+    # Keep this tied to the stratifier source file: any change there (e.g.
+    # VIX band shift) MUST be mirrored here, or the two classifiers drift
+    # and the regime gate stops being a meaningful measurement.
+
+    def _move_from_open_pct(self, underlying: str) -> float | None:
+        """Signed % move from the first 15-min candle's open.
+
+        Matches the ``move_from_open_pct`` column the stratifier consumes.
+        Returns None when spot or session-open is unavailable (label
+        evaluation then simply skips the trending/range_bound labels).
+        """
+        from src.core.types import Timeframe
+
+        spot = self.ctx.get_spot_price(underlying)
+        if not spot or spot <= 0:
+            return None
+
+        chain_builder = self.ctx._chain_builder
+        spot_token = None
+        for token, name in chain_builder._spot_tokens.items():
+            if name == underlying:
+                spot_token = token
+                break
+        if not spot_token:
+            return None
+
+        candles = self.ctx.get_candles(spot_token, Timeframe.M15, limit=3)
+        if not candles:
+            return None
+
+        session_open = float(candles[0].open)
+        if session_open <= 0:
+            return None
+
+        return (float(spot) - session_open) / session_open * 100.0
+
+    def _current_regime_labels(
+        self, underlying: str, expiry: "date | None" = None
+    ) -> list[str]:
+        """Classify the current tick into harness-compatible regime labels.
+
+        Thresholds are intentionally duplicated from
+        ``src/backtest/validation/regime.bucket_row`` rather than imported,
+        because the harness function operates on a pandas row (post-hoc
+        decision log) while this helper queries live context. The *values*
+        must stay in lockstep with the harness — don't tune one without
+        the other.
+        """
+        labels: list[str] = []
+
+        # VIX band (stratifier: >15 high, 13-15 mid, <13 low)
+        vix = self.ctx.get_vix()
+        if vix and vix > 0:
+            if vix > 15:
+                labels.append("high_vix")
+            elif vix >= 13:
+                labels.append("mid_vix")
+            else:
+                labels.append("low_vix")
+
+        # Expiry week (dte <= 2 OR is_expiry-today)
+        if expiry is not None:
+            today = self.ctx.clock.now().date()
+            dte = (expiry - today).days
+            if dte <= 2:
+                labels.append("expiry_week")
+
+        # Event day (cached at first call to avoid per-tick CSV read)
+        if not hasattr(self, "_regime_event_dates"):
+            try:
+                from src.backtest.validation.regime import load_event_dates
+                self._regime_event_dates = load_event_dates()
+            except (ImportError, OSError) as exc:
+                logger.debug(
+                    "[%s] event_dates load failed: %s", self.strategy_id, exc
+                )
+                self._regime_event_dates = {}
+        today_d = self.ctx.clock.now().date()
+        if today_d in self._regime_event_dates:
+            labels.append("event_day")
+
+        # Trending vs range_bound on |move_from_open_pct|
+        move_pct = self._move_from_open_pct(underlying)
+        if move_pct is not None:
+            m = abs(move_pct)
+            if m > 1.0:
+                labels.append("trending")
+            if m <= 0.5:
+                labels.append("range_bound")
+
+        return labels
+
+    def _check_blocked_regime(
+        self,
+        underlying: str,
+        expiry: "date | None" = None,
+        blocked: list[str] | None = None,
+    ) -> str | None:
+        """Skip-reason if the current tick hits any blocked regime label.
+
+        ``blocked`` overrides ``params.blocked_regimes`` when provided —
+        used by multi-leg strategies like Portfolio that maintain per-leg
+        blocklists (premium_blocked_regimes vs trend_blocked_regimes).
+        Default ``None`` falls back to the single-list convention on the
+        strategy params.
+
+        Returns None when the blocklist is empty or no active label
+        matches. Otherwise returns a string describing the first
+        matching label and the full active-label set (useful for skip-
+        log diagnosis — on a tick where multiple labels fire, you want
+        to know which one triggered the block).
+        """
+        if blocked is None:
+            blocked = list(getattr(self.params, "blocked_regimes", []) or [])
+        else:
+            blocked = list(blocked)
+        if not blocked:
+            return None
+
+        labels = self._current_regime_labels(underlying, expiry)
+        hit = [r for r in labels if r in blocked]
+        if not hit:
+            return None
+
+        logger.debug(
+            "filter blocked entry: regime",
+            extra={
+                "tag": Tag.FILTER,
+                "strategy": self.strategy_id,
+                "filter": "blocked_regime",
+                "labels": labels,
+                "blocked_hit": hit,
+                "result": "block",
+            },
+        )
+        return f"Regime {hit[0]} blocked (active: {labels})"
 
     def _check_expiry_rollover(self, current_expiry: "date | None", underlying: str) -> "date | None":
         """If the current expiry is in the past, roll to the next one.

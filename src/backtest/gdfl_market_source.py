@@ -22,7 +22,7 @@ from src.core.constants import INDIA_VIX_TOKEN, RISK_FREE_RATE
 from src.core.models import Greeks, OptionData, Tick
 from src.core.types import OptionType
 from src.options.greeks import compute_greeks_vec
-from src.options.iv import compute_iv
+from src.options.iv import compute_iv_vec
 
 logger = logging.getLogger(__name__)
 
@@ -216,20 +216,20 @@ class GDFLMarketSource:
             vols = exp_group["volume"].values
             ots = exp_group["option_type"].values
 
-            # Scalar IV solve per row (compute_iv isn't vectorized)
-            ivs = np.full(len(strikes), 0.0)
-            for i in range(len(strikes)):
-                iv = compute_iv(
-                    float(ltps[i]), float(spot), float(strikes[i]),
-                    T, RISK_FREE_RATE, ots[i],
-                )
-                ivs[i] = iv if iv is not None and iv > 0 else 0.01
+            # Vectorized IV solve (shared S, T, r across rows). NaN for rows
+            # that failed NR + brentq fallback are clamped to 0.01 below so
+            # downstream Greeks don't explode.
+            K_arr = strikes.astype(float)
+            ltps_arr = ltps.astype(float)
+            is_call = (ots == "CE")
+            ivs = compute_iv_vec(
+                ltps_arr, float(spot), K_arr, T, RISK_FREE_RATE, is_call,
+            )
+            ivs = np.where(np.isfinite(ivs) & (ivs > 0), ivs, 0.01)
 
             # Vectorized Greeks
-            K_arr = strikes.astype(float)
             S_arr = np.full(len(strikes), float(spot))
             T_arr = np.full(len(strikes), T)
-            is_call = (ots == "CE")
             greeks_dict = compute_greeks_vec(S_arr, K_arr, T_arr, RISK_FREE_RATE, ivs, is_call)
 
             chain = chain_builder.get_chain(self.underlying, exp_date)

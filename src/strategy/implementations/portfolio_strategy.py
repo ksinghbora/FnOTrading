@@ -31,6 +31,7 @@ from src.advisor.confluence import (
 )
 from src.advisor.models import DayBias
 from src.strategy.decision_logger import DecisionLogger, DecisionSnapshot
+from src.strategy.event_calendar import EventCalendar
 from src.strategy.implementations import portfolio_strikes as _strikes
 from src.strategy.implementations.portfolio_pricing import (
     find_available_wing_strike,
@@ -139,6 +140,15 @@ class PortfolioStrategy(BaseStrategy):
         self._confluence_enabled: bool = False
         self._confluence_weight: float = 1.0
 
+        # ─── Event calendar (P1 #11 hard block) ─────────────────
+        # Loaded in on_start so the CSV read doesn't happen inside __init__
+        # (keeps pickle/import-time side effects at zero). None when the
+        # hard-block flag is off so downstream code can cheap-check is None.
+        self._event_calendar: EventCalendar | None = None
+        # Friday square-off dedup — fire the log once per session, not per
+        # tick from 14:55 to 15:15.
+        self._friday_squareoff_logged: bool = False
+
         # ─── Day-level leg P&L tracking ─────────────────────────
         self._prem_realized_pnl: float = 0.0
         self._trend_realized_pnl: float = 0.0
@@ -225,10 +235,21 @@ class PortfolioStrategy(BaseStrategy):
         self._regime_detector = RegimeDetector(
             self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder
         )
-        # IV Rank baseline — precomputed once from 6-month VIX CSV. Empty
-        # tuple is safe; compute_iv_rank() returns None and the shadow
-        # logger emits "iv_rank=unavailable" without affecting any score.
-        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline()
+        # IV Rank baseline — precomputed once from VIX CSV.
+        # Apr 25 2026 audit (independent reviewer): pass ``as_of_date``
+        # so a backtest starting in Sep 2024 doesn't compute the 52w
+        # window from data through 2026 (silent forward-looking leak
+        # that would matter the moment the IV-Rank shadow signal is
+        # promoted to a real score). Empty tuple is safe;
+        # compute_iv_rank() returns None and shadow logging emits
+        # "iv_rank=unavailable" without affecting any score. The
+        # as-of date is the strategy's current trading day at on_start —
+        # for a multi-day backtest this is conservative (slightly stale
+        # toward end-of-window) but never leaks future data.
+        as_of = self.ctx.clock.now().date() if self.ctx.clock else None
+        self._iv_rank_52w_high, self._iv_rank_52w_low = load_iv_rank_baseline(
+            as_of_date=as_of,
+        )
         if self._iv_rank_52w_high > 0:
             logger.info(
                 f"[{self.strategy_id}] IV Rank baseline loaded: "
@@ -241,13 +262,36 @@ class PortfolioStrategy(BaseStrategy):
 
         # Load AI advisor day bias (if available)
         self._load_day_bias()
+
+        # Load event calendar when the hard-block flag is on. We keep the
+        # instance None when disabled so the per-tick check is a single
+        # attribute compare rather than a CSV-in-memory walk.
+        if (
+            getattr(self.params, "event_day_hard_block_enabled", False)
+            and not getattr(self.params, "event_day_soft_penalty_only", False)
+        ):
+            try:
+                self._event_calendar = EventCalendar(
+                    csv_path=getattr(
+                        self.params, "event_calendar_path", "data/event_days.csv",
+                    ),
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"[{self.strategy_id}] Event calendar load failed — "
+                    f"falling back to soft-penalty path only: {exc}"
+                )
+                self._event_calendar = None
+
         logger.info(
             f"[{self.strategy_id}] Portfolio strategy started: "
             f"underlying={self.params.underlying} expiry={self._expiry} "
             f"premium_threshold={self.params.signal_threshold} "
             f"trend_threshold={self.params.trend_signal_threshold} "
             f"advisor={'active' if self._confluence_enabled else 'shadow'} "
-            f"day_bias={'loaded' if self._day_bias else 'none'}"
+            f"day_bias={'loaded' if self._day_bias else 'none'} "
+            f"event_cal={'loaded' if self._event_calendar else 'off'} "
+            f"friday_squareoff={'on' if getattr(self.params, 'friday_premium_squareoff_enabled', False) else 'off'}"
         )
 
     async def on_tick(self, tick: Tick) -> Signal | None:
@@ -354,6 +398,29 @@ class PortfolioStrategy(BaseStrategy):
                 return self._exit_trend("Expiry-day force-exit")
             # No positions — fall through.
 
+        # ─── Friday 14:55 premium square-off (P1 #12) ──────────────
+        # Force-flat all premium positions (strangle / IC / straddle) just
+        # before 15:00 on Fridays. Weekend gap risk — event-driven Monday-
+        # open jumps can move NIFTY >1% overnight (FOMC decisions announced
+        # 23:30 IST Wed/Thu, RBI emergency actions, geopolitical shocks).
+        # Minute-cadence backtests cannot model this cleanly, so we lean
+        # on a hard time gate. Trend debit spreads are exempt because the
+        # risk is directional (capped at debit paid), not gap-vulnerable.
+        if (
+            getattr(self.params, "friday_premium_squareoff_enabled", False)
+            and EventCalendar.is_friday_for_premium(now.date())
+            and now.time() >= getattr(self.params, "friday_squareoff_time", time(14, 55))
+            and self._prem_entered
+        ):
+            if not self._friday_squareoff_logged:
+                logger.info(
+                    f"[{self.strategy_id}] [FRIDAY_SQUAREOFF] "
+                    f"force-flat premium at {now.time().isoformat()} "
+                    f"(mode={self._prem_mode})"
+                )
+                self._friday_squareoff_logged = True
+            return self._exit_premium("Friday 14:55 square-off (weekend gap risk)")
+
         # Time exit — close all open legs
         if now.time() >= self.params.exit_time:
             if self._prem_entered:
@@ -421,6 +488,48 @@ class PortfolioStrategy(BaseStrategy):
         spot = float(self.ctx.get_spot_price(self.params.underlying))
         vix = self.ctx.get_vix()
         if spot <= 0 or vix <= 0:
+            return None
+
+        # ─── Event-day hard block (P1 #11) ────────────────────────
+        # The legacy soft-penalty (see ~line 550 below) only reduces the
+        # entry score by -5/-15/-25. That has never prevented the 3-5
+        # blow-up days/year where short premium loses 5-10× daily expected
+        # P&L on RBI/Fed/Budget shock moves. When the hard-block flag is on
+        # and the calendar has a HARD_BLOCK entry for today, we skip the
+        # premium leg entirely. Trend leg is NOT blocked — directional
+        # debit spreads actually benefit from event-day volatility.
+        if self._event_calendar is not None:
+            hard, event_type = self._event_calendar.is_hard_blocked(now.date())
+            if hard:
+                self._log_skip_throttled(
+                    f"EVENT_BLOCK:{event_type}",
+                    f"[{self.strategy_id}] [EVENT_BLOCK] PREMIUM blocked — "
+                    f"{event_type} on {now.date().isoformat()}",
+                    extra={
+                        "tag": Tag.FILTER,
+                        "strategy": self.strategy_id,
+                        "filter": "event_day_hard_block",
+                        "event_type": event_type,
+                        "action": "BLOCK",
+                    },
+                )
+                return None
+
+        # ─── P1.5 regime gate (premium leg) ───────────────────────────
+        # Short-baseline validation flagged high_vix + trending as the
+        # two losing buckets for premium. Block entry using labels that
+        # mirror the harness stratifier VERBATIM, so the post-hoc regime
+        # report measures exactly what was gated at runtime.
+        regime_block = self._check_blocked_regime(
+            self.params.underlying,
+            self._expiry,
+            blocked=self.params.premium_blocked_regimes,
+        )
+        if regime_block:
+            self._log_skip_throttled(
+                "PREMIUM_REGIME_BLOCK",
+                f"[{self.strategy_id}] PREMIUM blocked: {regime_block}",
+            )
             return None
 
         # Per-day cap (Apr 18 2026 chain-replay diagnosis): without this,
@@ -727,6 +836,24 @@ class PortfolioStrategy(BaseStrategy):
                     f"< trend_vix_min={self.params.trend_vix_min} — entering anyway (paper mode)",
                 )
 
+        # ─── P1.5 regime gate (trend leg) ─────────────────────────────
+        # Default blocklist is EMPTY — the whole point of the trend leg is
+        # to profit from the "trending" regime that crushes premium. The
+        # hook is wired in for symmetry and so operators can disable trend
+        # in specific regimes (e.g. "event_day") via param overrides
+        # without touching the code.
+        regime_block = self._check_blocked_regime(
+            self.params.underlying,
+            self._expiry,
+            blocked=self.params.trend_blocked_regimes,
+        )
+        if regime_block:
+            self._log_skip_throttled(
+                "TREND_REGIME_BLOCK",
+                f"[{self.strategy_id}] TREND blocked: {regime_block}",
+            )
+            return None
+
         breakout, oi_confirmed, trend_duration = self._assess_trend(spot)
 
         # Hard gate (Apr 2026): require ≥45min sustained — 30min "sustained"
@@ -834,6 +961,7 @@ class PortfolioStrategy(BaseStrategy):
             candles,
             morning_candles=3,
             confirmation_pct=self.params.breakout_confirmation_pct,
+            atr_multiplier=self.params.breakout_atr_multiplier,
         )
 
         if not breakout.direction:
@@ -1381,30 +1509,48 @@ class PortfolioStrategy(BaseStrategy):
                         f"Theta efficiency: ratio {theta_gamma:.1f} < {self.params.theta_gamma_min_ratio}"
                     )
 
+        # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
+        # When `vol_scaled_exits=False`, each helper returns the fallback
+        # verbatim so behavior is unchanged by default. The IC high-VIX widen
+        # and the gamma-tightening sl_multiplier are layered on top, same as
+        # before — vol-scaling replaces the *base* threshold, not the modifiers.
+        dte_prem = (
+            (self._expiry - self.ctx.clock.now().date()).days
+            if self._expiry else 7
+        )
+
         # Profit target
-        pt_pct = (
+        pt_fallback = (
             self.params.ic_profit_target_pct if self._prem_mode == "iron_condor"
             else self.params.premium_profit_target_pct
         )
+        pt_pct = self._compute_vol_scaled_exit_pct("pt", dte_prem, fallback_pct=pt_fallback)
         if change_pct < 0 and abs(change_pct) >= pt_pct:
             return self._exit_premium(f"Profit target: premium decayed {abs(change_pct):.1f}%")
 
         # Stop loss (gamma-tightened, VIX-scaled for IC)
         if self._prem_mode == "iron_condor":
-            base_sl = self.params.ic_stop_loss_pct
+            base_sl = self._compute_vol_scaled_exit_pct(
+                "sl", dte_prem, fallback_pct=self.params.ic_stop_loss_pct
+            )
             # IC in high VIX: premiums are fatter so noise is larger — widen stop
             vix_now = self.ctx.get_vix()
             if vix_now > 20:
                 base_sl = min(base_sl * 1.5, 80.0)  # 40% → 60%, capped at 80%
             sl_pct = base_sl * sl_multiplier
         else:
-            sl_pct = self.params.premium_stop_loss_pct * sl_multiplier
+            base_sl = self._compute_vol_scaled_exit_pct(
+                "sl", dte_prem, fallback_pct=self.params.premium_stop_loss_pct
+            )
+            sl_pct = base_sl * sl_multiplier
         if change_pct > sl_pct:
             tag = " (gamma-tightened)" if gamma_tightened else ""
             return self._exit_premium(f"Stop loss: premium up {change_pct:.1f}%{tag}")
 
         # Trailing stop — lock in gains after premium decays meaningfully
-        trail_pct_base = self.params.premium_trail_stop_pct
+        trail_pct_base = self._compute_vol_scaled_exit_pct(
+            "trail", dte_prem, fallback_pct=self.params.premium_trail_stop_pct
+        )
         if trail_pct_base > 0:
             if current_cost < self._peak_premium:
                 self._peak_premium = current_cost
@@ -1550,21 +1696,36 @@ class PortfolioStrategy(BaseStrategy):
         if current_value > self._peak_spread_value:
             self._peak_spread_value = current_value
 
+        # Resolve vol-scaled exits (opt-in) — see _compute_vol_scaled_exit_pct.
+        dte_trend = (
+            (self._expiry - self.ctx.clock.now().date()).days
+            if self._expiry else 7
+        )
+        trend_pt_pct = self._compute_vol_scaled_exit_pct(
+            "pt", dte_trend, fallback_pct=self.params.trend_profit_target_pct
+        )
+        trend_sl_pct = self._compute_vol_scaled_exit_pct(
+            "sl", dte_trend, fallback_pct=self.params.trend_stop_loss_pct
+        )
+        trend_trail_pct = self._compute_vol_scaled_exit_pct(
+            "trail", dte_trend, fallback_pct=self.params.trend_trailing_stop_pct
+        )
+
         # Profit target
         if self._max_spread_value > 0:
             value_pct = float(current_value / self._max_spread_value * 100)
-            if value_pct >= self.params.trend_profit_target_pct:
+            if value_pct >= trend_pt_pct:
                 return self._exit_trend(f"Trend profit: spread at {value_pct:.1f}% of max")
 
         # Stop loss
         if self._entry_debit > 0:
             loss_pct = float((self._entry_debit - current_value) / self._entry_debit * 100)
-            if loss_pct >= self.params.trend_stop_loss_pct:
+            if loss_pct >= trend_sl_pct:
                 return self._exit_trend(f"Trend stop: lost {loss_pct:.1f}%")
 
         # Trailing stop — activates once spread reaches 30% of max profit
         # This prevents giving back large unrealized gains (e.g. Monday's +517 → -1527)
-        if self.params.trend_trailing_stop_pct > 0 and self._max_spread_value > 0:
+        if trend_trail_pct > 0 and self._max_spread_value > 0:
             max_profit = self._max_spread_value - self._entry_debit
             if max_profit > 0:
                 current_profit = current_value - self._entry_debit
@@ -1573,7 +1734,7 @@ class PortfolioStrategy(BaseStrategy):
                         pullback = float(
                             (self._peak_spread_value - current_value) / self._peak_spread_value * 100
                         )
-                        if pullback >= self.params.trend_trailing_stop_pct:
+                        if pullback >= trend_trail_pct:
                             return self._exit_trend(f"Trend trail: pullback {pullback:.1f}%")
 
         return None
@@ -2282,6 +2443,9 @@ class PortfolioStrategy(BaseStrategy):
         self._prem_trades_today = 0
         self._trend_trades_today = 0
         self._last_monitor_minute = -1
+        # Friday square-off fires once per session; reset the dedup flag so
+        # tomorrow's log is clean (matters especially on Fri→Mon reset).
+        self._friday_squareoff_logged = False
 
         # Reset per-session signal context (Apr 18 trend-improvements port):
         # VIX history is a 60-min lookback buffer for the rising/falling

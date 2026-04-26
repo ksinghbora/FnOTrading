@@ -1,91 +1,113 @@
-"""Backtesting engine — replays synthetic data through any registered strategy.
+"""Backtesting engine — GDFL real-tick replay.
 
 Uses the same components as live trading (TickFeedManager, OptionChainBuilder,
 PaperBrokerClient, PortfolioManager) but drives them synchronously via direct
 method calls instead of the EventBus. Strategies run identically through the
 same StrategyContext interface.
 
-Usage:
+Requires a :class:`GDFLMarketSource` (or equivalent) to drive market data;
+the legacy synthetic Black-Scholes data-generation path has been removed.
+For shared infrastructure (``BacktestClock``, ``import_strategies``,
+``trading_days``) see :mod:`src.backtest.common`.
+
+Usage::
+
+    from src.backtest.engine import BacktestEngine
+    from src.backtest.gdfl_market_source import GDFLMarketSource
+
     engine = BacktestEngine()
-    results = await engine.run("short_straddle", num_days=30)
+    market_source = GDFLMarketSource(parquet_dir, "NIFTY", NIFTY_SPOT_TOKEN)
+    result = await engine.run("portfolio", market_source=market_source)
 """
 
 import logging
-import math
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-import numpy as np
 import pytz
-from scipy.stats import norm as sp_norm
 
+from src.backtest.common import (
+    BacktestClock,
+    _FUT_TOKEN,
+    _NUM_STRIKES,
+    _SPOT_TOKENS,
+    _STRIKE_STEPS,
+    _TOKEN_BASE,
+    _fit_daily_skew,
+    _register_options,
+    _update_market,
+    import_strategies,
+    trading_days,
+)
 from src.backtest.metrics import calculate_metrics
-from src.broker.paper.client import PaperBrokerClient
-from src.core.clock import MarketClock
-from src.core.constants import INDIA_VIX_TOKEN, LOT_SIZES, RISK_FREE_RATE
+from src.broker.paper.client import BookLevel, DepthQuote, PaperBrokerClient
+from src.core.constants import INDIA_VIX_TOKEN, LOT_SIZES
 from src.core.events import EventBus
-from src.core.models import Greeks, OptionData, Order, PnL, Tick
-from src.core.types import OptionType, OrderStatus, ProductType
+from src.core.models import Order, Tick
+from src.core.types import OrderStatus, ProductType
 from src.market_data.aggregator import OHLCAggregator
 from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
-from src.market_data.simulator import BANKNIFTY_SPOT_TOKEN, NIFTY_SPOT_TOKEN
+from src.market_data.simulator import NIFTY_SPOT_TOKEN
 from src.portfolio.charges import calculate_charges
 from src.portfolio.manager import PortfolioManager
 from src.strategy.context import StrategyContext
 from src.strategy.registry import create_strategy
 
+# ─── Backward-compat private aliases ───────────────────────────────
+# A few modules we intentionally don't touch in Phase 1 still import
+# these under their legacy private names from ``src.backtest.engine``.
+# Keep the aliases (and the re-exports from common above) so those
+# imports continue to resolve; the helpers themselves now live in
+# ``src.backtest.common``.
+_import_strategies = import_strategies
+_trading_days = trading_days
+
 logger = logging.getLogger(__name__)
 
 IST = pytz.timezone("Asia/Kolkata")
 
-_TOKEN_BASE = 600_000
-_SPOT_TOKENS = {"NIFTY": NIFTY_SPOT_TOKEN, "BANKNIFTY": BANKNIFTY_SPOT_TOKEN}
-_STRIKE_STEPS = {"NIFTY": 50, "BANKNIFTY": 100, "FINNIFTY": 50}
+
+def _select_trading_days(
+    available: list[date],
+    days: list[date] | None,
+    start_date: date | None,
+    num_days: int,
+) -> tuple[list[date], list[date]]:
+    """Select trading days for a backtest run.
+
+    Two modes:
+
+    1. **Explicit list** — when ``days`` is given, return *exactly* those
+       days (filtered to ``available``), preserving order **and gaps**.
+       This is the audit-correct path for CPCV/non-contiguous splits.
+
+    2. **Legacy slice** — when ``days`` is None, return the first
+       ``num_days`` of ``available`` after applying ``start_date``.
+       Contiguous; matches the pre-Apr-25-2026 behaviour for callers
+       that just want "first N available days".
+
+    Returns ``(trading_days, missing_days)``. ``missing_days`` is non-empty
+    only when an explicit list contained dates that aren't in
+    ``available`` — the engine logs them at WARNING but otherwise drops
+    them so the run can proceed deterministically.
+    """
+    if days is not None:
+        available_set = set(available)
+        trading_days_out = [d for d in days if d in available_set]
+        missing = [d for d in days if d not in available_set]
+        return trading_days_out, missing
+
+    filtered = available
+    if start_date is not None:
+        filtered = [d for d in filtered if d >= start_date]
+    return filtered[:num_days], []
+
 _DEFAULT_SPOTS = {"NIFTY": 22500.0, "BANKNIFTY": 48000.0}
-_NUM_STRIKES = 30  # ±30 strikes from ATM (wider range for iron condor wings)
-
-
-class BacktestClock(MarketClock):
-    """Market clock returning simulated time for backtesting."""
-
-    def __init__(self):
-        super().__init__()
-        self._sim_now: datetime | None = None
-        self._expiry_override: dict[str, list[date]] = {}  # underlying -> available expiries
-
-    def set_time(self, dt: datetime) -> None:
-        self._sim_now = dt
-
-    def set_expiries(self, underlying: str, expiries: list[date]) -> None:
-        """Override the calendar-based expiry lookup with real listed expiries.
-
-        Used when GDFL (or other real data) dictates which expiries exist,
-        which can differ from the default Tuesday weekly cadence (e.g. due
-        to holidays or unscheduled shifts).
-        """
-        self._expiry_override[underlying] = sorted(expiries)
-
-    def now(self) -> datetime:
-        if self._sim_now:
-            return self._sim_now
-        return super().now()
-
-    def is_market_open(self) -> bool:
-        return True  # Always open during backtest
-
-    def next_expiry(self, underlying: str) -> date:
-        override = self._expiry_override.get(underlying)
-        if override:
-            today = self.now().date()
-            future = [e for e in override if e >= today]
-            if future:
-                return future[0]
-        return super().next_expiry(underlying)
 
 
 class BacktestEngine:
-    """Replays synthetic market data through any registered strategy."""
+    """Replays a real-tick ``market_source`` through any registered strategy."""
 
     async def run(
         self,
@@ -97,32 +119,58 @@ class BacktestEngine:
         initial_capital: float = 1_000_000,
         seed: int = 42,
         tick_interval_minutes: int = 1,
-        fat_tails: bool = False,
         market_source=None,
+        days: list[date] | None = None,
     ) -> dict:
-        """Run a backtest with synthetic data (or real GDFL data if market_source given).
+        """Run a real-tick backtest against ``market_source``.
 
         Args:
-            strategy_name: Registered strategy name (e.g., 'short_straddle').
+            strategy_name: Registered strategy name (e.g., 'portfolio').
             strategy_id: Unique ID (auto-generated if empty).
             strategy_params: Strategy parameter overrides.
-            num_days: Number of trading days to simulate.
-            start_date: First trading day (defaults to ~45 days ago).
+            num_days: Number of trading days to simulate (capped by the
+                number of days available in ``market_source``). **Ignored
+                when ``days`` is provided** — kept for backward compat with
+                callers that just want "first N available days".
+            start_date: Optional first trading day. If given, skips any
+                earlier days in ``market_source``. **Ignored when ``days``
+                is provided.**
             initial_capital: Starting capital.
-            seed: Random seed for reproducibility.
+            seed: Random seed (kept for reproducibility of any stochastic
+                strategy internals; the market replay itself is deterministic).
             tick_interval_minutes: Minutes between ticks (1=accurate, 5=fast).
-            fat_tails: Use Student-t(df=5) instead of Gaussian for returns (heavier tails).
-            market_source: Optional GDFLMarketSource. When provided, real tick
-                data drives the backtest instead of synthetic BS prices. Trading
-                days come from the parquet index unless start_date is explicit.
+            market_source: REQUIRED. A :class:`GDFLMarketSource` (or equivalent)
+                providing ``available_days()``, ``load_day()``, ``apply()``,
+                ``register_options()``, and ``expiries_for_day()``.
+            days: Optional explicit list of trading days to replay. When
+                supplied this overrides ``start_date`` + ``num_days`` and
+                the engine iterates **exactly the given days in order** —
+                including non-contiguous lists with gaps. Required for
+                CPCV correctness (Apr 25 2026): without it, CPCV passes
+                non-contiguous train indices like ``[0,1,5,6,7,…]`` and
+                the engine silently runs the contiguous slice
+                ``[0,1,2,3,4,5,6,7,…]``, leaking test days into train.
+                Days must already be filtered to ``market_source.available_days()``;
+                missing days are dropped with a warning.
+
+        Raises:
+            ValueError: if ``market_source`` is ``None``. The synthetic
+                Black-Scholes data-generation path has been removed — see
+                Phase 1 of the BS removal refactor.
 
         Returns:
             Dict with metrics, daily_results, equity_curve, trades.
         """
+        if market_source is None:
+            raise ValueError(
+                "BacktestEngine.run() requires market_source — the synthetic "
+                "Black-Scholes path has been removed. Pass a GDFLMarketSource "
+                "(see scripts/run_gdfl_backtest.py for a worked example)."
+            )
+
         strategy_id = strategy_id or f"{strategy_name}_bt"
         params = strategy_params or {}
         underlying = params.get("underlying", "NIFTY")
-        start_date = start_date or (date.today() - timedelta(days=45))
 
         # Ensure strategy modules are registered
         _import_strategies()
@@ -135,52 +183,64 @@ class BacktestEngine:
         chain_builder = OptionChainBuilder(event_bus, clock)
 
         # Quote provider for the paper broker (F2).
-        # Only wired when we have a real market_source (GDFL). Returns
-        # (bid, ask) for a tradingsymbol by reverse-looking-up the
-        # instrument token via chain_builder's symbol_map and reading
-        # the latest tick's bid/ask. When the paper broker sees
-        # non-zero bid/ask it fills BUY @ ask and SELL @ bid, mirroring
-        # how live Kite market orders cross the spread. For the
-        # synthetic BS path we leave quote_provider=None so the tiered
-        # SlippageModel (premium tier × time × VIX × size) is used as
-        # before — BS bid/ask are cosmetic ±1% placeholders and not a
-        # realistic fill model.
-        quote_provider = None
-        if market_source is not None:
-            # Build reverse symbol → token map lazily; the chain
-            # builder populates _symbol_map as options are registered.
-            # Cache the inverse and refresh when we see a symbol we
-            # don't know yet (new strikes appear daily in GDFL).
-            _sym_to_token: dict[str, int] = {}
+        # Returns (bid, ask) for a tradingsymbol by reverse-looking-up
+        # the instrument token via chain_builder's symbol_map and reading
+        # the latest tick's bid/ask. When the paper broker sees non-zero
+        # bid/ask it fills BUY @ ask and SELL @ bid, mirroring how live
+        # Kite market orders cross the spread.
+        _sym_to_token: dict[str, int] = {}
 
-            def _resolve_token(tradingsymbol: str) -> int | None:
-                tok = _sym_to_token.get(tradingsymbol)
-                if tok is not None:
-                    return tok
-                for t, s in chain_builder._symbol_map.items():
-                    if s == tradingsymbol:
-                        _sym_to_token[tradingsymbol] = t
-                        return t
+        def _resolve_token(tradingsymbol: str) -> int | None:
+            tok = _sym_to_token.get(tradingsymbol)
+            if tok is not None:
+                return tok
+            for t, s in chain_builder._symbol_map.items():
+                if s == tradingsymbol:
+                    _sym_to_token[tradingsymbol] = t
+                    return t
+            return None
+
+        def _quote_provider(tradingsymbol: str) -> tuple[float | None, float | None]:
+            tok = _resolve_token(tradingsymbol)
+            if tok is None:
+                return None, None
+            tick = feed._latest_ticks.get(tok)
+            if tick is None:
+                return None, None
+            bid = float(tick.bid_price) if tick.bid_price else 0.0
+            ask = float(tick.ask_price) if tick.ask_price else 0.0
+            if bid <= 0 or ask <= 0 or ask < bid:
+                return None, None
+            return bid, ask
+
+        def _depth_provider(tradingsymbol: str) -> DepthQuote | None:
+            # GDFL exposes only top-of-book; wrap each side as a single
+            # BookLevel so the broker can emit a book_snapshot with
+            # bid_qty/ask_qty. Falls through to quote_provider (top-of-
+            # book with tick-per-lot penalty) when qty is missing.
+            tok = _resolve_token(tradingsymbol)
+            if tok is None:
                 return None
-
-            def _quote_provider(tradingsymbol: str) -> tuple[float | None, float | None]:
-                tok = _resolve_token(tradingsymbol)
-                if tok is None:
-                    return None, None
-                tick = feed._latest_ticks.get(tok)
-                if tick is None:
-                    return None, None
-                bid = float(tick.bid_price) if tick.bid_price else 0.0
-                ask = float(tick.ask_price) if tick.ask_price else 0.0
-                if bid <= 0 or ask <= 0 or ask < bid:
-                    return None, None
-                return bid, ask
-
-            quote_provider = _quote_provider
+            tick = feed._latest_ticks.get(tok)
+            if tick is None:
+                return None
+            bid = float(tick.bid_price) if tick.bid_price else 0.0
+            ask = float(tick.ask_price) if tick.ask_price else 0.0
+            if bid <= 0 or ask <= 0 or ask < bid:
+                return None
+            bid_qty = int(tick.bid_qty or 0)
+            ask_qty = int(tick.ask_qty or 0)
+            if bid_qty <= 0 and ask_qty <= 0:
+                return None
+            return DepthQuote(
+                bid_levels=[BookLevel(price=bid, size=bid_qty)] if bid_qty > 0 else [],
+                ask_levels=[BookLevel(price=ask, size=ask_qty)] if ask_qty > 0 else [],
+            )
 
         broker = PaperBrokerClient(
             initial_capital=initial_capital,
-            quote_provider=quote_provider,
+            quote_provider=_quote_provider,
+            depth_provider=_depth_provider,
         )
         portfolio = PortfolioManager(event_bus, broker, chain_builder)
 
@@ -189,33 +249,26 @@ class BacktestEngine:
         # ─── Create strategy ──────────────────────────────────────
         strategy = create_strategy(strategy_name, strategy_id, params)
 
-        # ─── Trading days ─────────────────────────────────────────
-        if market_source is not None:
-            available = market_source.available_days()
-            if not available:
-                return {"error": "GDFL market_source has no available days"}
-            if start_date is not None:
-                available = [d for d in available if d >= start_date]
-            trading_days = available[:num_days]
-            if not trading_days:
-                return {"error": "No GDFL days in requested range"}
-        else:
-            trading_days = _trading_days(start_date, num_days, clock)
-            if not trading_days:
-                return {"error": "No trading days in range"}
+        # ─── Trading days (from market_source) ────────────────────
+        available = market_source.available_days()
+        if not available:
+            return {"error": "GDFL market_source has no available days"}
+        trading_days, missing = _select_trading_days(
+            available=available, days=days, start_date=start_date, num_days=num_days,
+        )
+        if missing:
+            logger.warning(
+                "[BACKTEST] explicit days: %d of %d days missing in market_source — "
+                "dropping (e.g. %s)",
+                len(missing), len(days or []), missing[:3],
+            )
+        if not trading_days:
+            return {"error": "No GDFL days in requested range"}
 
         # ─── Market setup ─────────────────────────────────────────
         spot_token = _SPOT_TOKENS.get(underlying, NIFTY_SPOT_TOKEN)
         step = _STRIKE_STEPS.get(underlying, 50)
         spot = _DEFAULT_SPOTS.get(underlying, 22500.0)
-        rng = np.random.default_rng(seed)
-        # Fat tails: Student-t(df=5) scaled to match normal variance
-        _T_DF = 5
-        _T_SCALE = math.sqrt((_T_DF - 2) / _T_DF)  # ~0.775
-        def _rand(sigma: float) -> float:
-            if fat_tails:
-                return float(rng.standard_t(_T_DF)) * _T_SCALE * sigma
-            return float(rng.normal(0, sigma))
         vix = 14.5
 
         chain_builder.register_spot(spot_token, underlying)
@@ -231,18 +284,14 @@ class BacktestEngine:
                 next_token[0] += 1
             return option_tokens[key]
 
-        # Initial expiry and options
+        # Initial expiry and options — load day 1 so we can register
+        # options with REAL expiries/strikes from the market source.
         clock.set_time(IST.localize(datetime.combine(trading_days[0], time(9, 15))))
-        if market_source is not None:
-            # Load day 1 now so we can register options with REAL expiries/strikes
-            market_source.load_day(trading_days[0])
-            option_tokens = market_source.register_options(chain_builder, alloc_token)
-            expiries = market_source.expiries_for_day()
-            clock.set_expiries(underlying, expiries)
-            expiry = expiries[0] if expiries else clock.next_expiry(underlying)
-        else:
-            expiry = clock.next_expiry(underlying)
-            _register_options(chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token)
+        market_source.load_day(trading_days[0])
+        option_tokens = market_source.register_options(chain_builder, alloc_token)
+        expiries = market_source.expiries_for_day()
+        clock.set_expiries(underlying, expiries)
+        expiry = expiries[0] if expiries else clock.next_expiry(underlying)
 
         # ─── Wire order callback ──────────────────────────────────
         # F2: No pre-slippage here. The paper broker applies the single
@@ -342,29 +391,26 @@ class BacktestEngine:
             if day_idx > 0:
                 strategy.reset_day_state()
                 portfolio.reset_daily()
-                # Clear intraday candle builders so morning range is fresh
-                aggregator._builders.clear()
+                # Clear ALL aggregator per-day state — both in-progress
+                # builders AND completed candles. Apr 25 2026 audit:
+                # without clearing the completed list, callers that take
+                # ``candles[:N]`` (oldest of last N) silently mix
+                # yesterday's late-afternoon candles into today's morning
+                # window, corrupting move_from_open_pct, the trend
+                # filter, and the trend-leg's morning range detection.
+                aggregator.clear_day()
 
-            # Expiry rollover
+            # Expiry rollover (GDFL only — the synthetic BS path is gone).
             clock.set_time(IST.localize(datetime.combine(day, time(9, 15))))
-            if market_source is not None:
-                if day_idx > 0:  # day 0 already loaded above
-                    market_source.load_day(day)
-                    new_tokens = market_source.register_options(chain_builder, alloc_token)
-                    option_tokens.update(new_tokens)
-                exps = market_source.expiries_for_day()
-                if exps:
-                    clock.set_expiries(underlying, exps)
-                    expiry = exps[0]
-            else:
-                new_expiry = clock.next_expiry(underlying)
-                if new_expiry != expiry:
-                    expiry = new_expiry
-                    _register_options(
-                        chain_builder, underlying, spot, step, _NUM_STRIKES, expiry, alloc_token
-                    )
+            if day_idx > 0:  # day 0 already loaded above
+                market_source.load_day(day)
+                new_tokens = market_source.register_options(chain_builder, alloc_token)
+                option_tokens.update(new_tokens)
+            exps = market_source.expiries_for_day()
+            if exps:
+                clock.set_expiries(underlying, exps)
+                expiry = exps[0]
 
-            daily_drift = _rand(0.003)
             day_open = spot
             day_trades_start = len(broker._trades)
 
@@ -375,38 +421,14 @@ class BacktestEngine:
                 now = IST.localize(start_dt + timedelta(minutes=i))
                 clock.set_time(now)
 
-                if market_source is not None:
-                    # Real tick data path — market_source writes all caches
-                    gdfl_spot, gdfl_vix = market_source.apply(
-                        now, feed, broker, chain_builder, portfolio, option_tokens,
-                    )
-                    if gdfl_spot is None:
-                        continue  # No data this minute (pre-open, holiday gap)
-                    spot = gdfl_spot
-                    vix = gdfl_vix if gdfl_vix is not None else vix
-                else:
-                    # Synthetic path — unchanged
-                    vol_mult = 1.0 + 0.5 * (
-                        math.exp(-i / 30) + math.exp(-(375 - i) / 30)
-                    )
-                    ret = daily_drift / 375 + _rand(0.0003) * vol_mult
-                    spot *= (1 + ret)
-
-                    vix += 0.02 * (14.5 - vix) + float(rng.normal(0, 0.15))
-                    vix = max(8.0, min(40.0, vix))
-
-                    T = max(
-                        1 / (365 * 24),
-                        (expiry - day).days / 365 - i / (375 * 365),
-                    )
-                    iv_base = vix / 100
-
-                    _update_market(
-                        feed, broker, chain_builder, portfolio,
-                        underlying, expiry, spot, vix, now,
-                        spot_token, step, _NUM_STRIKES, T, iv_base,
-                        option_tokens, alloc_token,
-                    )
+                # Real tick data path — market_source writes all caches
+                gdfl_spot, gdfl_vix = market_source.apply(
+                    now, feed, broker, chain_builder, portfolio, option_tokens,
+                )
+                if gdfl_spot is None:
+                    continue  # No data this minute (pre-open, holiday gap)
+                spot = gdfl_spot
+                vix = gdfl_vix if gdfl_vix is not None else vix
 
                 # Dispatch to strategy
                 spot_tick = Tick.model_construct(
@@ -482,6 +504,10 @@ class BacktestEngine:
             "daily_results": daily_results,
             "equity_curve": equity_curve,
             "final_pnl": round(float(running_pnl), 2),
+            # Per-fill records with spread_half + book_snapshot metadata.
+            # Consumed by the validation harness (cost sensitivity +
+            # capacity modules) without re-reading GDFL parquet files.
+            "trades": list(broker._trades),
         }
 
         logger.info(
@@ -492,255 +518,3 @@ class BacktestEngine:
         )
 
         return result
-
-
-# ─── Module-level helpers (avoid instance method overhead) ────────
-
-
-def _import_strategies():
-    """Import strategy modules to trigger @register_strategy decorators."""
-    import src.strategy.implementations.short_straddle  # noqa: F401
-    import src.strategy.implementations.short_strangle  # noqa: F401
-    try:
-        import src.strategy.implementations.iron_condor  # noqa: F401
-        import src.strategy.implementations.delta_neutral  # noqa: F401
-        import src.strategy.implementations.trend_debit_spread  # noqa: F401
-        import src.strategy.implementations.portfolio_strategy  # noqa: F401
-    except ImportError:
-        pass
-
-
-def _trading_days(start: date, num_days: int, clock: MarketClock) -> list[date]:
-    """Generate a list of trading days starting from `start`."""
-    days: list[date] = []
-    current = start
-    while len(days) < num_days:
-        if current.weekday() < 5 and not clock.is_trading_holiday(current):
-            days.append(current)
-        current += timedelta(days=1)
-    return days
-
-
-def _register_options(chain_builder, underlying, spot, step, num_strikes, expiry, alloc_token):
-    """Register option instruments in the chain builder."""
-    atm = round(spot / step) * step
-    for i in range(-num_strikes, num_strikes + 1):
-        strike = atm + i * step
-        strike_dec = Decimal(str(strike))
-        for opt_type in (OptionType.CE, OptionType.PE):
-            token = alloc_token(underlying, strike, opt_type.value)
-            expiry_str = expiry.strftime("%y%b").upper()
-            symbol = f"{underlying}{expiry_str}{int(strike)}{opt_type.value}"
-            chain_builder.register_option(
-                token, underlying, expiry, strike_dec, opt_type, symbol,
-            )
-
-
-_FUT_TOKEN = 500_000  # Fixed token for synthetic futures
-
-
-def _update_market(
-    feed, broker, chain_builder, portfolio,
-    underlying, expiry, spot, vix, now,
-    spot_token, step, num_strikes, T, iv_base,
-    option_tokens, alloc_token,
-):
-    """Vectorized market update — batch BS + Greeks via numpy.
-
-    Directly populates feed cache, broker LTP, option chain entries,
-    and portfolio position LTPs. No EventBus involved.
-    """
-    spot_dec = Decimal(str(round(spot, 2)))
-    r = RISK_FREE_RATE
-
-    # ─── Spot price ───────────────────────────────────────────
-    chain_builder._spot_prices[underlying] = spot_dec
-    feed._latest_ticks[spot_token] = Tick.model_construct(
-        instrument_token=spot_token,
-        tradingsymbol=underlying,
-        timestamp=now,
-        ltp=spot_dec,
-        volume=0, oi=0,
-        bid_price=Decimal("0"), ask_price=Decimal("0"),
-        bid_qty=0, ask_qty=0,
-        high=Decimal("0"), low=Decimal("0"),
-        open=Decimal("0"), close=Decimal("0"),
-    )
-    broker.set_ltp(underlying, round(spot, 2))
-
-    # ─── Synthetic futures (for delta_neutral hedging) ──────
-    month_map = {
-        1: "JAN", 2: "FEB", 3: "MAR", 4: "APR", 5: "MAY", 6: "JUN",
-        7: "JUL", 8: "AUG", 9: "SEP", 10: "OCT", 11: "NOV", 12: "DEC",
-    }
-    yy = now.year % 100
-    mmm = month_map[now.month]
-    fut_symbol = f"{underlying}{yy}{mmm}FUT"
-    fut_price = round(spot * (1 + RISK_FREE_RATE * T), 2)
-    fut_dec = Decimal(str(fut_price))
-    feed._latest_ticks[_FUT_TOKEN] = Tick.model_construct(
-        instrument_token=_FUT_TOKEN,
-        tradingsymbol=fut_symbol,
-        timestamp=now,
-        ltp=fut_dec,
-        volume=0, oi=0,
-        bid_price=fut_dec, ask_price=fut_dec,
-        bid_qty=0, ask_qty=0,
-        high=fut_dec, low=fut_dec,
-        open=fut_dec, close=fut_dec,
-    )
-    broker.set_ltp(fut_symbol, fut_price)
-
-    # ─── VIX ──────────────────────────────────────────────────
-    vix_dec = Decimal(str(round(vix, 2)))
-    feed._latest_ticks[INDIA_VIX_TOKEN] = Tick.model_construct(
-        instrument_token=INDIA_VIX_TOKEN,
-        tradingsymbol="INDIA VIX",
-        timestamp=now,
-        ltp=vix_dec,
-        volume=0, oi=0,
-        bid_price=Decimal("0"), ask_price=Decimal("0"),
-        bid_qty=0, ask_qty=0,
-        high=Decimal("0"), low=Decimal("0"),
-        open=Decimal("0"), close=Decimal("0"),
-    )
-
-    # ─── Option chain (vectorized) ────────────────────────────
-    chain = chain_builder.get_chain(underlying, expiry)
-    if not chain:
-        return
-
-    chain.spot_price = spot_dec
-    atm = round(spot / step) * step
-    chain.atm_strike = Decimal(str(atm))
-
-    # Build strike array
-    n = 2 * num_strikes + 1
-    strikes_arr = np.empty(n)
-    for idx in range(n):
-        strikes_arr[idx] = atm + (idx - num_strikes) * step
-
-    # Vectorized BS pricing for all strikes at once
-    S_arr = np.full(n, spot)
-    T_safe = max(T, 1e-10)
-    sigma_safe = max(iv_base, 1e-10)
-    sqrt_T = math.sqrt(T_safe)
-    exp_rT = math.exp(-r * T_safe)
-
-    d1_arr = (np.log(S_arr / strikes_arr) + (r + 0.5 * sigma_safe**2) * T_safe) / (sigma_safe * sqrt_T)
-    d2_arr = d1_arr - sigma_safe * sqrt_T
-    N_d1 = sp_norm.cdf(d1_arr)
-    N_d2 = sp_norm.cdf(d2_arr)
-    N_neg_d1 = 1.0 - N_d1
-    N_neg_d2 = 1.0 - N_d2
-    n_d1_pdf = sp_norm.pdf(d1_arr)
-
-    ce_prices_arr = np.maximum(0.05, S_arr * N_d1 - strikes_arr * exp_rT * N_d2)
-    pe_prices_arr = np.maximum(0.05, strikes_arr * exp_rT * N_neg_d2 - S_arr * N_neg_d1)
-
-    # Vectorized Greeks
-    gamma_arr = np.minimum(n_d1_pdf / (S_arr * sigma_safe * sqrt_T), 1.0)
-    common_theta = -(S_arr * n_d1_pdf * sigma_safe) / (2 * sqrt_T)
-    ce_theta_arr = (common_theta - r * strikes_arr * exp_rT * N_d2) / 365
-    pe_theta_arr = (common_theta + r * strikes_arr * exp_rT * N_neg_d2) / 365
-    vega_arr = S_arr * n_d1_pdf * sqrt_T / 100
-    ce_rho_arr = strikes_arr * T_safe * exp_rT * N_d2 / 100
-    pe_rho_arr = -strikes_arr * T_safe * exp_rT * N_neg_d2 / 100
-
-    # Synthetic OI (vectorized)
-    distance_arr = np.abs(strikes_arr - spot) / spot if spot > 0 else np.zeros(n)
-    oi_arr = np.maximum(1000, 50000 * np.exp(-distance_arr * 30)).astype(int)
-
-    # Expiry string (computed once)
-    exp_str = expiry.strftime("%y%b").upper()
-    _ZERO = Decimal("0")
-    _SPREAD_MIN = Decimal("0.05")
-    _SPREAD_FACTOR = Decimal("0.01")
-
-    # Populate chain entries from vectorized results
-    for idx in range(n):
-        strike = float(strikes_arr[idx])
-        strike_dec = Decimal(str(int(strike))) if strike == int(strike) else Decimal(str(strike))
-
-        entry = chain_builder._find_or_create_entry(chain, strike_dec)
-        oi_val = int(oi_arr[idx])
-
-        for opt_str, price_val, delta_val, theta_val, rho_val in (
-            ("CE", float(ce_prices_arr[idx]), float(N_d1[idx]), float(ce_theta_arr[idx]), float(ce_rho_arr[idx])),
-            ("PE", float(pe_prices_arr[idx]), float(N_d1[idx] - 1), float(pe_theta_arr[idx]), float(pe_rho_arr[idx])),
-        ):
-            key = (underlying, strike, opt_str)
-            if key not in option_tokens:
-                token = alloc_token(underlying, strike, opt_str)
-                opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
-                sym = f"{underlying}{exp_str}{int(strike)}{opt_str}"
-                chain_builder.register_option(
-                    token, underlying, expiry, strike_dec, opt_type_enum, sym,
-                )
-            else:
-                token = option_tokens[key]
-
-            symbol = f"{underlying}{exp_str}{int(strike)}{opt_str}"
-            price_dec = Decimal(str(round(price_val, 2)))
-            spread = max(_SPREAD_MIN, price_dec * _SPREAD_FACTOR)
-            bid = max(_SPREAD_MIN, price_dec - spread)
-            ask = price_dec + spread
-            opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
-
-            greeks = Greeks(
-                delta=round(delta_val, 4),
-                gamma=round(float(gamma_arr[idx]), 6),
-                theta=round(theta_val, 4),
-                vega=round(float(vega_arr[idx]), 4),
-                rho=round(rho_val, 4),
-                iv=round(sigma_safe, 4),
-            )
-
-            opt_data = OptionData.model_construct(
-                tradingsymbol=symbol,
-                instrument_token=token,
-                strike=strike_dec,
-                option_type=opt_type_enum,
-                expiry=expiry,
-                ltp=price_dec,
-                bid_price=bid,
-                ask_price=ask,
-                volume=oi_val // 3,
-                oi=oi_val,
-                greeks=greeks,
-            )
-
-            if opt_str == "CE":
-                entry.ce = opt_data
-            else:
-                entry.pe = opt_data
-
-            feed._latest_ticks[token] = Tick.model_construct(
-                instrument_token=token,
-                tradingsymbol=symbol,
-                timestamp=now,
-                ltp=price_dec,
-                bid_price=bid,
-                ask_price=ask,
-                volume=oi_val // 3,
-                oi=oi_val,
-                bid_qty=100, ask_qty=100,
-                high=price_dec, low=price_dec,
-                open=price_dec, close=price_dec,
-            )
-            broker.set_ltp(symbol, round(price_val, 2))
-
-    # Chain aggregates
-    chain.total_ce_oi = sum(e.ce.oi for e in chain.strikes if e.ce)
-    chain.total_pe_oi = sum(e.pe.oi for e in chain.strikes if e.pe)
-    if chain.total_ce_oi > 0:
-        chain.pcr_oi = chain.total_pe_oi / chain.total_ce_oi
-    from src.options.chain_analyzer import compute_max_pain
-    chain.max_pain = compute_max_pain(chain)
-    chain.updated_at = now
-
-    # Update portfolio LTPs for open positions
-    for key, pos in portfolio._positions._positions.items():
-        cached = feed._latest_ticks.get(pos.instrument_token)
-        if cached:
-            pos.ltp = cached.ltp

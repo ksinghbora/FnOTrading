@@ -314,12 +314,26 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_VIX_CSV = _REPO_ROOT / "data" / "india_vix_minute.csv"
 
 
-def load_iv_rank_baseline(vix_csv: str | Path | None = None) -> tuple[float, float]:
+def load_iv_rank_baseline(
+    vix_csv: str | Path | None = None,
+    as_of_date: "date | None" = None,
+) -> tuple[float, float]:
     """Compute 52-week VIX high and low from historical minute data.
 
     Uses the last 252 trading days of daily closing VIX values (last tick
-    per day). Returns (vix_52w_high, vix_52w_low). Returns (0.0, 0.0) on
-    any error so callers can detect unavailability and skip IV Rank.
+    per day) **on or before** ``as_of_date``. Returns
+    ``(vix_52w_high, vix_52w_low)``. Returns ``(0.0, 0.0)`` on any error
+    so callers can detect unavailability and skip IV Rank.
+
+    Args:
+        vix_csv: optional override for the VIX minute CSV path.
+        as_of_date: cutoff. Only daily closes with date <= as_of_date
+            contribute to the 52w window. ``None`` means "use everything"
+            (legacy behaviour). **Backtests must pass the strategy's
+            current trading date** — without this, a Sep 2024 backtest
+            would compute the 52w range from data through Apr 2026,
+            silently leaking forward-looking VIX into IV-Rank features
+            (Apr 25 2026 audit).
 
     Side-effect-free apart from a WARNING log on failure.
     """
@@ -327,6 +341,8 @@ def load_iv_rank_baseline(vix_csv: str | Path | None = None) -> tuple[float, flo
         path = Path(vix_csv) if vix_csv is not None else _DEFAULT_VIX_CSV
         if not path.exists():
             return 0.0, 0.0
+
+        as_of_str: str | None = as_of_date.isoformat() if as_of_date else None
 
         # Group by date, keep last close per day
         daily: dict[str, float] = {}
@@ -338,6 +354,9 @@ def load_iv_rank_baseline(vix_csv: str | Path | None = None) -> tuple[float, flo
                 if not ts:
                     continue
                 date_str = ts[:10]  # ISO prefix → "2025-09-29"
+                if as_of_str is not None and date_str > as_of_str:
+                    # Skip future dates relative to the caller's "now".
+                    continue
                 close = row.get("close") or row.get("vix")
                 if close is None:
                     continue

@@ -358,13 +358,22 @@ class IronCondorStrategy(BaseStrategy):
 
         current_debit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
 
+        # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 7
+        pt_target_pct = self._compute_vol_scaled_exit_pct(
+            "pt", dte, fallback_pct=self.params.profit_target_pct
+        )
+        sl_threshold_pct = self._compute_vol_scaled_exit_pct(
+            "sl", dte, fallback_pct=self.params.stop_loss_pct
+        )
+
         # Profit target — exit when spread value has decayed enough
-        if self.params.profit_target_pct > 0:
+        if pt_target_pct > 0:
             decay_pct = float((self._entry_credit - current_debit) / self._entry_credit * 100)
-            if decay_pct >= self.params.profit_target_pct:
+            if decay_pct >= pt_target_pct:
                 logger.info(
                     f"[{self.strategy_id}] PROFIT TARGET: spread decayed {decay_pct:.1f}% "
-                    f"(target: {self.params.profit_target_pct}%)"
+                    f"(target: {pt_target_pct}%)"
                 )
                 self._stopped_for_day = True
                 return self._create_exit_signal(f"Profit target: spread decayed {decay_pct:.1f}%")
@@ -372,10 +381,10 @@ class IronCondorStrategy(BaseStrategy):
         loss_pct = float((current_debit - self._entry_credit) / self._entry_credit * 100)
 
         # Stop loss check on entire position
-        if loss_pct > self.params.stop_loss_pct:
+        if loss_pct > sl_threshold_pct:
             logger.info(
                 f"[{self.strategy_id}] STOP LOSS: position loss {loss_pct:.1f}% "
-                f"(threshold: {self.params.stop_loss_pct}%)"
+                f"(threshold: {sl_threshold_pct}%)"
             )
             self._stopped_for_day = True
             return self._create_exit_signal(f"Stop loss: position loss +{loss_pct:.1f}%")

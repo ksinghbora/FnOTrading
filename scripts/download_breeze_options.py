@@ -234,7 +234,8 @@ def download_day(
 
 def compute_greeks_for_file(filepath: Path, spot_csv: str = "data/nifty_spot_minute.csv"):
     """Post-process: compute IV and greeks from option prices using BS model."""
-    from src.backtest.engine import compute_iv, compute_greeks
+    from src.options.greeks import compute_greeks
+    from src.options.iv import compute_iv
 
     RISK_FREE_RATE = 0.065  # 6.5% India 10Y
 

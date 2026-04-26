@@ -60,18 +60,30 @@ CHARGES = {
         "percentage": Decimal("0.03"),        # 0.03% (whichever is lower)
     },
     "stt": {
-        "options_sell_pct": Decimal("0.0625"),  # 0.0625% on sell side premium
-        "options_exercise_pct": Decimal("0.125"),  # 0.125% on intrinsic value (ITM exercise)
-        "futures_sell_pct": Decimal("0.0125"),  # 0.0125% on sell side
+        # Apr 25 2026 audit (Phase 3-Pre): updated to current rates per
+        # Union Budget 2026 (effective April 1 2026). Prior values were
+        # the pre-Oct-2024 rates and silently understated trading costs
+        # in every backtest run since Oct 2024.
+        # Source: Union Budget 2024 (Oct 1 2024 hike from 0.0625 → 0.1%) and
+        # Union Budget 2026 (Apr 1 2026 hike from 0.1 → 0.15%).
+        "options_sell_pct": Decimal("0.1"),     # 0.10% on sell side premium (Oct 1 2024 - Mar 31 2026)
+        "options_sell_pct_apr2026": Decimal("0.15"),  # 0.15% from Apr 1 2026
+        "options_exercise_pct": Decimal("0.125"),  # 0.125% on intrinsic value (ITM exercise) — until Mar 31 2026
+        "options_exercise_pct_apr2026": Decimal("0.15"),  # 0.15% from Apr 1 2026
+        "futures_sell_pct": Decimal("0.02"),    # 0.02% (Oct 1 2024 - Mar 31 2026)
+        "futures_sell_pct_apr2026": Decimal("0.05"),   # 0.05% from Apr 1 2026
     },
     "transaction_charges": {
-        "options_pct": Decimal("0.05"),       # NSE transaction charge on premium turnover
-        "futures_pct": Decimal("0.002"),      # NSE transaction charge on futures turnover
+        # NSE circular 100/2024 effective Oct 1 2024:
+        # Options on premium turnover: 0.0353% (was 0.05%)
+        # Futures on turnover: 0.00173% (was 0.002%)
+        "options_pct": Decimal("0.0353"),     # NSE transaction charge on premium turnover (post Oct 2024)
+        "futures_pct": Decimal("0.00173"),    # NSE transaction charge on futures turnover (post Oct 2024)
     },
     "sebi_charges_pct": Decimal("0.0001"),   # 0.0001% of turnover
     "gst_pct": Decimal("18"),                # 18% on (brokerage + transaction + SEBI)
     "stamp_duty": {
-        "options_buy_pct": Decimal("0.003"),  # 0.003% on buy side
+        "options_buy_pct": Decimal("0.003"),  # 0.003% on buy side (uniform across India since 2020)
         "futures_buy_pct": Decimal("0.002"),  # 0.002% on buy side
     },
 }

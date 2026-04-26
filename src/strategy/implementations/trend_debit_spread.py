@@ -395,10 +395,22 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         if current_value > self._peak_value:
             self._peak_value = current_value
 
+        # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
+        dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 7
+        pt_target_pct = self._compute_vol_scaled_exit_pct(
+            "pt", dte, fallback_pct=self.params.profit_target_pct
+        )
+        sl_threshold_pct = self._compute_vol_scaled_exit_pct(
+            "sl", dte, fallback_pct=self.params.stop_loss_pct
+        )
+        trail_threshold_pct = self._compute_vol_scaled_exit_pct(
+            "trail", dte, fallback_pct=self.params.trailing_stop_pct
+        )
+
         # Profit target: spread reaches X% of max theoretical value
         if self._max_spread_value > 0:
             value_pct = float(current_value / self._max_spread_value * 100)
-            if value_pct >= self.params.profit_target_pct:
+            if value_pct >= pt_target_pct:
                 return self._create_exit_signal(
                     f"Profit target: spread at {value_pct:.1f}% of max value"
                 )
@@ -408,13 +420,13 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             loss_pct = float(
                 (self._entry_debit - current_value) / self._entry_debit * 100
             )
-            if loss_pct >= self.params.stop_loss_pct:
+            if loss_pct >= sl_threshold_pct:
                 return self._create_exit_signal(
                     f"Stop loss: spread lost {loss_pct:.1f}% of entry debit"
                 )
 
         # Trailing stop: once 20%+ of max profit reached, trail from peak
-        if self.params.trailing_stop_pct > 0 and self._max_spread_value > 0:
+        if trail_threshold_pct > 0 and self._max_spread_value > 0:
             max_profit = self._max_spread_value - self._entry_debit
             if max_profit > 0:
                 current_profit = current_value - self._entry_debit
@@ -423,10 +435,10 @@ class TrendDebitSpreadStrategy(BaseStrategy):
                     pullback_from_peak = float(
                         (self._peak_value - current_value) / self._peak_value * 100
                     ) if self._peak_value > 0 else 0
-                    if pullback_from_peak >= self.params.trailing_stop_pct:
+                    if pullback_from_peak >= trail_threshold_pct:
                         return self._create_exit_signal(
                             f"Trailing stop: pullback {pullback_from_peak:.1f}% "
-                            f"from peak (threshold: {self.params.trailing_stop_pct}%)"
+                            f"from peak (threshold: {trail_threshold_pct}%)"
                         )
 
         return None
