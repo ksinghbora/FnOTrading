@@ -95,6 +95,25 @@ class BaseStrategy(ABC):
         Return a Signal to place orders, or None to do nothing.
         """
 
+    def evaluate_score(self) -> int:
+        """Return current 0-100 setup score WITHOUT mutating any state.
+
+        Used by the OrchestratorStrategy to compare candidates per tick.
+        Default returns 0 (strategy has no scoring rule — orchestrator
+        will treat it as "never the best choice" unless every other
+        candidate also returns 0). Strategies with scoring rules
+        (iron_condor, iron_butterfly, short_strangle, short_straddle,
+        long_calendar) should factor their scoring block into a helper
+        and call it from both ``evaluate_score`` and the entry path so
+        the standalone and orchestrated paths agree on the score.
+
+        Contract:
+        - MUST NOT mutate self._entered, position state, or any tracker
+        - MUST be safe to call multiple times per tick
+        - MUST be safe to call when self._regime, self._expiry, etc. are not yet set
+        """
+        return 0
+
     async def on_candle(self, candle: OHLC) -> Signal | None:
         """Called on candle close for subscribed timeframes.
 

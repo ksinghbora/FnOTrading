@@ -173,6 +173,44 @@ class IronButterflyParams(IronCondorParams):
     short_put_delta: float = -0.5
 
 
+class OrchestratorParams(BaseStrategyParams):
+    """Parameters for the OrchestratorStrategy meta-controller.
+
+    Phase 3c (Apr 27 2026): a registry-discovered, fully-decoupled meta
+    strategy that runs N child strategies in parallel as scorers and
+    routes execution to the highest-scoring child each tick. Children
+    must NOT be hardcoded — they're listed by name and looked up via
+    ``src.strategy.registry``. See memory/orchestrator_decoupling.md for
+    the design contract.
+
+    Adding a strategy = put its registry name in ``children``. Removing
+    = take it out. No orchestrator code changes either way.
+    """
+
+    # Names from the registry. Strategy must register itself via
+    # @register_strategy(name, ParamsCls) to be discoverable here.
+    # Order is informational — selection is by score, not list position.
+    children: list[str] = Field(default_factory=lambda: [
+        "iron_condor",
+        "iron_butterfly",
+        "short_strangle",
+        "short_straddle",
+        "long_calendar",
+    ])
+
+    # Per-child param overrides. Key = child registry name, value = dict
+    # of param overrides for that child's params class. Children NEVER
+    # see each other's params; this dict is split apart at instantiation.
+    children_params: dict = Field(default_factory=dict)
+
+    # Selection thresholds
+    min_score_to_trade: int = 60        # Skip trading if no child scores >= this
+    score_margin_to_switch: int = 10    # Don't switch from active child unless candidate beats by this much
+
+    # Lifecycle
+    propagate_exits_to_children: bool = True  # When orchestrator exits, force children to clear state too
+
+
 class LongCalendarParams(BaseStrategyParams):
     """Parameters for Long Calendar strategy — long vega, theta differential.
 

@@ -378,6 +378,34 @@ class LongCalendarStrategy(BaseStrategy):
 
         return None
 
+    def evaluate_score(self) -> int:
+        """Score 0-100 for orchestrator comparison. Long calendar doesn't
+        use the per-tick rule-based scorer that IC/strangle/straddle share;
+        instead score is rule-based on entry-filter eligibility:
+          - 0 if any hard filter fails (no back expiry, expiry day, VIX out of band)
+          - 60 + VIX-fit bonus if all eligible
+        Range 0–80 to leave headroom; orchestrator min_score_to_trade=60
+        keeps long_calendar in contention only when its setup is real.
+        """
+        try:
+            if self._front_expiry is None or self._back_expiry is None:
+                return 0
+            if self._check_expiry_day_block(self.params.underlying):
+                return 0
+            if self._check_vix_filter():
+                return 0
+            vix = self.ctx.get_vix()
+            if vix <= 0:
+                return 0
+            # Bonus when VIX is in the lower-middle of the band (room to expand)
+            band = max(1.0, self.params.vix_entry_max - self.params.vix_entry_min)
+            band_pos = (vix - self.params.vix_entry_min) / band
+            # Best when VIX is at lower-third of band (vol expansion most likely)
+            fit = max(0, 20 - int(abs(band_pos - 0.33) * 40))
+            return 60 + fit
+        except Exception:
+            return 0
+
     async def on_stop(self) -> None:
         if self._entered:
             logger.info(f"[{self.strategy_id}] Stopping with open calendar position")

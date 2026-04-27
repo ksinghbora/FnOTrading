@@ -110,9 +110,11 @@ class IronCondorStrategy(BaseStrategy):
 
         return None
 
-    async def _try_entry(self) -> Signal | None:
-        """Select strikes by delta and enter the iron condor."""
-        # --- Signal scoring ---
+    def _compute_score(self) -> tuple[int, list[str]]:
+        """Pure scorer — no state mutation. Used by both _try_entry
+        (decide whether to actually enter) and evaluate_score (orchestrator
+        comparison). Returns (score, reasons).
+        """
         vix = self.ctx.get_vix()
         morning_range_pct = 0.0
         move_from_open_pct = 0.0
@@ -127,11 +129,23 @@ class IronCondorStrategy(BaseStrategy):
                 pcr_oi = chain_for_score.pcr_oi
         dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 0
         is_expiry_day = self._expiry == self.ctx.clock.now().date() if self._expiry else False
-
         score, reasons = score_strategy(
             IRON_CONDOR_CONFIG, vix, morning_range_pct, move_from_open_pct,
             pcr_oi, is_expiry_day, dte,
         )
+        return int(score), reasons
+
+    def evaluate_score(self) -> int:
+        try:
+            score, _ = self._compute_score()
+            return score
+        except Exception:
+            return 0
+
+    async def _try_entry(self) -> Signal | None:
+        """Select strikes by delta and enter the iron condor."""
+        # --- Signal scoring ---
+        score, reasons = self._compute_score()
         reasons_str = ", ".join(reasons)
         logger.info(
             f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
