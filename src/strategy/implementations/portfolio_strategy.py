@@ -706,7 +706,7 @@ class PortfolioStrategy(BaseStrategy):
                     rule_score=rule_score, ai_adj=ai_adj,
                     final_score=self._prem_score, threshold=threshold,
                     entry_premium=float(self._entry_premium), quantity=self._prem_quantity,
-                    shadow_blocked=would_block,
+                    shadow_blocked=False,
                 ))
                 return signal
         elif now.minute % 5 == 0 and self._last_skip_minute != now.hour * 60 + now.minute:
@@ -867,7 +867,7 @@ class PortfolioStrategy(BaseStrategy):
                     rule_score=rule_score, ai_adj=ai_adj,
                     final_score=self._trend_score, threshold=trend_threshold,
                     entry_premium=float(self._entry_debit), quantity=self._trend_quantity,
-                    shadow_blocked=trend_would_block,
+                    shadow_blocked=False,
                 ))
                 return signal
 
