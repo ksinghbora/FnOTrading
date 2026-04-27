@@ -40,7 +40,6 @@ dependencies = [
     # Timezone
     "pytz>=2024.1",
     "pyotp>=2.9.0",
-    "breeze-connect>=1.0.67",
     # Secret storage (OS keychain — macOS Keychain, Linux Secret Service, Windows Cred Mgr)
     "keyring>=25.0.0",
     # Cold storage — Backblaze B2 SDK for the upload_to_b2.py uploader.

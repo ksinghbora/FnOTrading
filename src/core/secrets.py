@@ -38,8 +38,6 @@ SECRET_KEYS: Final[tuple[str, ...]] = (
     "TELEGRAM_BOT_TOKEN",
     "ANTHROPIC_API_KEY",
     "API_SECRET_KEY",
-    "BREEZE_API_SECRET",
-    "BREEZE_SESSION_TOKEN",
 )
 
 try:

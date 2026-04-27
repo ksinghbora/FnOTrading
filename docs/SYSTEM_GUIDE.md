@@ -609,8 +609,8 @@ FnOTrading/
 │   ├── download_spot_data.py    # Historical data download
 │   └── multi_seed_backtest.py   # Multi-seed Monte Carlo
 ├── data/
-│   ├── chain_snapshots/         # Real option chain CSVs (60s)
-│   ├── breeze_chain/            # Breeze API historical data
+│   ├── chain_snapshots/         # Real option chain CSVs (60s, Kite WebSocket)
+│   ├── gdfl_snapshots/          # Historical tick parquets (NIFTY+BANKNIFTY)
 │   ├── decisions/               # Decision logger CSVs
 │   ├── day_bias.json            # AI advisor morning output
 │   └── *.csv                    # Spot + VIX historical data
@@ -1100,21 +1100,20 @@ ADVISOR_CONFLUENCE_WEIGHT=1.0
 ```
 ┌───────────────────────────────────────────────────────────────────┐
 │                                                                    │
-│  GOLD STANDARD: Our Chain Recorder (~95% realistic)               │
-│  ├── Source: Live Kite WebSocket + optional Breeze enrichment     │
-│  ├── What: LTP, bid, ask, IV, greeks, OI for ALL strikes         │
-│  ├── Frequency: Every 60 seconds                                 │
-│  ├── Location: data/chain_snapshots/chain_YYYY-MM-DD.csv         │
-│  ├── Available: March 25, 2026+ (growing daily)                  │
-│  └── Use for: Exact P&L validation, parameter tuning             │
+│  GOLD STANDARD: GDFL Tick Archive (~95% realistic)                │
+│  ├── Source: GDFL daily tick zips (NIFTY + BANKNIFTY options)     │
+│  ├── What: 1-min bars, LTP/bid/ask/OI per strike per expiry      │
+│  ├── Location: data/gdfl_snapshots/*.parquet                     │
+│  ├── Available: Sep 2024 - Feb 2026 (~370 trading days)          │
+│  └── Use for: Backtest, CPCV, walk-forward validation            │
 │                                                                    │
-│  GOOD ENOUGH: Breeze API Historical (~50% P&L accuracy)          │
-│  ├── Source: ICICI Breeze Connect API (historical endpoint)       │
-│  ├── What: 1-min OHLC + OI per strike, computed greeks           │
-│  ├── Location: data/breeze_chain/                                │
-│  ├── Available: 61 days (Dec 2025 - Mar 2026)                   │
-│  ├── Diverges 70-176% from real chain data on same days          │
-│  └── Use for: Directional conclusions ONLY                       │
+│  GOLD STANDARD (live): Chain Recorder (~95% realistic)            │
+│  ├── Source: Live Kite WebSocket only                             │
+│  ├── What: LTP, bid, ask, IV, greeks, OI for ALL strikes          │
+│  ├── Frequency: Every 60 seconds                                  │
+│  ├── Location: data/chain_snapshots/chain_YYYY-MM-DD.csv          │
+│  ├── Available: March 25, 2026+ (growing daily)                   │
+│  └── Use for: Exact P&L validation of live decisions              │
 │                                                                    │
 │  ROUGH ESTIMATE: BS Historical Engine (~40% P&L accuracy)        │
 │  ├── Source: Synthetic option prices from Black-Scholes model     │

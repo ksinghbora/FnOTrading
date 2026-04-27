@@ -4,8 +4,7 @@ Records option chain state to CSV files during live/paper trading.
 After collecting 2-3 weeks of data, the ReplayBacktestEngine can replay
 real option prices instead of synthetic Black-Scholes pricing.
 
-Optionally enriches snapshots with Breeze API data (bid/ask, OI) when configured.
-Falls back gracefully to WebSocket-only data if Breeze is unavailable.
+Snapshots come from the Kite WebSocket feed (greeks, LTP, OI, bid/ask).
 
 Output: data/chain_snapshots/chain_YYYY-MM-DD.csv
 Columns: time,underlying,expiry,strike,option_type,ltp,iv,delta,gamma,theta,vega,oi,volume,bid_price,ask_price
@@ -25,99 +24,12 @@ from src.observability.heartbeat import Heartbeat
 logger = logging.getLogger(__name__)
 
 
-class BreezeEnricher:
-    """Optional Breeze API integration for richer chain snapshots.
-
-    Fetches real-time option chain quotes with bid/ask and OI.
-    If not configured or any error occurs, returns empty — caller uses WebSocket data.
-    """
-
-    def __init__(self):
-        self._breeze = None
-        self._available = False
-        self._last_error_time = 0
-        self._error_cooldown = 300  # 5 min cooldown after errors
-
-    def connect(self) -> bool:
-        """Try to connect to Breeze API. Returns True if successful."""
-        try:
-            api_key = os.environ.get("BREEZE_API_KEY", "")
-            api_secret = os.environ.get("BREEZE_API_SECRET", "")
-            session_token = os.environ.get("BREEZE_SESSION_TOKEN", "")
-
-            if not (api_key and api_secret and session_token):
-                return False
-
-            from breeze_connect import BreezeConnect
-            self._breeze = BreezeConnect(api_key=api_key)
-            self._breeze.generate_session(api_secret=api_secret, session_token=session_token)
-            self._available = True
-            logger.info("[CHAIN_RECORDER] Breeze API connected — enriched snapshots enabled")
-            return True
-        except Exception as e:
-            logger.info(f"[CHAIN_RECORDER] Breeze API not available ({e}) — using WebSocket only")
-            self._available = False
-            return False
-
-    def get_chain_quotes(self, underlying: str, expiry: date) -> dict[tuple[float, str], dict]:
-        """Fetch full option chain from Breeze.
-
-        Returns: {(strike, option_type): {ltp, bid, ask, oi, volume}} or empty dict on failure.
-        """
-        import time as _time
-
-        if not self._available or not self._breeze:
-            return {}
-
-        # Cooldown after errors
-        now = _time.time()
-        if now - self._last_error_time < self._error_cooldown:
-            return {}
-
-        try:
-            result: dict[tuple[float, str], dict] = {}
-
-            for right, opt_type in [("call", "CE"), ("put", "PE")]:
-                resp = self._breeze.get_option_chain_quotes(
-                    stock_code=underlying,
-                    exchange_code="NFO",
-                    product_type="options",
-                    expiry_date=f"{expiry.isoformat()}T07:00:00.000Z",
-                    right=right,
-                    strike_price="",  # all strikes
-                )
-
-                if resp and resp.get("Success"):
-                    for entry in resp["Success"]:
-                        strike = float(entry.get("strike_price", 0))
-                        ltp = float(entry.get("ltp", 0) or 0)
-                        if strike <= 0:
-                            continue
-
-                        result[(strike, opt_type)] = {
-                            "ltp": ltp,
-                            "bid": float(entry.get("best_bid_price", 0) or 0),
-                            "ask": float(entry.get("best_offer_price", 0) or 0),
-                            "oi": int(float(entry.get("open_interest", 0) or 0)),
-                            "volume": int(entry.get("total_quantity_traded", 0) or 0),
-                        }
-
-            return result
-
-        except Exception as e:
-            logger.warning(f"[CHAIN_RECORDER] Breeze quote fetch failed: {e}")
-            self._last_error_time = _time.time()
-            return {}
-
-
 class ChainSnapshotRecorder:
     """Periodically snapshots option chain to CSV for future backtesting.
 
     Captures ATM ± num_strikes for all active expiries every interval_seconds.
-    One CSV file per trading day, append mode (survives restarts).
-
-    If Breeze API is configured, enriches snapshots with real bid/ask and OI.
-    Falls back to WebSocket-only data if Breeze is unavailable.
+    One CSV file per trading day, atomic-rewrite mode (survives restarts).
+    Source: Kite WebSocket feed only.
     """
 
     def __init__(
@@ -137,19 +49,16 @@ class ChainSnapshotRecorder:
         self._task: asyncio.Task | None = None
         self._running = False
         self._snapshots_today = 0
-        self._breeze = BreezeEnricher()
         self._heartbeat = heartbeat
 
     async def start(self) -> None:
         """Start periodic snapshot recording."""
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._running = True
-        self._breeze.connect()  # Best-effort — falls back to WebSocket if unavailable
         self._task = asyncio.create_task(self._record_loop())
-        source = "WebSocket + Breeze" if self._breeze._available else "WebSocket"
         logger.info(
             f"[CHAIN_RECORDER] Started — interval={self._interval}s "
-            f"output={self._output_dir} strikes=±{self._num_strikes} source={source}"
+            f"output={self._output_dir} strikes=±{self._num_strikes} source=WebSocket"
         )
 
     async def stop(self) -> None:
@@ -206,10 +115,7 @@ class ChainSnapshotRecorder:
 
     # ── Snapshot construction ────────────────────────────────────
     def _take_snapshot(self, now: datetime) -> None:
-        """Snapshot all active chains to CSV.
-
-        Merges WebSocket data (greeks, LTP) with Breeze data (bid/ask, OI)
-        when available. Falls back to WebSocket-only if Breeze is unavailable.
+        """Snapshot all active chains to CSV from the WebSocket feed.
 
         Apr 2026 audit fixes:
           1. Skip-or-flag for degraded snapshots: if every CE+PE in this
@@ -251,9 +157,6 @@ class ChainSnapshotRecorder:
                 continue
 
             for expiry, chain in expiry_chains.items():
-                # Fetch Breeze quotes for this expiry (best-effort)
-                breeze_quotes = self._breeze.get_chain_quotes(underlying, expiry)
-
                 for entry in chain.strikes:
                     strike = float(entry.strike)
                     # Only record strikes near ATM
@@ -266,28 +169,12 @@ class ChainSnapshotRecorder:
 
                         g = opt_data.greeks
 
-                        # Start with WebSocket data
+                        # WebSocket data (single source of truth)
                         ltp = float(opt_data.ltp)
                         oi = opt_data.oi
                         volume = opt_data.volume
                         bid = float(opt_data.bid_price)
                         ask = float(opt_data.ask_price)
-
-                        # Enrich with Breeze data if available
-                        bq = breeze_quotes.get((strike, opt_type))
-                        if bq:
-                            # Breeze has better bid/ask and OI
-                            if bq["bid"] > 0:
-                                bid = bq["bid"]
-                            if bq["ask"] > 0:
-                                ask = bq["ask"]
-                            if bq["oi"] > 0:
-                                oi = bq["oi"]
-                            if bq["volume"] > 0:
-                                volume = bq["volume"]
-                            # Use Breeze LTP if WebSocket LTP is zero
-                            if ltp <= 0 and bq["ltp"] > 0:
-                                ltp = bq["ltp"]
 
                         # Quality counters
                         has_quote = ltp > 0 or bid > 0 or ask > 0
