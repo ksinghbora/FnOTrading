@@ -127,6 +127,8 @@ materially different per-trade gross than backtest:
 | 2026-04-26 | Phase 3a-revised: all 4 strategies FAIL standalone gates; iron_condor identified as keeper | First proper standalone CPCV+WF on full Sep24-Jul25 corpus across 4 strategies; failure modes correctly differentiated by harness | [reports/standalone_v1/SUMMARY.md](../reports/standalone_v1/SUMMARY.md) |
 | 2026-04-26 | Validation perf optimizations merged (Numba+msgspec+parallel WF+round audit) | ~1.5–2× end-to-end speedup verified; 5.8×/11× on hot pricing/Greeks; tests pass; determinism preserved | commit 9a0c54f |
 | 2026-04-26 | Mac Pro project moved from `iCloud Drive (Archive)/` back to `~/Documents/FnOTrading` | iCloud Drive disabled by user; venv rebuilt at new path; LaunchAgent installed for caffeinate | this update |
+| 2026-04-27 | Removed shadow-block paper-mode bypasses (5 strategies, ~10 sites) | Live paper now enforces all entry filters identically to backtest; the n=3 live paper Strangle "₹257/trade gross" data is invalid (collected during shadow period) | commit f928037 |
+| 2026-04-27 | Gate B (intraday VIX spike) implemented for IC; default DISABLED | Pre-registered per Phase 3b proposal; opt-in via `intraday_vix_spike_enabled=True`; awaiting holdout test | this commit |
 
 ## 6. DO NOT REVERSE these decisions without explicit operator approval
 
@@ -164,6 +166,10 @@ materially different per-trade gross than backtest:
    "skip entries"? Propose specific gate, pre-register hypothesis,
    then validate on FRESH window (don't reuse Phase 3a-revised's
    train+val).
+   **STATUS Apr 27:** Gate B (intraday VIX spike >= 15% from morning
+   open after 11:30 IST) implemented and tested. DISABLED by default —
+   enable per-instance via `intraday_vix_spike_enabled=True` for the
+   pre-registered single-shot holdout test.
 
 3. **Capacity-aware sizing algorithm.** Design lot-size clamper
    based on slippage curve. Validate on iron_condor's capacity table.
@@ -210,4 +216,4 @@ canonical living dashboard for this branch. All other memory and
 docs files become historical archive once superseded — they are
 read-only after their creation date unless explicitly amended.
 
-Last updated: 2026-04-26 23:30 IST (post Phase 3a-revised + perf merge + Pro project relocation)
+Last updated: 2026-04-27 (post shadow-block fix + Gate B implementation, default disabled)

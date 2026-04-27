@@ -87,6 +87,11 @@ class IronCondorStrategy(BaseStrategy):
     async def on_tick(self, tick: Tick) -> Signal | None:
         now = self.ctx.clock.now()
 
+        # Capture morning-open VIX for Gate B (idempotent; only on first call
+        # after 9:15 IST per day). Done early so the captured value reflects
+        # session open, not entry_time (default 9:20).
+        self._capture_morning_vix_if_needed()
+
         # Expiry rollover
         new_expiry = self._check_expiry_rollover(self._expiry, self.params.underlying)
         if new_expiry:
@@ -156,6 +161,18 @@ class IronCondorStrategy(BaseStrategy):
             self._log_skip_throttled(
                 "ENTRY_SKIP_VIX",
                 f"[{self.strategy_id}] Entry skipped: {vix_block}",
+            )
+            return None
+
+        # Phase 3b Gate B — intraday VIX spike filter (PRE-REGISTERED, opt-in
+        # via params.intraday_vix_spike_enabled). When enabled, blocks new IC
+        # entries after activate_after time if VIX has risen >= threshold% from
+        # morning open. Designed for the May 8 2025 spike pattern.
+        spike_block = self._check_intraday_vix_spike_filter()
+        if spike_block:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_VIX_SPIKE",
+                f"[{self.strategy_id}] Entry skipped: {spike_block}",
             )
             return None
 

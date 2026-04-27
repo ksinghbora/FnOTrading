@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import date, time
 from decimal import Decimal
 from typing import Any
 
@@ -62,6 +63,11 @@ class BaseStrategy(ABC):
         # log fired 19,646 times across ic_1/strangle_1/straddle_1 in
         # ~20 minutes, drowning real signal in the audit log.
         self._last_skip_log_minute: dict[str, int] = {}
+        # Phase 3b Gate B state — captures VIX at first tick after 9:15 IST
+        # each day, used by _check_intraday_vix_spike_filter to detect a
+        # mid-session vol regime change vs. morning baseline.
+        self._intraday_vix_morning: float | None = None
+        self._intraday_vix_capture_date: date | None = None
 
     def set_context(self, context: "StrategyContext") -> None:
         """Inject the strategy context (called by runner, not by strategy)."""
@@ -444,6 +450,77 @@ class BaseStrategy(ABC):
                 },
             )
             return f"VIX {vix:.1f} exceeds max {vix_max}"
+        return None
+
+    def _capture_morning_vix_if_needed(self) -> None:
+        """Capture morning-open VIX once per trading day for Gate B.
+
+        Idempotent: only captures on the first call after 9:15 IST per
+        trading day. Used by ``_check_intraday_vix_spike_filter`` to detect
+        same-day vol regime changes.
+        """
+        now = self.ctx.clock.now()
+        today = now.date()
+        if self._intraday_vix_capture_date == today:
+            return  # already captured today
+        if now.time() < time(9, 15):
+            return  # market not open yet
+        vix = self.ctx.get_vix()
+        if vix <= 0:
+            return  # VIX feed not yet ready
+        self._intraday_vix_morning = vix
+        self._intraday_vix_capture_date = today
+
+    def _check_intraday_vix_spike_filter(self) -> str | None:
+        """Phase 3b Gate B — block entries on intraday VIX spike days.
+
+        Pre-registered per reports/phase3b_research/regime_gate_proposal.md.
+        Default disabled; opt-in via ``intraday_vix_spike_enabled`` param.
+
+        Trigger: after ``intraday_vix_spike_activate_after`` time, if
+        current VIX exceeds morning-open VIX by ``intraday_vix_spike_threshold_pct``,
+        return a reason string. Caller treats this as a hard block.
+
+        Returns None if the gate is disabled, not yet active, or not triggered.
+        """
+        if not getattr(self.params, "intraday_vix_spike_enabled", False):
+            return None
+        self._capture_morning_vix_if_needed()
+        if self._intraday_vix_morning is None:
+            return None  # morning VIX not yet captured (pre-9:15 or feed cold)
+        activate_after = getattr(
+            self.params, "intraday_vix_spike_activate_after", time(11, 30)
+        )
+        now_t = self.ctx.clock.now().time()
+        if now_t < activate_after:
+            return None  # gate not yet active for the day
+        vix = self.ctx.get_vix()
+        if vix <= 0:
+            return None
+        threshold_pct = float(
+            getattr(self.params, "intraday_vix_spike_threshold_pct", 15.0)
+        )
+        ratio = vix / self._intraday_vix_morning
+        threshold_ratio = 1.0 + threshold_pct / 100.0
+        if ratio > threshold_ratio:
+            spike_pct = (ratio - 1.0) * 100.0
+            logger.debug(
+                "filter blocked entry: intraday VIX spike",
+                extra={
+                    "tag": Tag.FILTER,
+                    "strategy": self.strategy_id,
+                    "filter": "intraday_vix_spike",
+                    "morning_open": round(self._intraday_vix_morning, 2),
+                    "current": round(vix, 2),
+                    "spike_pct": round(spike_pct, 1),
+                    "threshold_pct": threshold_pct,
+                    "result": "block",
+                },
+            )
+            return (
+                f"intraday VIX spike: morning_open={self._intraday_vix_morning:.2f} "
+                f"current={vix:.2f} (+{spike_pct:.1f}%) > threshold {threshold_pct:.0f}%"
+            )
         return None
 
     def _get_vix_adjusted_lots(self) -> int:

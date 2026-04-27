@@ -46,6 +46,17 @@ class BaseStrategyParams(BaseModel):
     skip_entry_on_expiry_day: bool = True   # Block new entries when today == expiry
     expiry_day_force_exit_at: time = time(14, 30)  # Exit ALL legs before gamma vertical
 
+    # Phase 3b Gate B — intraday VIX-spike filter (PRE-REGISTERED, default off).
+    # Blocks new entries on days where VIX has risen >= threshold% from morning
+    # open after a configurable activation time. Designed for iron_condor based
+    # on the May 8 2025 spike (VIX 15.6 → 22.8 in last 90 min) which produced
+    # the wf_coverage failure. See reports/phase3b_research/regime_gate_proposal.md.
+    # Default disabled — operator must opt-in to test on holdout. Per discipline
+    # §VII.7, this gate has not been calibrated on validation data.
+    intraday_vix_spike_enabled: bool = False
+    intraday_vix_spike_threshold_pct: float = 15.0    # +15% from morning open
+    intraday_vix_spike_activate_after: time = time(11, 30)  # IST, gate active after this
+
     # Trail-stop activation gates (Apr 17 trader-analysis fix).
     # First 30 min of session is auction-imbalance noise — premium can swing
     # 10-20% on a directionless day. Trailing during that window locks losses
