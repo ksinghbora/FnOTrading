@@ -197,6 +197,13 @@ class LongCalendarParams(BaseStrategyParams):
     leg_type: str = "CE"                     # "CE" or "PE" — single calendar; "BOTH" = double
     strike_offset_pct: float = 0.0           # 0.0 = ATM; ±X% = slightly OTM/ITM
 
+    # Back-expiry selection. v2 (weekly back, ~7 day differential) failed:
+    # bid-ask costs ate the small theta differential. v3 ups the gap:
+    # back must be at least min_back_days after front, which on NIFTY
+    # weeklies typically picks the NEXT MONTHLY expiry (~21-35 days out).
+    # Longer time differential = larger theta-decay edge per round trip.
+    min_back_days: int = 21                  # Minimum gap (calendar days) between front and back expiry
+
     # Risk management — long-debit position, max loss = net debit paid
     profit_target_pct: float = 30.0          # Exit when spread value gains X%
     stop_loss_pct: float = 50.0              # Exit when spread value drops X% (max -100% = full debit)

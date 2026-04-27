@@ -109,12 +109,21 @@ class LongCalendarStrategy(BaseStrategy):
         )
 
     def _find_back_expiry(self) -> date | None:
-        """Return the next available expiry strictly after the front."""
+        """Return the smallest expiry that is at least ``min_back_days``
+        calendar days after the front expiry.
+
+        v2 (default min_back_days=0) used the very next available expiry —
+        which on NIFTY weeklies meant a ~7-day time differential. That's
+        too small for theta-decay to overcome the 4-leg round-trip
+        bid-ask cost. v3 default (21 days) typically lands on the next
+        monthly expiry, giving 3-5× the differential.
+        """
         if self._front_expiry is None:
             return None
         expiries = sorted(self.ctx.get_available_expiries(self.params.underlying))
+        min_gap = max(1, int(self.params.min_back_days))
         for e in expiries:
-            if e > self._front_expiry:
+            if (e - self._front_expiry).days >= min_gap:
                 return e
         return None
 

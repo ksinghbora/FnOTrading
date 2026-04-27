@@ -37,34 +37,37 @@ def test_long_calendar_creates_with_defaults():
     assert s.params.intraday_vix_spike_enabled is False
 
 
-def test_long_calendar_back_expiry_finder_picks_next_after_front():
-    """_find_back_expiry must return the smallest expiry strictly > front."""
+def test_long_calendar_back_expiry_picks_first_with_min_gap():
+    """_find_back_expiry must return the smallest expiry at least
+    ``min_back_days`` after front (default 21)."""
     from src.backtest.common import import_strategies
     import_strategies()
     from src.strategy.registry import create_strategy
     s = create_strategy("long_calendar", strategy_id="lc_back_expiry")
 
+    # Weekly + monthly expiries: front on 2025-09-09, weeklies at +7, +14
+    # days, monthly at +21 days. Default min_back_days=21 → must skip the
+    # two weeklies and land on the +21-day expiry.
     expiries = [date(2025, 9, 9), date(2025, 9, 16), date(2025, 9, 23), date(2025, 9, 30)]
     ctx = MagicMock()
     ctx.get_available_expiries = MagicMock(return_value=expiries)
     s._context = ctx
     s._front_expiry = date(2025, 9, 9)
-    assert s._find_back_expiry() == date(2025, 9, 16)
-
-    s._front_expiry = date(2025, 9, 23)
     assert s._find_back_expiry() == date(2025, 9, 30)
 
 
-def test_long_calendar_back_expiry_returns_none_at_end_of_chain():
+def test_long_calendar_back_expiry_returns_none_when_nothing_far_enough():
+    """If no expiry is at least min_back_days out, return None (skip trade)."""
     from src.backtest.common import import_strategies
     import_strategies()
     from src.strategy.registry import create_strategy
-    s = create_strategy("long_calendar", strategy_id="lc_back_expiry_eod")
-    expiries = [date(2025, 9, 9), date(2025, 9, 16)]
+    s = create_strategy("long_calendar", strategy_id="lc_back_expiry_none")
+    # Only weeklies — none reach 21 days from front
+    expiries = [date(2025, 9, 9), date(2025, 9, 16), date(2025, 9, 23)]
     ctx = MagicMock()
     ctx.get_available_expiries = MagicMock(return_value=expiries)
     s._context = ctx
-    s._front_expiry = date(2025, 9, 16)
+    s._front_expiry = date(2025, 9, 9)
     assert s._find_back_expiry() is None
 
 
@@ -80,6 +83,26 @@ def test_long_calendar_back_expiry_unsorted_input_handled():
     ctx.get_available_expiries = MagicMock(return_value=expiries)
     s._context = ctx
     s._front_expiry = date(2025, 9, 9)
+    # min_back_days=21 default → 9/30 is 21 days out, others closer
+    assert s._find_back_expiry() == date(2025, 9, 30)
+
+
+def test_long_calendar_min_back_days_override_picks_weekly():
+    """Setting min_back_days=7 reproduces v2 behavior (next weekly)."""
+    from src.backtest.common import import_strategies
+    import_strategies()
+    from src.strategy.registry import create_strategy
+    s = create_strategy(
+        "long_calendar",
+        strategy_id="lc_back_weekly",
+        params={"min_back_days": 7},
+    )
+    expiries = [date(2025, 9, 9), date(2025, 9, 16), date(2025, 9, 23), date(2025, 9, 30)]
+    ctx = MagicMock()
+    ctx.get_available_expiries = MagicMock(return_value=expiries)
+    s._context = ctx
+    s._front_expiry = date(2025, 9, 9)
+    # 9/16 is exactly 7 days out
     assert s._find_back_expiry() == date(2025, 9, 16)
 
 
