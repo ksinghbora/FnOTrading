@@ -128,7 +128,9 @@ materially different per-trade gross than backtest:
 | 2026-04-26 | Validation perf optimizations merged (Numba+msgspec+parallel WF+round audit) | ~1.5–2× end-to-end speedup verified; 5.8×/11× on hot pricing/Greeks; tests pass; determinism preserved | commit 9a0c54f |
 | 2026-04-26 | Mac Pro project moved from `iCloud Drive (Archive)/` back to `~/Documents/FnOTrading` | iCloud Drive disabled by user; venv rebuilt at new path; LaunchAgent installed for caffeinate | this update |
 | 2026-04-27 | Removed shadow-block paper-mode bypasses (5 strategies, ~10 sites) | Live paper now enforces all entry filters identically to backtest; the n=3 live paper Strangle "₹257/trade gross" data is invalid (collected during shadow period) | commit f928037 |
-| 2026-04-27 | Gate B (intraday VIX spike) implemented for IC; default DISABLED | Pre-registered per Phase 3b proposal; opt-in via `intraday_vix_spike_enabled=True`; awaiting holdout test | this commit |
+| 2026-04-27 | Gate B (intraday VIX spike) implemented for IC; default DISABLED | Pre-registered per Phase 3b proposal; opt-in via `intraday_vix_spike_enabled=True`; awaiting holdout test | commit 7ecb81b |
+| 2026-04-27 | Holdout (Aug 2025–Feb 2026, ~150 days) partitioned into 4 slices | Avoids consuming full holdout on one hypothesis test; preserves untouchable FINAL slice | [holdout_allocation.md](../reports/phase3b_research/holdout_allocation.md) |
+| 2026-04-27 | Hypothesis #2 pre-registered: lower IC vix_entry_min from 16 to 14 | Targets Window 7 zero-trades + Window 2 small-sample issues | [lower_vix_entry_min_proposal.md](../reports/phase3b_research/lower_vix_entry_min_proposal.md) |
 
 ## 6. DO NOT REVERSE these decisions without explicit operator approval
 
@@ -153,7 +155,18 @@ materially different per-trade gross than backtest:
 
 ## 7. Next concrete action (proposed)
 
-**Phase 3b research — three workstreams in priority order:**
+**Holdout slice plan (4 sub-windows, single-access each):**
+
+| Slice | Period | Days | Hypothesis | Status |
+|---|---|---|---|---|
+| A | Aug 1 – Sep 30 2025 | 44 | Gate B (intraday VIX spike) | Reserved |
+| B | Oct 1 – Nov 30 2025 | 43 | Lower IC vix_entry_min 16→14 | Reserved |
+| C | Dec 1 – Dec 31 2025 | 22 | Reserved for one more pre-registered hypothesis | Unallocated |
+| FINAL | Jan 1 – Feb 27 2026 | 42 | UNTOUCHABLE — final validation of winning combination | Sealed |
+
+See [reports/phase3b_research/holdout_allocation.md](../reports/phase3b_research/holdout_allocation.md) for run commands and discipline rules per slice.
+
+**Phase 3b research workstreams (sequenced for fewest hypotheses → most):**
 
 1. **Cost-model audit** (highest ROI). Compare GDFL parquet bid/ask
    spreads on the 3 live paper Strangle trades vs the actual broker
@@ -216,4 +229,4 @@ canonical living dashboard for this branch. All other memory and
 docs files become historical archive once superseded — they are
 read-only after their creation date unless explicitly amended.
 
-Last updated: 2026-04-27 (post shadow-block fix + Gate B implementation, default disabled)
+Last updated: 2026-04-27 (post shadow-block fix + Gate B + holdout slice allocation + lower vix_entry_min pre-registration)
