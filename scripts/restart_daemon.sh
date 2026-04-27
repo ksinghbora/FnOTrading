@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-REPO="/Users/kundanbora/Documents/FnOTrading"
+REPO="/Users/kundanbora/code/FnOTrading"
 # PID file lives OUTSIDE ~/Documents/ (Apr 21 fix). macOS Tahoe TCC denies
 # launchd-spawned /bin/bash from reading files under ~/Documents/ even when
 # bash has Full Disk Access — see plist comment for why. Symptom: the bash
