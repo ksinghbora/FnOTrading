@@ -173,6 +173,41 @@ class IronButterflyParams(IronCondorParams):
     short_put_delta: float = -0.5
 
 
+class LongCalendarParams(BaseStrategyParams):
+    """Parameters for Long Calendar strategy — long vega, theta differential.
+
+    Phase 3b candidate (Apr 27): the only positive-vega strategy in the
+    roster. Sells front-week ATM option, buys back-week (or back-month)
+    same-strike option. Profits when:
+      1. Underlying stays near ATM strike (theta differential)
+      2. Implied vol expands (positive vega)
+      3. Front-month decays faster than back-month
+
+    This is the strategy that PROFITS on the Apr 7 / May 8 type vol
+    spike events that killed iron_condor in Phase 3a-revised.
+    """
+
+    # VIX entry band — calendar wants moderate vol with room to expand.
+    # Below 14 = no expansion expected. Above 25 = already expanded, late.
+    vix_entry_min: float = 14.0
+    vix_entry_max: float = 25.0
+    vix_reduce_above: float = 22.0
+
+    # Calendar structure
+    leg_type: str = "CE"                     # "CE" or "PE" — single calendar; "BOTH" = double
+    strike_offset_pct: float = 0.0           # 0.0 = ATM; ±X% = slightly OTM/ITM
+
+    # Risk management — long-debit position, max loss = net debit paid
+    profit_target_pct: float = 30.0          # Exit when spread value gains X%
+    stop_loss_pct: float = 50.0              # Exit when spread value drops X% (max -100% = full debit)
+    max_underlying_move_pct: float = 1.5     # Hard stop if spot moves >X% from strike
+
+    # Timing
+    front_close_buffer_minutes: int = 90     # Close N min before front-week expiry (avoid 0DTE gamma trap on front leg)
+    pcr_filter_enabled: bool = False         # PCR less informative for long-vega — disable by default
+    max_pain_filter_enabled: bool = False    # Same — calendar profit zone differs from short-premium
+
+
 class DeltaNeutralParams(BaseStrategyParams):
     """Parameters for Delta Neutral strategy."""
 
