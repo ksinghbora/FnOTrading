@@ -1125,13 +1125,13 @@ ADVISOR_CONFLUENCE_WEIGHT=1.0
 └───────────────────────────────────────────────────────────────────┘
 ```
 
-**Critical insight**: When all 3 sources were compared on overlapping
-days, direction agreement between Breeze and our chain recorder was about
-50% (coin flip). Magnitude differences were 70-176%. **Portfolio is the
-ONLY strategy profitable across all 3 data sources**.
+**Critical insight**: GDFL parquet is the production gold-standard
+for backtest validation; live chain recorder feeds the production
+decision pipeline. Synthetic BS engine is for rough regime sketches
+only — never tune from BS numbers alone.
 
-**Rule**: Never make parameter changes based solely on Breeze or BS
-numbers. Wait for 30+ days of chain recorder data before tuning.
+**Rule**: Validate against GDFL or 30+ days of chain recorder data.
+BS-only conclusions are not actionable.
 
 ### 6.2 Chain Recorder
 
@@ -1150,8 +1150,7 @@ Example row:
 164.00, 167.00
 ```
 
-Optional Breeze enrichment adds bid/ask and richer OI data when ICICI
-Breeze API credentials are configured.
+Source: Kite WebSocket feed only.
 
 ### 6.3 Replay Engine
 
@@ -1206,8 +1205,8 @@ classifier (XGBoost) to dynamically adjust score thresholds.
 | BS Historical | Synthetic prices from real spot+VIX | 90 | +88,287 | ~60% too optimistic |
 | Simulated Normal | Monte Carlo (10 seeds x 30 days) | 300 | +9,262 avg | 10/10 profitable |
 | Simulated Fat-Tail | Student-t(df=5) tails | 300 | +6,761 avg | 10/10 profitable |
-| Breeze Replay | Breeze 1-min OHLC | 61 | Positive (directional) | ~50% P&L accuracy |
-| Chain Replay | Real chain snapshots | 3+ | TBD (collecting data) | Gold standard |
+| GDFL Replay | NIFTY+BANKNIFTY tick parquet | 370 | See standalone_v1 reports | Production gold standard |
+| Chain Replay | Real chain snapshots | 3+ | TBD (collecting data) | Live-feed validation |
 
 ---
 
