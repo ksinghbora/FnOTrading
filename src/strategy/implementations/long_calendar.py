@@ -374,9 +374,20 @@ class LongCalendarStrategy(BaseStrategy):
             logger.info(f"[{self.strategy_id}] Stopping with open calendar position")
 
     def reset_day_state(self) -> None:
-        """Reset intraday flags at start of new trading day."""
-        self._entered = False
-        self._stopped_for_day = False
+        """Reset intraday flags at start of new trading day.
+
+        Critical: long_calendar is a MULTI-DAY position by design (sells
+        front-week, buys back-week — held until front expiry approaches).
+        Unlike short_straddle / iron_condor which always exit same-day,
+        the calendar must NOT reset ``_entered`` daily, or it compounds
+        into stacked positions over the week. Only reset the per-day
+        skip-log dedup; entry/stop flags persist until expiry rollover
+        or an explicit exit fires.
+        """
+        # Do NOT reset self._entered or self._stopped_for_day here.
+        # Both are cleared in on_tick when _check_expiry_rollover fires
+        # (front-week expiring → fresh week → fresh entry decision) or
+        # explicitly by _create_exit_signal.
         self._last_skip_log_minute.clear()
 
     def _create_exit_signal(self, reason: str) -> Signal:
