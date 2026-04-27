@@ -444,10 +444,6 @@ class PortfolioStrategy(BaseStrategy):
             # Live mode: only 9:30-11:00
             prem_cutoff = time(14, 0) if self._paper_mode else time(11, 0)
             if now.time() < prem_cutoff:
-                if now.time() >= time(11, 0) and self._paper_mode:
-                    if not hasattr(self, '_late_entry_logged'):
-                        logger.info(f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM entry after 11:00 — entering anyway (paper mode)")
-                        self._late_entry_logged = True
                 signal = self._evaluate_premium(now)
                 if signal:
                     return signal
@@ -561,64 +557,32 @@ class PortfolioStrategy(BaseStrategy):
         # detected — throttle to 1 line/min/key. The base.py
         # _log_skip_throttled helper handles the per-minute keying.
         if regime.regime == MarketRegime.EXTREME_VOL:
-            if not self._paper_mode:
-                self._prem_stopped = True
-                logger.info(f"[{self.strategy_id}] PREMIUM SIT OUT: {regime.reason}")
-                return None
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_REGIME_EXTREME",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM would sit out: {regime.reason}",
-                )
+            self._prem_stopped = True
+            logger.info(f"[{self.strategy_id}] PREMIUM SIT OUT: {regime.reason}")
+            return None
 
         if regime.regime == MarketRegime.CONFLICTED:
-            if not self._paper_mode:
-                logger.info(f"[{self.strategy_id}] PREMIUM REDUCED: regime conflict — {regime.reason}")
-                self._prem_quantity = max(self._lot_size, self._base_quantity // 4)
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_REGIME_CONFLICT",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] REGIME CONFLICT — would reduce to 25%: {regime.reason}",
-                )
+            logger.info(f"[{self.strategy_id}] PREMIUM REDUCED: regime conflict — {regime.reason}")
+            self._prem_quantity = max(self._lot_size, self._base_quantity // 4)
 
         if regime.regime == MarketRegime.CHOPPY:
-            if not self._paper_mode:
-                logger.info(f"[{self.strategy_id}] PREMIUM REDUCED: {regime.reason}")
-                self._prem_quantity = max(self._lot_size, self._base_quantity // 2)
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_REGIME_CHOP",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] CHOP detected — would reduce size: chop_score={regime.chop_score:.2f}",
-                )
+            logger.info(f"[{self.strategy_id}] PREMIUM REDUCED: {regime.reason}")
+            self._prem_quantity = max(self._lot_size, self._base_quantity // 2)
 
         # Hard filters (PCR + max-pain) — Apr 18 2026 wiring fix.
         # Pre-fix portfolio_strategy ignored these even though the params
         # default to enabled. Now gated behind `portfolio_filters_enabled`
-        # so we can A/B replay before flipping the default. In paper mode
-        # the filters log as [SHADOW_BLOCK] (mirrors iron_condor pattern)
-        # so we still see what they WOULD have blocked.
+        # so we can A/B replay before flipping the default.
         if self.params.portfolio_filters_enabled and self._expiry:
             pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
             if pcr_block:
-                if self._paper_mode:
-                    self._log_skip_throttled(
-                        "SHADOW_BLOCK_PREMIUM_PCR",
-                        f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM {pcr_block}",
-                    )
-                else:
-                    logger.info(f"[{self.strategy_id}] PREMIUM blocked: {pcr_block}")
-                    return None
+                logger.info(f"[{self.strategy_id}] PREMIUM blocked: {pcr_block}")
+                return None
 
             mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
             if mp_block:
-                if self._paper_mode:
-                    self._log_skip_throttled(
-                        "SHADOW_BLOCK_PREMIUM_MP",
-                        f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM {mp_block}",
-                    )
-                else:
-                    logger.info(f"[{self.strategy_id}] PREMIUM blocked: {mp_block}")
-                    return None
+                logger.info(f"[{self.strategy_id}] PREMIUM blocked: {mp_block}")
+                return None
 
         chain = self.ctx.get_option_chain(self.params.underlying, self._expiry)
         pcr_oi = chain.pcr_oi if chain else 1.0
@@ -663,16 +627,10 @@ class PortfolioStrategy(BaseStrategy):
         if dte <= 1 and day_of_week == 0 and now.time() >= time(14, 0):
             # Monday afternoon with DTE=1 — gamma zone
             weekly_penalty = -15
-            if not self._paper_mode:
-                self._log_skip_throttled(
-                    "WEEKLY_CYCLE_GAMMA",
-                    f"[{self.strategy_id}] WEEKLY CYCLE: Mon PM DTE=1 — high gamma risk",
-                )
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_WEEKLY_CYCLE",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] WEEKLY CYCLE: would penalize -15 (Mon PM gamma)",
-                )
+            self._log_skip_throttled(
+                "WEEKLY_CYCLE_GAMMA",
+                f"[{self.strategy_id}] WEEKLY CYCLE: Mon PM DTE=1 — high gamma risk",
+            )
 
         # IC mode when VIX >= strangle_vix_max (default 12) — wings protect
         will_use_ic = vix >= self.params.strangle_vix_max
@@ -740,14 +698,7 @@ class PortfolioStrategy(BaseStrategy):
 
         ai_adj = self._prem_score - rule_score
 
-        would_block = self._prem_score < threshold
-        if would_block and self._paper_mode:
-            logger.info(
-                f"[{self.strategy_id}] [SHADOW_BLOCK] PREMIUM score={self._prem_score} < threshold={threshold} "
-                f"— entering anyway (paper mode)"
-            )
-
-        if self._prem_score >= threshold or (would_block and self._paper_mode):
+        if self._prem_score >= threshold:
             signal = self._enter_premium(vix)
             if signal:
                 self._decision_logger.log(self._build_snapshot(
@@ -808,13 +759,7 @@ class PortfolioStrategy(BaseStrategy):
         # Block trend entry on expiry day — near-zero DTE debit spreads have
         # massive gamma, negligible extrinsic value, and terrible risk/reward
         if self._expiry and now.date() == self._expiry:
-            if not self._paper_mode:
-                return None
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_TREND_EXPIRY",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] TREND blocked on expiry day — entering anyway (paper mode)",
-                )
+            return None
 
         spot = float(self.ctx.get_spot_price(self.params.underlying))
         vix = self.ctx.get_vix()
@@ -822,19 +767,12 @@ class PortfolioStrategy(BaseStrategy):
             return None
 
         if vix < self.params.trend_vix_min:
-            if not self._paper_mode:
-                self._log_skip_throttled(
-                    "TREND_VIX_LOW",
-                    f"[{self.strategy_id}] [VIX_GATE] TREND blocked: VIX={vix:.1f} "
-                    f"< trend_vix_min={self.params.trend_vix_min} (no vol, breakouts whipsaw)",
-                )
-                return None
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_TREND_VIX",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] TREND VIX={vix:.1f} "
-                    f"< trend_vix_min={self.params.trend_vix_min} — entering anyway (paper mode)",
-                )
+            self._log_skip_throttled(
+                "TREND_VIX_LOW",
+                f"[{self.strategy_id}] [VIX_GATE] TREND blocked: VIX={vix:.1f} "
+                f"< trend_vix_min={self.params.trend_vix_min} (no vol, breakouts whipsaw)",
+            )
+            return None
 
         # ─── P1.5 regime gate (trend leg) ─────────────────────────────
         # Default blocklist is EMPTY — the whole point of the trend leg is
@@ -860,7 +798,7 @@ class PortfolioStrategy(BaseStrategy):
         # breakouts whipsaw too often in high VIX (4 of 6 trend entries hit
         # -23% stop in 23-day chain replay). The score was passing them at
         # 30min via score_trend_following's +25 bonus; this gates that out.
-        if breakout.direction and trend_duration < 45 and not self._paper_mode:
+        if breakout.direction and trend_duration < 45:
             if now.minute % 10 == 0:
                 logger.info(
                     f"[{self.strategy_id}] TREND gated: sustained={trend_duration}min < 45min "
@@ -921,14 +859,7 @@ class PortfolioStrategy(BaseStrategy):
         # rationale and scripts/analyze_score_rebalance_impact.py for the data.
         trend_threshold = self.params.trend_signal_threshold
 
-        trend_would_block = self._trend_score < trend_threshold
-        if trend_would_block and self._paper_mode:
-            logger.info(
-                f"[{self.strategy_id}] [SHADOW_BLOCK] TREND score={self._trend_score} < threshold={trend_threshold} "
-                f"— entering anyway (paper mode)"
-            )
-
-        if self._trend_score >= trend_threshold or (trend_would_block and self._paper_mode and breakout.direction):
+        if self._trend_score >= trend_threshold:
             signal = self._enter_trend(breakout, spot)
             if signal:
                 self._decision_logger.log(self._build_snapshot(
@@ -1463,13 +1394,7 @@ class PortfolioStrategy(BaseStrategy):
         now = self.ctx.clock.now()
         dte = (self._expiry - now.date()).days if self._expiry else 99
         if dte <= 1 and now.weekday() == 0 and now.time() >= time(14, 30):
-            if not self._paper_mode:
-                return self._exit_premium("Weekly time exit: Mon 2:30 PM, DTE=1 (gamma risk)")
-            else:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_WEEKLY_TIME_EXIT",
-                    f"[{self.strategy_id}] [SHADOW_BLOCK] Would exit: weekly time stop Mon 2:30 PM",
-                )
+            return self._exit_premium("Weekly time exit: Mon 2:30 PM, DTE=1 (gamma risk)")
 
         short_cost = self.ctx.get_ltp(self._short_ce_token) + self.ctx.get_ltp(self._short_pe_token)
         if self._prem_mode == "iron_condor" and self._long_ce_token:

@@ -165,18 +165,11 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
         )
         if score < 60:
-            if self._paper_mode:
-                self._log_skip_throttled(
-                    "SHADOW_BLOCK_SCORE",
-                    f"[SHADOW_BLOCK] strategy={self.strategy_id} score={score}/100 "
-                    f"< 60 — proceeding anyway (paper mode)",
-                )
-            else:
-                self._log_skip_throttled(
-                    "ENTRY_SKIP_SCORE",
-                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
-                )
-                return None
+            self._log_skip_throttled(
+                "ENTRY_SKIP_SCORE",
+                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
+            )
+            return None
 
         # Get M5 candles for breakout detection
         spot_token = self._find_spot_token()
@@ -210,17 +203,11 @@ class TrendDebitSpreadStrategy(BaseStrategy):
             regime_label = regime.regime.value
             regime_confirms = regime.regime == MarketRegime.TRENDING
             if not regime_confirms:
-                if self._paper_mode:
-                    logger.info(
-                        f"[{self.strategy_id}] [SHADOW_BLOCK] Breakout detected but regime={regime_label} "
-                        f"(not TRENDING) — entering anyway (paper mode)"
-                    )
-                else:
-                    logger.info(
-                        f"[{self.strategy_id}] Breakout {breakout.direction} blocked: "
-                        f"regime={regime_label} (not TRENDING)"
-                    )
-                    return None
+                logger.info(
+                    f"[{self.strategy_id}] Breakout {breakout.direction} blocked: "
+                    f"regime={regime_label} (not TRENDING)"
+                )
+                return None
 
         # OI confirmation
         oi_confirmed = True
@@ -336,8 +323,8 @@ class TrendDebitSpreadStrategy(BaseStrategy):
         # Minimum debit check — reject near-worthless expiry-day spreads
         if self._entry_debit < Decimal("10"):
             logger.info(
-                f"[{self.strategy_id}] [SHADOW_BLOCK] Debit too low ({self._entry_debit:.2f}) "
-                f"— likely expiry day, skipping"
+                f"[{self.strategy_id}] Entry skipped: debit too low ({self._entry_debit:.2f}) "
+                f"— likely expiry day"
             )
             return None
 
