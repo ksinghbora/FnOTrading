@@ -12,7 +12,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import msgspec
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from src.core.types import (
     InstrumentType,
@@ -125,6 +125,14 @@ class OptionData(BaseModel):
     oi: int = 0
     greeks: Greeks = Field(default_factory=Greeks)
 
+    @field_serializer("greeks")
+    def _serialize_greeks(self, v: Greeks) -> dict:
+        # msgspec.Struct doesn't have model_dump; manual serialization for
+        # pydantic to_dict / model_dump_json compatibility (API responses,
+        # decision-log JSON columns, WebSocket frames).
+        return {"delta": v.delta, "gamma": v.gamma, "theta": v.theta,
+                "vega": v.vega, "rho": v.rho, "iv": v.iv}
+
 
 class OptionChainEntry(BaseModel):
     """A single strike in the option chain with CE and PE data."""
@@ -228,6 +236,11 @@ class Position(BaseModel):
     pnl: Decimal = Decimal("0")
     product: ProductType = ProductType.NRML
     greeks: Greeks = Field(default_factory=Greeks)
+
+    @field_serializer("greeks")
+    def _serialize_greeks(self, v: Greeks) -> dict:
+        return {"delta": v.delta, "gamma": v.gamma, "theta": v.theta,
+                "vega": v.vega, "rho": v.rho, "iv": v.iv}
 
 
 class PnL(BaseModel):
