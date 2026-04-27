@@ -167,35 +167,55 @@ class OrchestratorStrategy(BaseStrategy):
             scores.items(),
             key=lambda kv: (-kv[1], order.index(kv[0]) if kv[0] in order else 99),
         )
-        if not ranked:
-            return None
-        best_name, best_score = ranked[0]
+        # Filter to eligible (score >= threshold)
+        eligible = [(name, s) for name, s in ranked if s >= self.params.min_score_to_trade]
 
-        if best_score < self.params.min_score_to_trade:
-            # No candidate strong enough this tick. Caller logs only every Nth tick
-            # to avoid spam — the throttle dedup handles that.
+        if not eligible:
+            best_pair = ranked[0] if ranked else ("none", 0)
             self._log_skip_throttled(
                 "ORCH_NO_CANDIDATE",
                 f"[{self.strategy_id}] no child scored >= {self.params.min_score_to_trade} "
-                f"(best={best_name}@{best_score})",
+                f"(best={best_pair[0]}@{best_pair[1]})",
             )
             return None
 
-        # ── Phase 3: route to the best child ──
-        winner = self._children[best_name]
-        try:
-            signal = await winner.on_tick(tick)
-        except Exception as e:
-            logger.error(f"[{self.strategy_id}] selected child '{best_name}' on_tick errored: {e}")
-            return None
+        # ── Phase 3: route to the best eligible child, fall back to next-best
+        # if it returns None (e.g., a child's hard filter blocks entry despite
+        # the score being above threshold — common cause: thin chain, missing
+        # wing strikes, expiry-day block). The first child to emit a non-None
+        # signal wins the slot. Without this fallback, the orchestrator gets
+        # stuck on the highest-scoring child even when its data conditions
+        # prevent entry, and other eligible children never get a chance.
+        for name, score in eligible:
+            child = self._children[name]
+            try:
+                signal = await child.on_tick(tick)
+            except Exception as e:
+                logger.error(f"[{self.strategy_id}] child '{name}' on_tick errored: {e}")
+                continue
+            if signal is None:
+                # Child rejected this tick (filter blocked, no fill, etc.) — try next eligible
+                self._log_skip_throttled(
+                    f"ORCH_FALLBACK_{name}",
+                    f"[{self.strategy_id}] '{name}' (score={score}) returned None — trying next eligible",
+                )
+                continue
+            # Got a real signal — claim the slot if it's an entry
+            if signal.signal_type == SignalType.ENTRY:
+                self._active_child = name
+                logger.info(
+                    f"[{self.strategy_id}] selected '{name}' (score={score}) — "
+                    f"position now active under this child"
+                )
+            return signal
 
-        if signal is not None and signal.signal_type == SignalType.ENTRY:
-            self._active_child = best_name
-            logger.info(
-                f"[{self.strategy_id}] selected '{best_name}' (score={best_score}) — "
-                f"position now active under this child"
-            )
-        return signal
+        # All eligible children returned None this tick
+        self._log_skip_throttled(
+            "ORCH_ALL_REJECTED",
+            f"[{self.strategy_id}] all {len(eligible)} eligible children returned None "
+            f"(best score was {eligible[0][1]} for {eligible[0][0]})",
+        )
+        return None
 
     def evaluate_score(self) -> int:
         """Orchestrator's own score = best child's score. Used if this

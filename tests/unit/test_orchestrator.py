@@ -232,6 +232,76 @@ async def test_orchestrator_routes_only_to_active_child_once_position_held():
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_falls_back_when_top_child_returns_none():
+    """If the highest-scoring eligible child returns None (e.g., its hard
+    filters block entry despite a high score), the orchestrator must try
+    the NEXT-highest eligible child rather than giving up. Prevents the
+    "stuck on a failing dominant child" pattern observed in Phase 3c v1."""
+    _ensure_imported()
+    from src.core.models import Signal
+    from src.core.types import SignalType
+    from src.strategy.registry import create_strategy
+
+    o = create_strategy(
+        "orchestrator",
+        strategy_id="orch_fallback",
+        params={"children": ["iron_condor", "short_strangle"]},
+    )
+    o.set_context(_make_minimal_ctx())
+    await o.on_start()
+
+    # IC scores higher but returns None (e.g., wing not in chain).
+    # Strangle scores lower but produces a valid signal.
+    o._children["iron_condor"].evaluate_score = lambda: 80
+    o._children["short_strangle"].evaluate_score = lambda: 65
+    o._children["iron_condor"].on_tick = AsyncMock(return_value=None)  # blocked
+    sg_signal = Signal(
+        strategy_id="sg_dummy",
+        signal_type=SignalType.ENTRY,
+        legs=[],
+        reason="fallback",
+    )
+    o._children["short_strangle"].on_tick = AsyncMock(return_value=sg_signal)
+
+    tick = MagicMock()
+    result = await o.on_tick(tick)
+
+    o._children["iron_condor"].on_tick.assert_awaited_once()
+    o._children["short_strangle"].on_tick.assert_awaited_once()
+    assert result is sg_signal
+    # Strangle won the slot via fallback
+    assert o._active_child == "short_strangle"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_returns_none_when_all_eligible_reject():
+    """If every eligible child returns None this tick, the orchestrator
+    yields None — no slot taken — and is free to retry next tick."""
+    _ensure_imported()
+    from src.strategy.registry import create_strategy
+
+    o = create_strategy(
+        "orchestrator",
+        strategy_id="orch_all_reject",
+        params={"children": ["iron_condor", "short_strangle"]},
+    )
+    o.set_context(_make_minimal_ctx())
+    await o.on_start()
+
+    o._children["iron_condor"].evaluate_score = lambda: 80
+    o._children["short_strangle"].evaluate_score = lambda: 70
+    o._children["iron_condor"].on_tick = AsyncMock(return_value=None)
+    o._children["short_strangle"].on_tick = AsyncMock(return_value=None)
+
+    result = await o.on_tick(MagicMock())
+
+    o._children["iron_condor"].on_tick.assert_awaited_once()
+    o._children["short_strangle"].on_tick.assert_awaited_once()
+    assert result is None
+    assert o._active_child is None  # slot stays open for next tick
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_releases_slot_on_active_child_exit():
     _ensure_imported()
     from src.core.models import Signal
