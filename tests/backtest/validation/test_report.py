@@ -150,7 +150,7 @@ def test_evaluate_gates_all_pass() -> None:
         assert passed, f"gate {name} unexpectedly failed: {reason}"
 
 
-def test_evaluate_gates_cpcv_stability_fail() -> None:
+def test_evaluate_gates_cpcv_median_sharpe_fail() -> None:
     gates = evaluate_gates(
         cpcv_result=_failing_cpcv(),
         wf_report=_wf(median_decay=0.2, frac_pos=0.8),
@@ -158,9 +158,62 @@ def test_evaluate_gates_cpcv_stability_fail() -> None:
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    assert gates["cpcv_stability"][0] is False
+    # Median Sharpe in _failing_cpcv() is ~-0.2 → fails > 0.3 threshold
+    assert gates["cpcv_median_sharpe"][0] is False
     # The failing cpcv has pbo=0.7 → should also fail cpcv_pbo
     assert gates["cpcv_pbo"][0] is False
+
+
+def test_evaluate_gates_dsr_dropped() -> None:
+    """DSR was dropped as a hard gate on Apr 27 2026 — must not appear
+    in the gate table even when the run would otherwise pass DSR."""
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert "dsr" not in gates
+    assert "cpcv_stability" not in gates  # renamed to cpcv_median_sharpe
+
+
+def test_evaluate_gates_cpcv_median_borderline() -> None:
+    """Median Sharpe between 0.3 and 0.5 — would have failed the old
+    cpcv_stability (>0.5) gate but passes the relaxed >0.3 floor."""
+    rng = np.random.default_rng(42)
+    dist = rng.normal(0.4, 0.2, size=40)
+    cpcv = {
+        "paths": [],
+        "sharpe_distribution": dist,
+        "sharpe_mean": float(dist.mean()),
+        "sharpe_median": float(np.median(dist)),
+        "sharpe_p05": float(np.percentile(dist, 5)),
+        "sharpe_p95": float(np.percentile(dist, 95)),
+        "pbo": 0.2,
+        "num_trades_mean": 80.0,
+    }
+    gates = evaluate_gates(
+        cpcv_result=cpcv,
+        wf_report=_wf(median_decay=0.2, frac_pos=0.7),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert gates["cpcv_median_sharpe"][0] is True
+
+
+def test_evaluate_gates_wf_coverage_borderline_60pct() -> None:
+    """WF coverage at 0.6 — would have failed the old >=0.7 threshold
+    but passes the relaxed 0.6 floor introduced Apr 27."""
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.6),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert gates["wf_coverage"][0] is True
 
 
 def test_evaluate_gates_pbo_warn_when_missing() -> None:

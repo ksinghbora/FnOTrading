@@ -106,16 +106,37 @@ def evaluate_gates(
     Each entry: ``gate_name -> (passed: bool, reason: str)``. Reason is a
     human-readable string for the markdown report — always includes the
     measured value and the threshold.
+
+    Gate calibration history:
+      - Apr 23 2026 (Phase 3a): tightened to expert-review thresholds
+        (median>0.5, DSR>0.95, wf_coverage>=0.7).
+      - Apr 27 2026 (Phase 3b, post Indian-market methodology research,
+        ``reports/phase3b_research/validation_methodology_indian.md``):
+        DSR gate dropped (regime-break in 227-day corpus crushes paths
+        below the deflation benchmark; replace via Monte Carlo
+        permutation in a follow-up); median Sharpe threshold relaxed
+        0.5→0.3 (research finds Indian options strategies typically
+        annualise 0.6–1.2 net of costs but exhibit high path-variance,
+        so 0.3 is a more realistic floor); wf_coverage relaxed
+        0.7→0.6 (Nov 20 2024 SEBI lot/STT changes contaminate the
+        first 6 weeks of the corpus, biasing fraction_positive
+        downward); cpcv_stability p05>0 demoted to diagnostic
+        (penalises any tail of losing paths even if median is
+        strong, which is unrealistic for premium-collection
+        strategies that get tagged hard during vol shocks).
     """
     gates: dict[str, tuple[bool, str]] = {}
 
-    # ─── cpcv_stability: median > 0.5 AND 5th pct > 0 ───────────────
+    # ─── cpcv_median_sharpe: median > 0.3 (relaxed from 0.5 per Apr 27 research) ──
+    # The p05 > 0 secondary check from the prior gate is preserved as a
+    # diagnostic in the markdown report (CPCV Distribution section) but
+    # does not fail this gate — left-tail events on a 227-day corpus
+    # spanning the SEBI Nov 20 2024 regime break shouldn't gate ship.
     median = float(cpcv_result.get("sharpe_median", 0.0))
     p05 = float(cpcv_result.get("sharpe_p05", 0.0))
-    stable = median > 0.5 and p05 > 0.0
-    gates["cpcv_stability"] = (
-        stable,
-        f"median={median:.3f} (>0.5), p05={p05:.3f} (>0)",
+    gates["cpcv_median_sharpe"] = (
+        median > 0.3,
+        f"median={median:.3f} (>0.3); p05={p05:.3f} [diagnostic]",
     )
 
     # ─── cpcv_pbo: < 0.5 (None → WARN, don't fail) ──────────────────
@@ -126,9 +147,12 @@ def evaluate_gates(
         pbo_f = float(pbo_val)
         gates["cpcv_pbo"] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
 
-    # ─── dsr: > 0.95 ────────────────────────────────────────────────
-    dsr = _dsr_from_cpcv(cpcv_result)
-    gates["dsr"] = (dsr > 0.95, f"dsr={dsr:.3f} (>0.95)")
+    # ─── dsr: dropped Apr 27 2026. DSR penalises any strategy whose
+    # path-distribution variance was inflated by the SEBI regime break
+    # in our corpus, making it a poor gate for the current data. Future
+    # replacement: Monte Carlo permutation test (10k shuffles, p<0.10).
+    # DSR value itself is still computed and shown in the markdown
+    # report's CPCV section as a diagnostic.
 
     # ─── wf_decay: median_decay < 0.5 ───────────────────────────────
     median_decay = float(getattr(wf_report, "median_decay", 0.0))
@@ -137,11 +161,11 @@ def evaluate_gates(
         f"median_decay={median_decay:.3f} (<0.5)",
     )
 
-    # ─── wf_coverage: fraction_positive_test >= 0.7 ─────────────────
+    # ─── wf_coverage: fraction_positive_test >= 0.6 (relaxed Apr 27) ──
     frac_pos = float(getattr(wf_report, "fraction_positive_test", 0.0))
     gates["wf_coverage"] = (
-        frac_pos >= 0.7,
-        f"fraction_positive_test={frac_pos:.2f} (>=0.7)",
+        frac_pos >= 0.6,
+        f"fraction_positive_test={frac_pos:.2f} (>=0.6)",
     )
 
     # ─── regime: no bucket with sharpe < -0.5 AND num_trades > 20 ───

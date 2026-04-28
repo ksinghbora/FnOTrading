@@ -7,9 +7,9 @@ the contract: same seed → bit-identical path metrics regardless of how
 many subprocesses ran them.
 
 Why this matters:
-- DSR / cpcv_stability gates depend on the Sharpe distribution. A
-  worker count that quietly shifts the distribution would silently
-  change verdicts.
+- The cpcv_median_sharpe gate (and pre-Apr 27 the DSR / cpcv_stability
+  gates) depend on the Sharpe distribution. A worker count that quietly
+  shifts the distribution would silently change verdicts.
 - Running in parallel must be a pure speedup, never a behaviour change.
 - Per-path RNG seed = ``base_seed * 2654435761 + path_id`` (Knuth
   multiplicative hash). Workers derive their seed from the path id
