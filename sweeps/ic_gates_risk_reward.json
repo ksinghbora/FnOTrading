@@ -1,0 +1,14 @@
+{
+  "_comment": "Sweep 2 — wing width x stop-loss interaction. Wing width sets max-loss per IC; stop-loss sets when we cut a losing position before max-loss is realised. The default 8x40 combo (400pt wing, 40% premium-up stop) gave -3.90 Sharpe on gdfl_v2. Tighter stops should reduce per-trade loss; wider wings increase credit but also max-loss. Cartesian 4x4 = 16 configs.",
+  "base_params": {
+    "vix_entry_min": 14.0,
+    "vix_entry_max": 25.0,
+    "short_call_delta": 0.15,
+    "short_put_delta": -0.15,
+    "profit_target_pct": 25.0
+  },
+  "grid": {
+    "wing_width_strikes": [4, 6, 8, 10],
+    "stop_loss_pct": [25.0, 35.0, 50.0, 75.0]
+  }
+}

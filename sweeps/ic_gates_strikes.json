@@ -1,0 +1,17 @@
+{
+  "_comment": "Sweep 3 — short-leg delta. Default 0.15 puts shorts ~1.5 sigma OTM. Lower delta (0.10) = further OTM = lower premium but higher win-rate; higher delta (0.25, 0.30) = closer to ATM = more credit but more breaches. Critical for gdfl_v2 where the wider chain may have shifted the actual delta=0.15 strike. Cartesian 4x4 (CE x PE deltas, kept symmetric) = 4 configs only since deltas are linked.",
+  "base_params": {
+    "vix_entry_min": 14.0,
+    "vix_entry_max": 25.0,
+    "wing_width_strikes": 8,
+    "stop_loss_pct": 40.0,
+    "profit_target_pct": 25.0
+  },
+  "configs": [
+    {"name": "delta_0.10", "short_call_delta": 0.10, "short_put_delta": -0.10},
+    {"name": "delta_0.15", "short_call_delta": 0.15, "short_put_delta": -0.15},
+    {"name": "delta_0.20", "short_call_delta": 0.20, "short_put_delta": -0.20},
+    {"name": "delta_0.25", "short_call_delta": 0.25, "short_put_delta": -0.25},
+    {"name": "delta_0.30", "short_call_delta": 0.30, "short_put_delta": -0.30}
+  ]
+}
