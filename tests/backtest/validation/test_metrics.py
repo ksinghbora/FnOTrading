@@ -13,6 +13,7 @@ from src.backtest.validation.metrics import (
     _annualized_sharpe,
     deflated_sharpe_ratio,
     min_track_record_length,
+    monte_carlo_skill_pvalue,
     pbo,
     probabilistic_sharpe_ratio,
     stationary_bootstrap_sharpe_ci,
@@ -109,3 +110,61 @@ def test_bootstrap_covers_point_estimate() -> None:
     point = _annualized_sharpe(returns)
     low, _, high = stationary_bootstrap_sharpe_ci(returns, 5, 1000, 0.95, seed=5)
     assert low <= point <= high
+
+
+# ─── Monte Carlo skill p-value (replaces dropped DSR gate) ───────────
+
+
+def test_mc_pvalue_reproducible() -> None:
+    rng = np.random.default_rng(11)
+    pnl = rng.normal(100.0, 1000.0, size=120)
+    p1 = monte_carlo_skill_pvalue(pnl, n_perm=2000, block_size_mean=15.0, seed=42)
+    p2 = monte_carlo_skill_pvalue(pnl, n_perm=2000, block_size_mean=15.0, seed=42)
+    assert p1 == p2
+
+
+def test_mc_pvalue_strong_skill_rejects_null() -> None:
+    """Daily PnL with strong positive drift (mean=200, sd=1000, n=200)
+    should produce p << 0.10 — null of zero-mean returns is strongly
+    rejected."""
+    rng = np.random.default_rng(0)
+    pnl = rng.normal(200.0, 1000.0, size=200)
+    p = monte_carlo_skill_pvalue(pnl, n_perm=5000, block_size_mean=15.0, seed=1)
+    assert p < 0.05
+
+
+def test_mc_pvalue_negative_drift_does_not_reject_null() -> None:
+    """Negative-drift PnL cannot beat the zero-mean null — p ~ 1.0."""
+    rng = np.random.default_rng(2)
+    pnl = rng.normal(-150.0, 1000.0, size=200)
+    p = monte_carlo_skill_pvalue(pnl, n_perm=5000, block_size_mean=15.0, seed=3)
+    assert p > 0.90
+
+
+def test_mc_pvalue_degenerate_inputs() -> None:
+    """Empty / single-point / zero-variance series → p=1.0 (no skill)."""
+    assert monte_carlo_skill_pvalue(np.array([]), seed=1) == 1.0
+    assert monte_carlo_skill_pvalue(np.array([100.0]), seed=2) == 1.0
+    assert monte_carlo_skill_pvalue(np.zeros(50), seed=3) == 1.0
+
+
+def test_mc_pvalue_benchmark_lifts_null() -> None:
+    """The benchmark parameter is in daily-PnL ₹ units (it shifts the
+    null mean before bootstrapping). Raising it from 0 toward the
+    observed sample mean should monotonically push p higher — the null
+    distribution moves into and through the observed-Sharpe region."""
+    rng = np.random.default_rng(4)
+    pnl = rng.normal(150.0, 1000.0, size=200)
+    p_zero = monte_carlo_skill_pvalue(
+        pnl, n_perm=2000, block_size_mean=15.0, benchmark=0.0, seed=5
+    )
+    p_half = monte_carlo_skill_pvalue(
+        pnl, n_perm=2000, block_size_mean=15.0, benchmark=75.0, seed=5
+    )
+    p_match = monte_carlo_skill_pvalue(
+        pnl, n_perm=2000, block_size_mean=15.0, benchmark=150.0, seed=5
+    )
+    # Strictly monotone — raising the bar must not lower p
+    assert p_zero <= p_half <= p_match
+    # And the bar at the observed mean is meaningfully different from zero
+    assert p_match > p_zero + 0.05

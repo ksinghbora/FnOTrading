@@ -216,6 +216,105 @@ def test_evaluate_gates_wf_coverage_borderline_60pct() -> None:
     assert gates["wf_coverage"][0] is True
 
 
+# ─── MC permutation + block bootstrap CI gates (Apr 27 DSR replacement) ──
+
+
+def _strong_skill_pnl(seed: int = 0, n: int = 200) -> np.ndarray:
+    """Daily PnL with clear positive drift — should clear both new gates.
+
+    mean=300, sd=600 → annualised Sharpe ≈ 7.9 in expectation, with
+    standard error of the sample mean ≈ 42 (n=200). At this signal-to-
+    noise ratio the sample Sharpe is reliably ≥ 6 across seeds, so the
+    test isn't sensitive to seed choice the way a borderline case
+    would be."""
+    rng = np.random.default_rng(seed)
+    return rng.normal(300.0, 600.0, size=n)
+
+
+def _flat_pnl(seed: int = 0, n: int = 200) -> np.ndarray:
+    """Daily PnL with negative drift — should fail both new gates."""
+    rng = np.random.default_rng(seed)
+    return rng.normal(-100.0, 800.0, size=n)
+
+
+def test_evaluate_gates_no_daily_pnl_omits_new_gates() -> None:
+    """Backwards-compat: existing call sites that don't pass daily_pnl
+    must not see the MC / bootstrap-CI keys at all."""
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert "mc_skill_pvalue" not in gates
+    assert "bootstrap_sharpe_ci" not in gates
+
+
+def test_evaluate_gates_mc_and_bootstrap_pass_on_strong_pnl() -> None:
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+        daily_pnl=_strong_skill_pnl(seed=10),
+    )
+    assert gates["mc_skill_pvalue"][0] is True
+    assert gates["bootstrap_sharpe_ci"][0] is True
+    assert "p=" in gates["mc_skill_pvalue"][1]
+    assert "90%-CI=" in gates["bootstrap_sharpe_ci"][1]
+
+
+def test_evaluate_gates_mc_and_bootstrap_fail_on_flat_pnl() -> None:
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+        daily_pnl=_flat_pnl(seed=11),
+    )
+    assert gates["mc_skill_pvalue"][0] is False
+    assert gates["bootstrap_sharpe_ci"][0] is False
+
+
+def test_evaluate_gates_short_daily_pnl_warns_not_fails() -> None:
+    """A daily_pnl series shorter than 30 days is not informative for
+    a stationary bootstrap — gate should WARN (passed=True) with a
+    reason that says ``WARN``."""
+    rng = np.random.default_rng(1)
+    short = rng.normal(0.0, 1000.0, size=20)
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+        daily_pnl=short,
+    )
+    assert gates["mc_skill_pvalue"][0] is True
+    assert "WARN" in gates["mc_skill_pvalue"][1]
+    assert gates["bootstrap_sharpe_ci"][0] is True
+    assert "WARN" in gates["bootstrap_sharpe_ci"][1]
+
+
+def test_evaluate_gates_accepts_list_daily_pnl() -> None:
+    """Accept plain ``list[float]`` as well as ``np.ndarray`` so callers
+    don't need to import numpy just to pass the daily PnL through."""
+    pnl_list = list(_strong_skill_pnl(seed=12))
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+        daily_pnl=pnl_list,
+    )
+    assert gates["mc_skill_pvalue"][0] is True
+    assert gates["bootstrap_sharpe_ci"][0] is True
+
+
 def test_evaluate_gates_pbo_warn_when_missing() -> None:
     cpcv = _passing_cpcv()
     cpcv["pbo"] = None

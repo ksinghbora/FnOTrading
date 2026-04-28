@@ -325,7 +325,19 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     full_result = await runner(combined, baseline_params)
     trades = list(full_result.get("trades", []))
-    logger.info("[VALIDATE] collected %d trades", len(trades))
+    # Daily-PnL series for the MC permutation + block-bootstrap-CI gates
+    # added Apr 27 2026 alongside the DSR drop. The engine emits one row
+    # per session in ``daily_results``; we read the ``pnl`` field which
+    # is the end-of-day P&L net of charges (₹).
+    daily_pnl_series = [
+        float(d.get("pnl", 0.0))
+        for d in full_result.get("daily_results", [])
+    ]
+    logger.info(
+        "[VALIDATE] collected %d trades, %d daily-PnL points",
+        len(trades),
+        len(daily_pnl_series),
+    )
 
     # ─── Regime stratification (must run AFTER full-window write) ──
     decisions = loader.load_decisions(combined)
@@ -364,6 +376,7 @@ async def main_async(args: argparse.Namespace) -> int:
         regime_stats=regime_stats,
         cost_curve=cost_curve,
         capacity_df=capacity_df,
+        daily_pnl=daily_pnl_series,
     )
     final_verdict = all(passed for passed, _ in gates.values())
 

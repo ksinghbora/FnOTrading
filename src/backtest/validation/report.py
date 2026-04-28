@@ -22,8 +22,21 @@ import numpy as np
 
 from src.backtest.validation.metrics import (
     deflated_sharpe_ratio,
+    monte_carlo_skill_pvalue,
     probabilistic_sharpe_ratio,
+    stationary_bootstrap_sharpe_ci,
 )
+
+# Apr 27 2026 — replacement gates for the dropped DSR. Block size 15 ≈
+# 3 trading weeks; persists vol-regime autocorrelation through the
+# resample. n=10k is the López de Prado significance-test floor; runs
+# in ~0.25s per strategy, dwarfed by the surrounding backtest.
+_BOOTSTRAP_BLOCK_DAYS = 15.0
+_BOOTSTRAP_N = 10_000
+_BOOTSTRAP_SEED = 20260427  # deterministic across re-runs of the same data
+_MC_PVALUE_THRESHOLD = 0.10
+_BOOTSTRAP_CI_LOWER_FLOOR = -0.1
+_BOOTSTRAP_CONFIDENCE = 0.90
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -100,6 +113,7 @@ def evaluate_gates(
     regime_stats: dict[str, "RegimeStats"],
     cost_curve: dict[float, dict],
     capacity_df: "pd.DataFrame | None",
+    daily_pnl: "np.ndarray | list[float] | None" = None,
 ) -> dict[str, tuple[bool, str]]:
     """Return the gate table per the validation spec.
 
@@ -187,6 +201,53 @@ def evaluate_gates(
     # ─── capacity: pnl_per_lot non-declining up to 300 lots ─────────
     cap_ok, cap_reason = _eval_capacity_gate(capacity_df)
     gates["capacity"] = (cap_ok, cap_reason)
+
+    # ─── mc_skill_pvalue + bootstrap_sharpe_ci ──────────────────────
+    # Both gates need the raw daily-PnL series from the full-window run
+    # (extracted in scripts/validate_strategy.py from
+    # ``full_result['daily_results']``). When unavailable (e.g.
+    # narrow-scope unit tests that pass only the aggregate cpcv/wf
+    # inputs), the gates are skipped — they neither pass nor fail —
+    # which keeps test ergonomics untouched while ensuring real
+    # validation runs always exercise them.
+    if daily_pnl is not None:
+        pnl_arr = np.asarray(daily_pnl, dtype=float)
+        if pnl_arr.size >= 30:
+            mc_p = monte_carlo_skill_pvalue(
+                pnl_arr,
+                block_size_mean=_BOOTSTRAP_BLOCK_DAYS,
+                n_perm=_BOOTSTRAP_N,
+                benchmark=0.0,
+                seed=_BOOTSTRAP_SEED,
+            )
+            gates["mc_skill_pvalue"] = (
+                mc_p < _MC_PVALUE_THRESHOLD,
+                f"p={mc_p:.4f} (<{_MC_PVALUE_THRESHOLD}; "
+                f"{_BOOTSTRAP_N} stationary-bootstrap perms, "
+                f"~{int(_BOOTSTRAP_BLOCK_DAYS)}d blocks)",
+            )
+            ci_low, _ci_med, ci_high = stationary_bootstrap_sharpe_ci(
+                pnl_arr,
+                block_size_mean=_BOOTSTRAP_BLOCK_DAYS,
+                n_boot=_BOOTSTRAP_N,
+                confidence=_BOOTSTRAP_CONFIDENCE,
+                seed=_BOOTSTRAP_SEED,
+            )
+            gates["bootstrap_sharpe_ci"] = (
+                ci_low > _BOOTSTRAP_CI_LOWER_FLOOR,
+                f"90%-CI=[{ci_low:+.3f}, {ci_high:+.3f}] "
+                f"(lower>{_BOOTSTRAP_CI_LOWER_FLOOR:+.1f})",
+            )
+        else:
+            # Too few days to be meaningful (< 1 month). WARN, not FAIL.
+            gates["mc_skill_pvalue"] = (
+                True,
+                f"daily_pnl has {pnl_arr.size} days (<30) — WARN, gate skipped",
+            )
+            gates["bootstrap_sharpe_ci"] = (
+                True,
+                f"daily_pnl has {pnl_arr.size} days (<30) — WARN, gate skipped",
+            )
 
     return gates
 

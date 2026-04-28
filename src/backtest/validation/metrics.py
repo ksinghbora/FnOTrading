@@ -117,6 +117,28 @@ def pbo(train_sharpes: np.ndarray, test_sharpes: np.ndarray) -> float:
     return float(np.mean(logits <= 0.0))
 
 
+def _stationary_bootstrap_indices(n: int, p: float, rng: np.random.Generator) -> np.ndarray:
+    """One Politis & Romano stationary-bootstrap index sequence of length n.
+
+    With probability p each step the chain restarts at a uniform-random
+    index (geometric block lengths, mean = 1/p); otherwise it advances by
+    one position (wrapping). Vectorised inner loops are still O(n) but
+    the Python-level work is bounded by a single pass.
+    """
+    idx = np.empty(n, dtype=np.int64)
+    i = int(rng.integers(0, n))
+    idx[0] = i
+    restarts = rng.random(n - 1) < p
+    starts = rng.integers(0, n, size=n - 1)
+    for t in range(1, n):
+        if restarts[t - 1]:
+            i = int(starts[t - 1])
+        else:
+            i = (i + 1) % n
+        idx[t] = i
+    return idx
+
+
 def stationary_bootstrap_sharpe_ci(
     returns: np.ndarray,
     block_size_mean: float = 5.0,
@@ -129,29 +151,66 @@ def stationary_bootstrap_sharpe_ci(
     n = r.size
     if n < 2:
         return (0.0, 0.0, 0.0)
-    if block_size_mean <= 1.0:
-        p = 1.0
-    else:
-        p = 1.0 / float(block_size_mean)
+    p = 1.0 if block_size_mean <= 1.0 else 1.0 / float(block_size_mean)
     rng = np.random.default_rng(seed)
     sharpes = np.empty(n_boot, dtype=float)
     for b in range(n_boot):
-        idx = np.empty(n, dtype=np.int64)
-        i = int(rng.integers(0, n))
-        idx[0] = i
-        # Vectorize restart coin flips and step increments for speed
-        restarts = rng.random(n - 1) < p
-        starts = rng.integers(0, n, size=n - 1)
-        for t in range(1, n):
-            if restarts[t - 1]:
-                i = int(starts[t - 1])
-            else:
-                i = (i + 1) % n
-            idx[t] = i
-        sample = r[idx]
+        sample = r[_stationary_bootstrap_indices(n, p, rng)]
         sharpes[b] = _annualized_sharpe(sample)
     alpha = (1.0 - confidence) / 2.0
     low = float(np.percentile(sharpes, 100.0 * alpha))
     med = float(np.percentile(sharpes, 50.0))
     high = float(np.percentile(sharpes, 100.0 * (1.0 - alpha)))
     return (low, med, high)
+
+
+def monte_carlo_skill_pvalue(
+    returns: np.ndarray,
+    block_size_mean: float = 15.0,
+    n_perm: int = 10000,
+    benchmark: float = 0.0,
+    seed: int | None = None,
+) -> float:
+    """Block-bootstrap test of the null H₀: annualized Sharpe = benchmark.
+
+    Algorithm (Politis & Romano stationary bootstrap, applied as a
+    significance test rather than a CI estimator):
+
+    1. Centre the daily-PnL series so its sample mean equals
+       ``benchmark`` — this realises the null distribution while
+       preserving the autocorrelation structure of the original data
+       (3-week-ish blocks for Indian options, where vol regimes persist
+       for several sessions).
+    2. Resample the centred series ``n_perm`` times using stationary-
+       bootstrap indices with mean block length ``block_size_mean``.
+       Compute annualised Sharpe per resample → empirical null
+       distribution.
+    3. p-value = fraction of bootstrap Sharpes that match-or-exceed the
+       observed Sharpe. Small p ⇒ observed Sharpe is unlikely under
+       the null ⇒ evidence of skill.
+
+    Use as a replacement for the dropped DSR gate. Threshold at p < 0.10
+    is the López de Prado-recommended floor for a single-strategy
+    significance test; tighten to 0.05 once the corpus extends past the
+    Nov 2024 SEBI regime break.
+
+    Returns 1.0 (no skill) for degenerate inputs (n < 2, zero variance).
+    """
+    r = np.asarray(returns, dtype=float)
+    n = r.size
+    if n < 2:
+        return 1.0
+    sr_obs = _annualized_sharpe(r)
+    # Centre under the null: sample mean → 0 if benchmark=0.
+    centred = r - r.mean() + benchmark
+    s = centred.std(ddof=1)
+    if s == 0 or not np.isfinite(s):
+        return 1.0
+    p = 1.0 if block_size_mean <= 1.0 else 1.0 / float(block_size_mean)
+    rng = np.random.default_rng(seed)
+    n_ge = 0
+    for _ in range(n_perm):
+        sample = centred[_stationary_bootstrap_indices(n, p, rng)]
+        if _annualized_sharpe(sample) >= sr_obs:
+            n_ge += 1
+    return float(n_ge) / float(n_perm)
