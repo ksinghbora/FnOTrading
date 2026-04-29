@@ -63,6 +63,13 @@ class ShortStrangleStrategy(BaseStrategy):
         self._pe_strike: float = 0
         self._entry_premium: Decimal = Decimal("0")
         self._peak_premium: Decimal = Decimal("0")  # For trailing stop
+        # Apr 29 2026 Phase 1C: per-leg entry fill prices (₹/share). The
+        # strategy SOLD each short at bid; per-leg fills let the
+        # adjustment path attribute the rolled leg's realised P&L
+        # against its own entry basis instead of against the post-roll
+        # _entry_premium (which only reflects the new strike).
+        self._ce_entry_fill: float = 0.0
+        self._pe_entry_fill: float = 0.0
         self._expiry: date | None = None
         self._lot_size = LOT_SIZES.get(params.underlying, 75)
         self._quantity = params.quantity_lots * self._lot_size
@@ -247,6 +254,10 @@ class ShortStrangleStrategy(BaseStrategy):
         pe_ltp = self.ctx.get_ltp(self._pe_token)  # logging only
         self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
         self._peak_premium = self._entry_premium
+        # Apr 29 2026 Phase 1C: snapshot per-leg entry fills for ADJUST
+        # attribution. Both legs SELL at bid.
+        self._ce_entry_fill, _ = self._bid_ask_for(self._ce_token)
+        self._pe_entry_fill, _ = self._bid_ask_for(self._pe_token)
 
         # F1: LIMIT-at-mid. If either leg can't be priced, abort entry.
         ce_leg = self._build_option_leg(
@@ -421,6 +432,13 @@ class ShortStrangleStrategy(BaseStrategy):
                 logger.debug(f"[{self.strategy_id}] CE roll skipped: same strike")
                 return None
 
+            # Apr 29 2026 Phase 1C: snapshot the OLD CE close fill BEFORE
+            # the token is replaced. BUY-to-close pays ask; realized
+            # P&L = (sold-at-bid - bought-at-ask) × quantity. The old
+            # _ce_entry_fill is the entry-time bid for THIS leg.
+            _, close_old_ce_ask = self._bid_ask_for(self._ce_token)
+            ce_realized_pnl = (self._ce_entry_fill - close_old_ce_ask) * self._quantity
+
             # F1: LIMIT-at-mid for both close + open legs of the roll.
             close_leg = self._build_option_leg(
                 self._ce_symbol, self._ce_token, OrderSide.BUY, self._quantity,
@@ -440,6 +458,9 @@ class ShortStrangleStrategy(BaseStrategy):
                 return None
             legs.append(close_leg)
             legs.append(open_leg)
+            # Refresh CE entry fill to the new strike's bid; PE basis
+            # untouched so a future EXIT or PE roll attributes correctly.
+            self._ce_entry_fill, _ = self._bid_ask_for(self._ce_token)
 
             logger.info(
                 f"[{self.strategy_id}] ROLL CE: {old_strike} -> {self._ce_strike} "
@@ -465,6 +486,11 @@ class ShortStrangleStrategy(BaseStrategy):
                 logger.debug(f"[{self.strategy_id}] PE roll skipped: same strike")
                 return None
 
+            # Apr 29 2026 Phase 1C: same realized-P&L capture as the CE
+            # branch — snapshot the close fill before the swap.
+            _, close_old_pe_ask = self._bid_ask_for(self._pe_token)
+            pe_realized_pnl = (self._pe_entry_fill - close_old_pe_ask) * self._quantity
+
             # F1: LIMIT-at-mid for both close + open legs of the roll.
             close_leg = self._build_option_leg(
                 self._pe_symbol, self._pe_token, OrderSide.BUY, self._quantity,
@@ -484,6 +510,8 @@ class ShortStrangleStrategy(BaseStrategy):
                 return None
             legs.append(close_leg)
             legs.append(open_leg)
+            # Refresh PE entry fill to new strike's bid; CE basis untouched.
+            self._pe_entry_fill, _ = self._bid_ask_for(self._pe_token)
 
             logger.info(
                 f"[{self.strategy_id}] ROLL PE: {old_strike} -> {self._pe_strike} "
@@ -493,11 +521,23 @@ class ShortStrangleStrategy(BaseStrategy):
         # Re-record entry premium after roll using REALISTIC fills, not
         # LTP — see _entry_fill_credit docstring + Apr 29 multi-model
         # audit (5/6 reviewers flagged this exact LTP-rebase pattern).
-        # Note: this still doesn't capture the closed-leg's realised
-        # roll P&L, only avoids further LTP fiction. Phase 1C will add
-        # ADJUST decision rows so the roll cost is auditable.
         self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
         self._peak_premium = self._entry_premium
+
+        # Apr 29 2026 Phase 1C: emit an ADJUST decision row so the roll's
+        # closed-leg realised P&L is captured under the active trade_id.
+        # The eventual EXIT computes outcome_pnl against the *post-roll*
+        # _entry_premium, so without this row the roll's P&L would be
+        # invisible to the decision log (lives only in broker.trades).
+        side_realized = ce_realized_pnl if leg_type == "CE" else pe_realized_pnl
+        self._log_adjust_decision(
+            leg="PREMIUM",
+            mode="strangle",
+            side_label=leg_type,
+            side_realized_pnl=float(side_realized),
+            new_entry_premium=float(self._entry_premium),
+        )
+
         self._adjustments_today += 1
         self._last_adjustment_time = self.ctx.clock.now().timestamp()
 

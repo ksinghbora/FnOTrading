@@ -65,6 +65,18 @@ class IronCondorStrategy(BaseStrategy):
         self._long_pe_strike: float = 0
         # Tracking
         self._entry_credit: Decimal = Decimal("0")
+        # Apr 29 2026 Phase 1C: per-leg entry fill prices (₹/share). The
+        # strategy SOLD short legs at bid and BOUGHT long legs at ask;
+        # ``_entry_credit`` aggregates these for the full 4-leg position.
+        # Per-leg fills are needed at adjustment time to attribute the
+        # closed-side's realised P&L against its OWN entry basis (rather
+        # than against the rebased post-roll _entry_credit which reflects
+        # the *new* legs). After a roll, only the rolled side's fills are
+        # updated; the un-touched side keeps its original entry basis.
+        self._short_ce_entry_fill: float = 0.0
+        self._short_pe_entry_fill: float = 0.0
+        self._long_ce_entry_fill: float = 0.0
+        self._long_pe_entry_fill: float = 0.0
         self._expiry: date | None = None
         self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
         self._quantity: int = params.quantity_lots * self._lot_size
@@ -389,6 +401,13 @@ class IronCondorStrategy(BaseStrategy):
         long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
         self._entry_credit = Decimal(str(round(self._entry_fill_credit(), 2)))
+        # Apr 29 2026 Phase 1C: snapshot per-leg entry fill prices so a
+        # later adjustment can attribute its closed-side realised P&L
+        # against the right basis. Shorts fill at bid, longs at ask.
+        self._short_ce_entry_fill, _ = self._bid_ask_for(self._short_ce_token)
+        self._short_pe_entry_fill, _ = self._bid_ask_for(self._short_pe_token)
+        _, self._long_ce_entry_fill = self._bid_ask_for(self._long_ce_token)
+        _, self._long_pe_entry_fill = self._bid_ask_for(self._long_pe_token)
 
         # F1: LIMIT-at-mid. Every leg must price — a missing wing turns the
         # IC into a naked short.
@@ -563,6 +582,16 @@ class IronCondorStrategy(BaseStrategy):
         if side == "call":
             # F1: LIMIT-at-mid on close legs. Token-only lookups via
             # _build_option_leg fall back to the feed's latest tick's bid/ask.
+            # Apr 29 2026 Phase 1C: snapshot the close-side fills BEFORE
+            # building the close legs so we can attribute the rolled-side's
+            # realised P&L to the ADJUST decision row. BUY-to-close pays
+            # ask on the short, SELL-to-close receives bid on the long.
+            _, close_short_ce_ask = self._bid_ask_for(self._short_ce_token)
+            close_long_ce_bid, _ = self._bid_ask_for(self._long_ce_token)
+            ce_side_close_debit = close_short_ce_ask - close_long_ce_bid
+            ce_side_entry_credit = self._short_ce_entry_fill - self._long_ce_entry_fill
+            ce_side_realized_pnl = (ce_side_entry_credit - ce_side_close_debit) * self._quantity
+
             close_old_short = self._build_option_leg(
                 self._short_ce_symbol, self._short_ce_token, OrderSide.BUY, self._quantity,
             )
@@ -635,6 +664,15 @@ class IronCondorStrategy(BaseStrategy):
 
         elif side == "put":
             # F1: LIMIT-at-mid on close legs.
+            # Apr 29 2026 Phase 1C: snapshot close-side fills before
+            # building legs so the closed-side realised P&L is captured
+            # in the ADJUST decision row. Mirror of the call branch above.
+            _, close_short_pe_ask = self._bid_ask_for(self._short_pe_token)
+            close_long_pe_bid, _ = self._bid_ask_for(self._long_pe_token)
+            pe_side_close_debit = close_short_pe_ask - close_long_pe_bid
+            pe_side_entry_credit = self._short_pe_entry_fill - self._long_pe_entry_fill
+            pe_side_realized_pnl = (pe_side_entry_credit - pe_side_close_debit) * self._quantity
+
             close_old_short = self._build_option_leg(
                 self._short_pe_symbol, self._short_pe_token, OrderSide.BUY, self._quantity,
             )
@@ -718,6 +756,17 @@ class IronCondorStrategy(BaseStrategy):
             self._long_pe_token, self._long_pe_symbol, self._long_pe_strike = old_long_pe_token, old_long_pe_symbol, old_long_pe_strike
             return None
 
+        # Refresh per-leg entry fills for the rolled side BEFORE
+        # recomputing the aggregate entry_credit. The un-rolled side
+        # keeps its original entry basis (so a future EXIT or second
+        # ADJUST attributes its P&L correctly).
+        if side == "call":
+            self._short_ce_entry_fill, _ = self._bid_ask_for(self._short_ce_token)
+            _, self._long_ce_entry_fill = self._bid_ask_for(self._long_ce_token)
+        else:
+            self._short_pe_entry_fill, _ = self._bid_ask_for(self._short_pe_token)
+            _, self._long_pe_entry_fill = self._bid_ask_for(self._long_pe_token)
+
         # Recalculate entry credit after adjustment using REALISTIC fills
         # (bid/ask), mirroring the initial-entry path at line ~414. The
         # pre-Apr-29 code re-read LTP here, silently re-introducing the
@@ -725,6 +774,27 @@ class IronCondorStrategy(BaseStrategy):
         # by 5/6 reviewers as the most-confident remaining bookkeeping bug
         # post f944986. See ``_entry_fill_credit`` docstring on this class.
         self._entry_credit = Decimal(str(round(self._entry_fill_credit(), 2)))
+
+        # Apr 29 2026 Phase 1C: emit an ADJUST decision row capturing the
+        # closed-side's realised P&L. Without this row, the eventual EXIT
+        # would compute outcome_pnl against the *post-roll* _entry_credit,
+        # making the adjusted side's realised P&L invisible to the
+        # decision log (it lives only in broker.trades). Downstream
+        # stratifiers can now sum ENTER + ADJUSTs + EXIT under one
+        # trade_id for full lifecycle attribution.
+        if side == "call":
+            side_realized = float(ce_side_realized_pnl)
+            side_label = "CE"
+        else:
+            side_realized = float(pe_side_realized_pnl)
+            side_label = "PE"
+        self._log_adjust_decision(
+            leg="PREMIUM",
+            mode="iron_condor",
+            side_label=side_label,
+            side_realized_pnl=side_realized,
+            new_entry_premium=float(self._entry_credit),
+        )
 
         self._last_adjustment_time = self.ctx.clock.now().timestamp()
         self._adjustments_today += 1

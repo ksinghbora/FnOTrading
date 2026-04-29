@@ -80,6 +80,13 @@ COLUMNS = [
     # NIFTY options. ENTER rows leave it 0 (charges only realise on
     # round-trip close).
     "charges",
+    # Apr 29 2026 Phase 1C: stable trade lifecycle id. Set on ENTER,
+    # propagated through any ADJUST rows, and re-stamped on EXIT.
+    # Replaces regime.py's fragile cumcount-based ENTER↔EXIT pairing
+    # (which assumed CSV row order = trade order — true today, broken
+    # the moment any ADJUST row interleaves). Empty on legacy rows so
+    # downstream consumers can fall back to cumcount when missing.
+    "trade_id",
 ]
 
 
@@ -162,6 +169,11 @@ class DecisionSnapshot:
     # PortfolioManager.charges). Populated on EXIT only — see COLUMNS
     # for rationale. Apr 29 2026 multi-model audit fix.
     charges: float = 0.0
+    # Stable trade lifecycle id (UUID4-derived, 8-char short form).
+    # Same value on the ENTER row, every ADJUST row for that trade,
+    # and the final EXIT row. Empty string for legacy rows / SKIPs.
+    # Apr 29 2026 Phase 1C — replaces regime.py's cumcount pairing.
+    trade_id: str = ""
 
     # Actual day outcome (backfilled end-of-day for ML training labels)
     actual_day_regime: str = ""        # Ground truth: RANGE_BOUND / CHOPPY / TRENDING

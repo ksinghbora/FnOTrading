@@ -62,6 +62,12 @@ class BaseStrategy(ABC):
         # decision-row schema is float and rounding noise is irrelevant
         # at the ~₹100s scale we're tracking.
         self._charges_at_entry: float = 0.0
+        # Apr 29 2026 Phase 1C: stable trade lifecycle id. Set on ENTER,
+        # propagated through ADJUST rows, re-stamped on EXIT, then
+        # cleared. Empty string outside of an active trade. Subclasses
+        # that emit ADJUST rows read ``self._current_trade_id`` to keep
+        # the same id across the lifecycle.
+        self._current_trade_id: str = ""
         # Per-(strategy, key) dedup state for entry-skip log throttling.
         # See _log_skip_throttled below for why this lives on the base —
         # without it, every structural skip (expiry day 0DTE, VIX gate,
@@ -1041,6 +1047,16 @@ class BaseStrategy(ABC):
                 # Reset for the next ENTER cycle
                 self._charges_at_entry = charges_now
 
+            # Apr 29 2026 Phase 1C: stable trade lifecycle id.
+            #   ENTER  → mint a fresh id (UUID4 short form)
+            #   ADJUST → reuse the active id (no change)
+            #   EXIT   → reuse the active id, then clear after the row
+            #            is built so the next ENTER starts a new trade
+            if decision == "ENTER":
+                import uuid
+                self._current_trade_id = uuid.uuid4().hex[:8]
+            trade_id_for_row = self._current_trade_id
+
             snap = DecisionSnapshot(
                 timestamp=now.isoformat(),
                 strategy_id=self.strategy_id,
@@ -1062,12 +1078,69 @@ class BaseStrategy(ABC):
                 outcome_pnl=outcome_pnl,
                 held_minutes=held_minutes,
                 charges=charges_for_row,
+                trade_id=trade_id_for_row,
             )
             self._decision_logger.log(snap)
+            # Clear the trade id AFTER writing the EXIT row so the row
+            # itself carries the id but a subsequent ENTER mints a new
+            # one. ADJUST rows leave the id in place.
+            if decision == "EXIT":
+                self._current_trade_id = ""
         except Exception:
             logger.exception(
                 f"[DECISION] {self.strategy_id} log failed (decision={decision})"
             )
+
+    def _log_adjust_decision(
+        self,
+        *,
+        leg: str,
+        mode: str,
+        side_label: str,
+        side_realized_pnl: float,
+        new_entry_premium: float = 0.0,
+    ) -> None:
+        """Emit an ADJUST decision row mid-position.
+
+        Apr 29 2026 Phase 1C — when a strategy rolls a leg/wing, the
+        closed leg(s) have realised P&L that the prior decision-log
+        schema dropped on the floor (only ENTER and EXIT rows existed,
+        with EXIT's outcome_pnl computed against the *post-roll*
+        entry credit). This helper captures the realized P&L attributed
+        to that specific roll under the same trade_id as the ENTER, so
+        downstream stratifiers can sum (ENTER → ADJUSTs → EXIT) for the
+        true lifecycle P&L.
+
+        Parameters
+        ----------
+        leg
+            Logical leg label — same convention as ENTER/EXIT
+            (PREMIUM / TREND).
+        mode
+            Strategy mode string (e.g. iron_condor, strangle).
+        side_label
+            Which side was rolled (CE / PE / FRONT / etc.) — written
+            into ``exit_reason`` so the CSV remains parseable without
+            a new column. The naming "exit_reason for an ADJUST" is
+            mildly off but keeps the schema stable per the
+            "append, never reorder" convention.
+        side_realized_pnl
+            Realised P&L (₹) for the closed leg(s) of this adjustment.
+            Positive = profit captured by the roll, negative = loss
+            locked in.
+        new_entry_premium
+            Premium / credit / debit of the freshly-opened legs after
+            the roll, recorded into ``entry_premium`` so the post-roll
+            basis is auditable. 0 if the strategy didn't open new legs.
+        """
+        self._log_decision(
+            "ADJUST",
+            leg=leg,
+            mode=mode,
+            entry_premium=new_entry_premium,
+            exit_reason=f"ADJUST {side_label}",
+            outcome_pnl=side_realized_pnl,
+        )
 
     def reset_day_state(self) -> None:
         """Reset intraday flags at start of a new trading day.

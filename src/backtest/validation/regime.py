@@ -289,8 +289,23 @@ def stratify(
 
 def _pair_enter_exit(df: pd.DataFrame) -> pd.DataFrame:
     """Pair ENTER and EXIT rows; return one row per trade with entry-time
-    features + exit outcome_pnl. Falls through unchanged if pairing isn't
-    possible (e.g., no ENTER rows, or missing pairing key columns).
+    features + the trade's full lifecycle realised P&L. Falls through
+    unchanged if pairing isn't possible (e.g., no ENTER rows, or missing
+    pairing key columns).
+
+    Apr 29 2026 Phase 1C: when a ``trade_id`` column is present, pair by
+    id and SUM ``outcome_pnl`` across ENTER + ADJUST + EXIT rows for the
+    same trade. The id-based path:
+
+      - is robust to ADJUST rows interleaving (the prior cumcount path
+        broke the moment any extra row landed between ENTER and EXIT)
+      - captures multi-roll lifecycle P&L by summing ADJUST rows'
+        realised P&L into the same merged row
+      - is deterministic across parallel writers / strategy mixes
+
+    When ``trade_id`` is absent or empty (legacy CSVs), the original
+    cumcount-based pairing is used as a fallback so old data still
+    works.
     """
     decision = df["decision"].astype(str).str.upper()
     enter_mask = decision == "ENTER"
@@ -302,17 +317,49 @@ def _pair_enter_exit(df: pd.DataFrame) -> pd.DataFrame:
     if not required.issubset(df.columns):
         return df
 
+    # Apr 29 Phase 1C: prefer trade_id-based pairing when the column is
+    # present and at least one row has a non-empty id. Sum ADJUST +
+    # EXIT outcome_pnl per trade so multi-roll lifecycles aggregate
+    # correctly.
+    if "trade_id" in df.columns:
+        ids_nonempty = df["trade_id"].astype(str).str.len() > 0
+        if ids_nonempty.any():
+            work = df.copy()
+            work["trade_id"] = work["trade_id"].astype(str)
+            # Sum outcome_pnl across all rows in the same trade. ENTER
+            # rows have outcome_pnl = NaN (no realised P&L yet) and
+            # contribute 0 to the sum.
+            outcomes = (
+                work.assign(_pnl=pd.to_numeric(work["outcome_pnl"], errors="coerce").fillna(0.0))
+                .loc[work["trade_id"] != ""]
+                .groupby("trade_id", sort=False)["_pnl"]
+                .sum()
+                .rename("_lifecycle_pnl")
+            )
+            enters = work[enter_mask & (work["trade_id"] != "")].copy()
+            merged = enters.merge(outcomes, on="trade_id", how="inner")
+            if not merged.empty:
+                merged["outcome_pnl"] = merged["_lifecycle_pnl"]
+                merged = merged.drop(columns=["_lifecycle_pnl"])
+                return merged
+            # Fall through to the cumcount path if id-based pairing
+            # somehow produced no merges (defensive).
+
     work = df.copy()
-    # Stable per-row index within (strategy_id, leg, decision) groups so
-    # the i-th ENTER pairs with the i-th EXIT. CSV write order = trade
-    # order in the harness, so cumcount is the natural pairing key.
-    work["_pair_idx"] = work.groupby(
-        ["strategy_id", "leg", decision], sort=False
+    # Legacy fallback: stable per-row index within (strategy_id, leg,
+    # decision) groups so the i-th ENTER pairs with the i-th EXIT.
+    # Filter ADJUST rows out of the cumcount so they don't disturb
+    # the ENTER↔EXIT alignment when pre-Phase-1C decision logs lack
+    # trade_ids.
+    enter_or_exit = work[decision.isin(["ENTER", "EXIT"])].copy()
+    enter_or_exit_decision = enter_or_exit["decision"].astype(str).str.upper()
+    enter_or_exit["_pair_idx"] = enter_or_exit.groupby(
+        ["strategy_id", "leg", enter_or_exit_decision], sort=False
     ).cumcount()
 
-    enters = work[enter_mask].copy()
+    enters = enter_or_exit[enter_or_exit_decision == "ENTER"].copy()
     exits_pnl = (
-        work[exit_mask][["strategy_id", "leg", "_pair_idx", "outcome_pnl"]]
+        enter_or_exit[enter_or_exit_decision == "EXIT"][["strategy_id", "leg", "_pair_idx", "outcome_pnl"]]
         .rename(columns={"outcome_pnl": "_exit_pnl"})
     )
     merged = enters.merge(

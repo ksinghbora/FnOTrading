@@ -70,6 +70,11 @@ class ShortStraddleStrategy(BaseStrategy):
         self._hedge_pe_symbol: str = ""
         self._entry_premium: Decimal = Decimal("0")
         self._peak_premium: Decimal = Decimal("0")  # For trailing stop
+        # Apr 29 2026 Phase 1C: per-leg entry fill prices (bid each, since
+        # both shorts SELL at bid). Used by _adjust_losing_leg to attribute
+        # the rolled leg's realised P&L against the right basis.
+        self._ce_entry_fill: float = 0.0
+        self._pe_entry_fill: float = 0.0
         self._atm_strike: float = 0
         self._expiry: date | None = None
         self._lot_size: int = LOT_SIZES.get(params.underlying, 75)
@@ -246,6 +251,9 @@ class ShortStraddleStrategy(BaseStrategy):
         ce_ltp = self.ctx.get_ltp(self._ce_token)  # logging only
         pe_ltp = self.ctx.get_ltp(self._pe_token)  # logging only
         self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
+        # Phase 1C: snapshot per-leg fills for ADJUST P&L attribution.
+        self._ce_entry_fill, _ = self._bid_ask_for(self._ce_token)
+        self._pe_entry_fill, _ = self._bid_ask_for(self._pe_token)
 
         # F1: LIMIT-at-mid. Find the OptionData for the ATM strike so we
         # can pass bid/ask directly.
@@ -398,6 +406,17 @@ class ShortStraddleStrategy(BaseStrategy):
         is_ce_losing = ce_ltp > pe_ltp
         legs: list[SignalLeg] = []
 
+        # Apr 29 2026 Phase 1C: snapshot the close fill of the OLD losing
+        # leg BEFORE the swap. BUY-to-close pays ask; realized = (entry
+        # bid - close ask) × quantity. The un-touched leg's basis is
+        # preserved.
+        if is_ce_losing:
+            _, close_old_ask = self._bid_ask_for(self._ce_token)
+            losing_realized_pnl = (self._ce_entry_fill - close_old_ask) * self._quantity
+        else:
+            _, close_old_ask = self._bid_ask_for(self._pe_token)
+            losing_realized_pnl = (self._pe_entry_fill - close_old_ask) * self._quantity
+
         # Find new strike BEFORE mutating state
         new_token = 0
         new_symbol = ""
@@ -456,13 +475,30 @@ class ShortStraddleStrategy(BaseStrategy):
         else:
             self._pe_token = new_token
             self._pe_symbol = new_symbol
+        # Refresh the rolled leg's entry-fill basis BEFORE recomputing
+        # the aggregate _entry_premium. The un-rolled leg's basis is
+        # preserved so a future EXIT or second adjustment attributes
+        # P&L correctly.
+        if is_ce_losing:
+            self._ce_entry_fill, _ = self._bid_ask_for(self._ce_token)
+        else:
+            self._pe_entry_fill, _ = self._bid_ask_for(self._pe_token)
         # Re-record entry premium after adjustment using REALISTIC fills.
         # Apr 29 2026 audit (5/6 reviewers flagged the LTP-rebase pattern).
-        # Closed-leg realised P&L still isn't captured here — Phase 1C
-        # adds an ADJUST decision row to make roll cost auditable.
         self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
 
         side = "CE" if is_ce_losing else "PE"
+        # Phase 1C: emit an ADJUST decision row capturing the closed
+        # leg's realised P&L under the active trade_id. Without this,
+        # the roll's P&L lives only in broker.trades and is never
+        # attributed to the strategy's outcome_pnl chain.
+        self._log_adjust_decision(
+            leg="PREMIUM",
+            mode="straddle",
+            side_label=side,
+            side_realized_pnl=float(losing_realized_pnl),
+            new_entry_premium=float(self._entry_premium),
+        )
         logger.info(
             f"[{self.strategy_id}] ADJUST: Shifted {side} from {old_atm} to {new_atm}"
         )
