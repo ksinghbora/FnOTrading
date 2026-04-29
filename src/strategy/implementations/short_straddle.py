@@ -36,6 +36,24 @@ class ShortStraddleStrategy(BaseStrategy):
 
     params: ShortStraddleParams
 
+    # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
+    # Same structure as strangle: two ATM short legs, no wings. SELL at
+    # bid on entry, BUY at ask on exit. ``_bid_ask_for`` lives on
+    # BaseStrategy. Replaces the LTP-midpoint fiction in the prior
+    # outcome_pnl path.
+
+    def _entry_fill_credit(self) -> float:
+        """Net credit at entry: SELL CE at bid + SELL PE at bid."""
+        ce_bid, _ = self._bid_ask_for(self._ce_token)
+        pe_bid, _ = self._bid_ask_for(self._pe_token)
+        return ce_bid + pe_bid
+
+    def _exit_fill_debit(self) -> float:
+        """Net debit at exit: BUY CE at ask + BUY PE at ask."""
+        _, ce_ask = self._bid_ask_for(self._ce_token)
+        _, pe_ask = self._bid_ask_for(self._pe_token)
+        return ce_ask + pe_ask
+
     def __init__(self, strategy_id: str, params: ShortStraddleParams):
         super().__init__(strategy_id, params)
         self._entered = False
@@ -223,10 +241,11 @@ class ShortStraddleStrategy(BaseStrategy):
             logger.warning(f"[{self.strategy_id}] Could not find ATM options at strike {self._atm_strike}")
             return None
 
-        # Record entry premium
-        ce_ltp = self.ctx.get_ltp(self._ce_token)
-        pe_ltp = self.ctx.get_ltp(self._pe_token)
-        self._entry_premium = ce_ltp + pe_ltp
+        # Record entry premium using REALISTIC fills (bid for SELL legs).
+        # Apr 29 2026 audit fix — see _entry_fill_credit docstring.
+        ce_ltp = self.ctx.get_ltp(self._ce_token)  # logging only
+        pe_ltp = self.ctx.get_ltp(self._pe_token)  # logging only
+        self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
 
         # F1: LIMIT-at-mid. Find the OptionData for the ATM strike so we
         # can pass bid/ask directly.
@@ -437,8 +456,11 @@ class ShortStraddleStrategy(BaseStrategy):
         else:
             self._pe_token = new_token
             self._pe_symbol = new_symbol
-        # Re-record entry premium after adjustment
-        self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
+        # Re-record entry premium after adjustment using REALISTIC fills.
+        # Apr 29 2026 audit (5/6 reviewers flagged the LTP-rebase pattern).
+        # Closed-leg realised P&L still isn't captured here — Phase 1C
+        # adds an ADJUST decision row to make roll cost auditable.
+        self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
 
         side = "CE" if is_ce_losing else "PE"
         logger.info(
@@ -452,9 +474,10 @@ class ShortStraddleStrategy(BaseStrategy):
 
     def _create_exit_signal(self, reason: str) -> Signal:
         """Create signal to close all positions including hedges."""
-        ce_ltp = self.ctx.get_ltp(self._ce_token)
-        pe_ltp = self.ctx.get_ltp(self._pe_token)
-        exit_premium = ce_ltp + pe_ltp
+        # Realistic-fill exit (Apr 29 2026): BUY both legs at ask. The
+        # pre-fix LTP-midpoint path systematically over-reported
+        # outcome_pnl by one half-spread per leg.
+        exit_premium = Decimal(str(round(self._exit_fill_debit(), 2)))
         pnl_estimate = self._entry_premium - exit_premium
         logger.info(
             f"[EXIT] strategy={self.strategy_id} reason={reason} "

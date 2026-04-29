@@ -147,26 +147,13 @@ class IronCondorStrategy(BaseStrategy):
     # and exit debit. That's a midpoint estimate the broker doesn't
     # actually honour: short legs SELL at bid, long legs BUY at ask, and
     # exits flip those. On gdfl_v2's wider chain the LTP-vs-fill gap was
-    # ~₹723/fill, dwarfing every other variable. These helpers return
-    # the cross-spread fill price the broker will actually deliver.
-
-    def _bid_ask_for(self, token: int) -> tuple[float, float]:
-        """Return (bid, ask) for ``token`` from the latest tick.
-
-        Falls back to (ltp, ltp) — i.e. assumes zero spread — only when
-        bid/ask are unavailable. The fallback is a defensive last
-        resort; it will inflate PnL the same way the old LTP path did,
-        so callers should treat that as a quote-quality alarm, not a
-        clean signal.
-        """
-        tick = self.ctx.get_tick(token)
-        if tick is not None:
-            bid = float(tick.bid_price or 0)
-            ask = float(tick.ask_price or 0)
-            if bid > 0 and ask > 0 and ask >= bid:
-                return bid, ask
-        ltp = float(self.ctx.get_ltp(token) or 0)
-        return ltp, ltp
+    # ~₹723/fill, dwarfing every other variable.
+    #
+    # Generic ``_bid_ask_for`` / ``_spread_pct`` were promoted to
+    # BaseStrategy on Apr 29 (multi-model audit follow-up). The IC keeps
+    # ``_entry_fill_credit`` / ``_exit_fill_debit`` here because the leg
+    # structure (short CE + short PE + long CE wing + long PE wing) is
+    # IC-specific; strangle/straddle/calendar implement their own.
 
     def _entry_fill_credit(self) -> float:
         """Net credit the broker would actually book at entry.
@@ -195,16 +182,6 @@ class IronCondorStrategy(BaseStrategy):
         long_ce_bid, _ = self._bid_ask_for(self._long_ce_token)
         long_pe_bid, _ = self._bid_ask_for(self._long_pe_token)
         return (short_ce_ask + short_pe_ask) - (long_ce_bid + long_pe_bid)
-
-    @staticmethod
-    def _spread_pct(bid: float, ask: float) -> float | None:
-        """Bid-ask spread as a percentage of mid. None if quote is invalid."""
-        if bid <= 0 or ask <= 0 or ask < bid:
-            return None
-        mid = (bid + ask) / 2.0
-        if mid <= 0:
-            return None
-        return ((ask - bid) / mid) * 100.0
 
     def _check_strike_liquidity(self, opt, leg_label: str) -> str | None:
         """Reject a candidate strike whose bid-ask spread exceeds
@@ -741,12 +718,13 @@ class IronCondorStrategy(BaseStrategy):
             self._long_pe_token, self._long_pe_symbol, self._long_pe_strike = old_long_pe_token, old_long_pe_symbol, old_long_pe_strike
             return None
 
-        # Recalculate entry credit after adjustment
-        short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)
-        short_pe_ltp = self.ctx.get_ltp(self._short_pe_token)
-        long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
-        long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
-        self._entry_credit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
+        # Recalculate entry credit after adjustment using REALISTIC fills
+        # (bid/ask), mirroring the initial-entry path at line ~414. The
+        # pre-Apr-29 code re-read LTP here, silently re-introducing the
+        # midpoint fiction the chain-gap diagnostic exposed. Audit-flagged
+        # by 5/6 reviewers as the most-confident remaining bookkeeping bug
+        # post f944986. See ``_entry_fill_credit`` docstring on this class.
+        self._entry_credit = Decimal(str(round(self._entry_fill_credit(), 2)))
 
         self._last_adjustment_time = self.ctx.clock.now().timestamp()
         self._adjustments_today += 1

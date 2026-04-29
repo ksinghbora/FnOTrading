@@ -31,6 +31,24 @@ class ShortStrangleStrategy(BaseStrategy):
 
     MAX_ADJUSTMENTS_PER_DAY = 2
 
+    # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
+    # Strangle has 2 short legs (CE + PE), no wings. The broker SELLS at
+    # bid on entry and BUYS at ask on exit; the pre-fix code used LTP
+    # midpoint for both, hiding the per-leg cross-spread cost in the
+    # decision log. ``_bid_ask_for`` lives on BaseStrategy.
+
+    def _entry_fill_credit(self) -> float:
+        """Net credit at entry: SELL CE at bid + SELL PE at bid (per share)."""
+        ce_bid, _ = self._bid_ask_for(self._ce_token)
+        pe_bid, _ = self._bid_ask_for(self._pe_token)
+        return ce_bid + pe_bid
+
+    def _exit_fill_debit(self) -> float:
+        """Net debit at exit: BUY CE at ask + BUY PE at ask (per share)."""
+        _, ce_ask = self._bid_ask_for(self._ce_token)
+        _, pe_ask = self._bid_ask_for(self._pe_token)
+        return ce_ask + pe_ask
+
     def __init__(self, strategy_id: str, params: ShortStrangleParams):
         super().__init__(strategy_id, params)
         self._entered = False
@@ -221,9 +239,13 @@ class ShortStrangleStrategy(BaseStrategy):
         self._pe_symbol = best_pe.pe.tradingsymbol
         self._pe_strike = float(best_pe.strike)
 
-        ce_ltp = self.ctx.get_ltp(self._ce_token)
-        pe_ltp = self.ctx.get_ltp(self._pe_token)
-        self._entry_premium = ce_ltp + pe_ltp
+        # Realistic-fill credit (Apr 29 2026): SELL legs cross the bid,
+        # not the LTP midpoint. The pre-fix LTP path inflated entry
+        # premium by ~one half-spread per leg, mismatching what the
+        # broker actually books.
+        ce_ltp = self.ctx.get_ltp(self._ce_token)  # logging only
+        pe_ltp = self.ctx.get_ltp(self._pe_token)  # logging only
+        self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
         self._peak_premium = self._entry_premium
 
         # F1: LIMIT-at-mid. If either leg can't be priced, abort entry.
@@ -468,8 +490,13 @@ class ShortStrangleStrategy(BaseStrategy):
                 f"(delta was {self.params.adjustment_delta_threshold}+)"
             )
 
-        # Re-record entry premium after roll
-        self._entry_premium = self.ctx.get_ltp(self._ce_token) + self.ctx.get_ltp(self._pe_token)
+        # Re-record entry premium after roll using REALISTIC fills, not
+        # LTP — see _entry_fill_credit docstring + Apr 29 multi-model
+        # audit (5/6 reviewers flagged this exact LTP-rebase pattern).
+        # Note: this still doesn't capture the closed-leg's realised
+        # roll P&L, only avoids further LTP fiction. Phase 1C will add
+        # ADJUST decision rows so the roll cost is auditable.
+        self._entry_premium = Decimal(str(round(self._entry_fill_credit(), 2)))
         self._peak_premium = self._entry_premium
         self._adjustments_today += 1
         self._last_adjustment_time = self.ctx.clock.now().timestamp()
@@ -484,9 +511,10 @@ class ShortStrangleStrategy(BaseStrategy):
         )
 
     def _create_exit_signal(self, reason: str) -> Signal:
-        ce_ltp = self.ctx.get_ltp(self._ce_token)
-        pe_ltp = self.ctx.get_ltp(self._pe_token)
-        exit_premium = ce_ltp + pe_ltp
+        # Realistic-fill exit (Apr 29 2026): BUY both legs at ask. The
+        # pre-fix LTP path made outcome_pnl read midpoint-to-midpoint
+        # while the broker actually crossed the spread on both sides.
+        exit_premium = Decimal(str(round(self._exit_fill_debit(), 2)))
         pnl_estimate = self._entry_premium - exit_premium
         logger.info(
             f"[EXIT] strategy={self.strategy_id} reason={reason} "

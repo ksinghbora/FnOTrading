@@ -431,16 +431,59 @@ class BaseStrategy(ABC):
             return False
         return True
 
+    # ─── Realistic-fill quote helpers (Apr 29 2026 multi-model audit) ──
+    # The bookkeeping audit showed that *every* strategy's outcome_pnl was
+    # using ctx.get_ltp (midpoint) rather than the bid/ask the broker
+    # actually crosses. These helpers live on BaseStrategy so the four
+    # remaining strategies (strangle, straddle, butterfly, calendar) can
+    # share the same conversion as iron_condor's Apr 29 entry/exit fix.
+    # Per-strategy ``_entry_fill_credit`` / ``_exit_fill_debit`` methods
+    # call into these to compose their own leg-specific math.
+
+    def _bid_ask_for(self, token: int) -> tuple[float, float]:
+        """Return (bid, ask) for ``token`` from the latest tick.
+
+        Falls back to (ltp, ltp) — i.e. assumes zero spread — only when
+        bid/ask are unavailable. The fallback is a defensive last
+        resort; it will inflate PnL the same way the old LTP path did,
+        so callers should treat that as a quote-quality alarm, not a
+        clean signal.
+        """
+        tick = self.ctx.get_tick(token)
+        if tick is not None:
+            bid = float(tick.bid_price or 0)
+            ask = float(tick.ask_price or 0)
+            if bid > 0 and ask > 0 and ask >= bid:
+                return bid, ask
+        ltp = float(self.ctx.get_ltp(token) or 0)
+        return ltp, ltp
+
+    @staticmethod
+    def _spread_pct(bid: float, ask: float) -> float | None:
+        """Bid-ask spread as a percentage of mid. None if quote is invalid."""
+        if bid <= 0 or ask <= 0 or ask < bid:
+            return None
+        mid = (bid + ask) / 2.0
+        if mid <= 0:
+            return None
+        return ((ask - bid) / mid) * 100.0
+
     def _check_vix_filter(self) -> str | None:
         """Check if VIX is within the strategy's allowed band.
 
         Blocks entry when VIX < vix_entry_min (complacency, premium too cheap)
         or VIX > vix_entry_max (event/stress beyond strategy tolerance).
         Returns None if OK, or a reason string to skip.
+
+        Apr 29 2026 (multi-model audit fix): VIX <= 0 now BLOCKS entry
+        instead of silently allowing it. The old behaviour ("VIX feed
+        unavailable, allow entry") was a foot-gun: every GDFL data gap
+        would let strategies fire without a vol filter, exactly when
+        operators most rely on it. Fail-closed is the safer default.
         """
         vix = self.ctx.get_vix()
         if vix <= 0:
-            return None  # VIX data unavailable, allow entry
+            return "VIX data unavailable (vix<=0) — entry blocked, fail-closed"
         vix_min = getattr(self.params, "vix_entry_min", 0.0)
         vix_max = self.params.vix_entry_max
         if vix < vix_min:

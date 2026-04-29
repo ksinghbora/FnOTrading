@@ -65,6 +65,27 @@ class LongCalendarStrategy(BaseStrategy):
 
     params: LongCalendarParams
 
+    # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
+    # Calendar is a DEBIT spread: SELL front + BUY back at entry, mirror
+    # at exit. The broker crosses the spread on the side it's executing:
+    #   Entry → SELL front at front_bid, BUY back at back_ask
+    #   Exit  → BUY front at front_ask, SELL back at back_bid
+    # The pre-fix outcome_pnl path used LTP midpoint for both, hiding
+    # the round-trip cross-spread cost. ``_bid_ask_for`` lives on
+    # BaseStrategy.
+
+    def _entry_fill_debit(self) -> float:
+        """Net debit at entry: back_ask − front_bid (per share)."""
+        front_bid, _ = self._bid_ask_for(self._front_token)
+        _, back_ask = self._bid_ask_for(self._back_token)
+        return back_ask - front_bid
+
+    def _exit_fill_credit(self) -> float:
+        """Net credit at exit: back_bid − front_ask (per share)."""
+        _, front_ask = self._bid_ask_for(self._front_token)
+        back_bid, _ = self._bid_ask_for(self._back_token)
+        return back_bid - front_ask
+
     def __init__(self, strategy_id: str, params: LongCalendarParams):
         super().__init__(strategy_id, params)
         self._entered = False
@@ -286,7 +307,17 @@ class LongCalendarStrategy(BaseStrategy):
 
         # Validate calendar economics: back must cost more than front (longer
         # time value). If inverted (e.g. cross-day pricing artifact), refuse.
-        net_debit = back_leg.price - front_leg.price
+        # Apr 29 2026: net_debit was previously LIMIT-at-mid via leg.price;
+        # now use realistic fills (back_ask - front_bid) so the recorded
+        # entry_debit matches what the broker books once it crosses to fill.
+        # The +5 inverted-term-structure check still applies — a wider
+        # realistic debit narrows the slack but doesn't change the spirit.
+        self._front_token = front_opt.instrument_token
+        self._back_token = back_opt.instrument_token
+        realistic_debit = self._entry_fill_debit()
+        net_debit = Decimal(str(round(realistic_debit, 2))) if realistic_debit > 0 else (
+            back_leg.price - front_leg.price  # fallback when bid/ask missing
+        )
         if net_debit <= Decimal("5"):
             self._log_skip_throttled(
                 "ENTRY_SKIP_DEBIT",
@@ -295,11 +326,11 @@ class LongCalendarStrategy(BaseStrategy):
             )
             return None
 
-        # Commit state and emit signal
+        # Commit state and emit signal. (Tokens were set above so
+        # _entry_fill_debit could read bid/ask before the inverted-spread
+        # check. Symbols/strike are committed only after that check passes.)
         self._strike = target_strike
-        self._front_token = front_opt.instrument_token
         self._front_symbol = front_opt.tradingsymbol
-        self._back_token = back_opt.instrument_token
         self._back_symbol = back_opt.tradingsymbol
         self._entry_debit = net_debit
         self._peak_value = net_debit
@@ -444,9 +475,11 @@ class LongCalendarStrategy(BaseStrategy):
             self._quantity,
             order_type=OrderType.MARKET,
         )
-        front_ltp = self.ctx.get_ltp(self._front_token)
-        back_ltp = self.ctx.get_ltp(self._back_token)
-        exit_value = back_ltp - front_ltp
+        # Realistic-fill exit (Apr 29 2026 audit fix): MARKET orders
+        # cross the spread, so use back_bid - front_ask, not LTP midpoint.
+        # Pre-fix LTP path made outcome_pnl optimistic by ~one round-trip
+        # spread-cost vs what the broker actually books.
+        exit_value = Decimal(str(round(self._exit_fill_credit(), 2)))
         pnl = float(exit_value - self._entry_debit) * self._quantity
         logger.info(
             f"[EXIT] strategy={self.strategy_id} reason={reason} "
