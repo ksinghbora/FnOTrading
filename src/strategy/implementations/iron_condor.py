@@ -142,6 +142,94 @@ class IronCondorStrategy(BaseStrategy):
         except Exception:
             return 0
 
+    # ─── Realistic-fill helpers (Apr 29 2026, post chain-gap diagnostic) ──
+    # The strategy's prior PnL bookkeeping used LTP for both entry credit
+    # and exit debit. That's a midpoint estimate the broker doesn't
+    # actually honour: short legs SELL at bid, long legs BUY at ask, and
+    # exits flip those. On gdfl_v2's wider chain the LTP-vs-fill gap was
+    # ~₹723/fill, dwarfing every other variable. These helpers return
+    # the cross-spread fill price the broker will actually deliver.
+
+    def _bid_ask_for(self, token: int) -> tuple[float, float]:
+        """Return (bid, ask) for ``token`` from the latest tick.
+
+        Falls back to (ltp, ltp) — i.e. assumes zero spread — only when
+        bid/ask are unavailable. The fallback is a defensive last
+        resort; it will inflate PnL the same way the old LTP path did,
+        so callers should treat that as a quote-quality alarm, not a
+        clean signal.
+        """
+        tick = self.ctx.get_tick(token)
+        if tick is not None:
+            bid = float(tick.bid_price or 0)
+            ask = float(tick.ask_price or 0)
+            if bid > 0 and ask > 0 and ask >= bid:
+                return bid, ask
+        ltp = float(self.ctx.get_ltp(token) or 0)
+        return ltp, ltp
+
+    def _entry_fill_credit(self) -> float:
+        """Net credit the broker would actually book at entry.
+
+        Short legs fill at the bid (sell-side cross), long-wing legs at
+        the ask (buy-side cross). The realised credit is therefore
+        (sum of short bids) − (sum of long asks), which is strictly less
+        than or equal to the LTP-based number the strategy used to log.
+        """
+        short_ce_bid, _ = self._bid_ask_for(self._short_ce_token)
+        short_pe_bid, _ = self._bid_ask_for(self._short_pe_token)
+        _, long_ce_ask = self._bid_ask_for(self._long_ce_token)
+        _, long_pe_ask = self._bid_ask_for(self._long_pe_token)
+        return (short_ce_bid + short_pe_bid) - (long_ce_ask + long_pe_ask)
+
+    def _exit_fill_debit(self) -> float:
+        """Net debit the broker would actually book at exit.
+
+        Mirror of entry: short legs now BUY at ask (close at the offer),
+        long legs now SELL at bid. The realised debit is therefore
+        (sum of short asks) − (sum of long bids), which is strictly
+        greater than or equal to the LTP-based number.
+        """
+        _, short_ce_ask = self._bid_ask_for(self._short_ce_token)
+        _, short_pe_ask = self._bid_ask_for(self._short_pe_token)
+        long_ce_bid, _ = self._bid_ask_for(self._long_ce_token)
+        long_pe_bid, _ = self._bid_ask_for(self._long_pe_token)
+        return (short_ce_ask + short_pe_ask) - (long_ce_bid + long_pe_bid)
+
+    @staticmethod
+    def _spread_pct(bid: float, ask: float) -> float | None:
+        """Bid-ask spread as a percentage of mid. None if quote is invalid."""
+        if bid <= 0 or ask <= 0 or ask < bid:
+            return None
+        mid = (bid + ask) / 2.0
+        if mid <= 0:
+            return None
+        return ((ask - bid) / mid) * 100.0
+
+    def _check_strike_liquidity(self, opt, leg_label: str) -> str | None:
+        """Reject a candidate strike whose bid-ask spread exceeds
+        ``params.max_spread_pct``. Returns ``None`` if liquid, otherwise
+        a human-readable reason for the entry-skip log.
+
+        ``params.max_spread_pct == 0`` disables the filter (kept for
+        bisection / regression-test use)."""
+        if self.params.max_spread_pct <= 0:
+            return None
+        if opt is None:
+            return f"{leg_label}: missing chain entry"
+        bid = float(opt.bid_price or 0)
+        ask = float(opt.ask_price or 0)
+        spread_pct = self._spread_pct(bid, ask)
+        if spread_pct is None:
+            return f"{leg_label}: bid/ask invalid (bid={bid}, ask={ask})"
+        if spread_pct > self.params.max_spread_pct:
+            return (
+                f"{leg_label} {opt.tradingsymbol}: spread "
+                f"{spread_pct:.1f}% > max {self.params.max_spread_pct}% "
+                f"(bid={bid}, ask={ask})"
+            )
+        return None
+
     async def _try_entry(self) -> Signal | None:
         """Select strikes by delta and enter the iron condor."""
         # --- Signal scoring ---
@@ -283,6 +371,28 @@ class IronCondorStrategy(BaseStrategy):
                 f"actual CE={ce_wing_offset}pts PE={pe_wing_offset}pts"
             )
 
+        # ── Liquidity gate (Apr 29 2026) — reject any leg whose bid-ask
+        # spread exceeds params.max_spread_pct of mid. The chain-gap
+        # diagnostic showed this was the dominant edge-killer on
+        # gdfl_v2-shaped chains where deep wings have wide markets.
+        liquidity_blocks: list[str] = []
+        for opt, label in (
+            (best_short_ce.ce, "short_ce"),
+            (best_short_pe.pe, "short_pe"),
+            (long_ce_entry.ce, "long_ce"),
+            (long_pe_entry.pe, "long_pe"),
+        ):
+            block = self._check_strike_liquidity(opt, label)
+            if block:
+                liquidity_blocks.append(block)
+        if liquidity_blocks:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_ILLIQUID",
+                f"[{self.strategy_id}] Entry skipped — illiquid leg(s): "
+                + "; ".join(liquidity_blocks),
+            )
+            return None
+
         # Find all 4 legs in the chain
         self._short_ce_token = best_short_ce.ce.instrument_token
         self._short_ce_symbol = best_short_ce.ce.tradingsymbol
@@ -293,12 +403,15 @@ class IronCondorStrategy(BaseStrategy):
         self._long_pe_token = long_pe_entry.pe.instrument_token
         self._long_pe_symbol = long_pe_entry.pe.tradingsymbol
 
-        # Calculate net credit
+        # Calculate net credit using REALISTIC fills (bid/ask), not LTP.
+        # See _entry_fill_credit docstring + Apr 29 chain-gap diagnostic.
+        # Cache LTPs for the human-readable [ENTRY] log line below; they
+        # are NOT used for any P&L bookkeeping.
         short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)
         short_pe_ltp = self.ctx.get_ltp(self._short_pe_token)
         long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
-        self._entry_credit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
+        self._entry_credit = Decimal(str(round(self._entry_fill_credit(), 2)))
 
         # F1: LIMIT-at-mid. Every leg must price — a missing wing turns the
         # IC into a naked short.
@@ -651,16 +764,16 @@ class IronCondorStrategy(BaseStrategy):
 
     def _create_exit_signal(self, reason: str) -> Signal:
         """Create signal to close all 4 legs."""
-        short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)
-        short_pe_ltp = self.ctx.get_ltp(self._short_pe_token)
-        long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
-        long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
-        exit_debit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
-        pnl_estimate = self._entry_credit - exit_debit
+        # Realistic fill-based debit (Apr 29 2026, post chain-gap diagnostic).
+        # Short legs BUY at ask, long legs SELL at bid. The resulting
+        # ``outcome_pnl`` matches what the broker actually books — no
+        # more LTP-based fiction.
+        exit_debit = float(self._exit_fill_debit())
+        pnl_estimate = float(self._entry_credit) - exit_debit
         logger.info(
             f"[EXIT] strategy={self.strategy_id} reason={reason} "
-            f"entry_credit={self._entry_credit} exit_debit={exit_debit} "
-            f"estimated_pnl={pnl_estimate} qty={self._quantity}"
+            f"entry_credit={self._entry_credit} exit_debit={exit_debit:.2f} "
+            f"estimated_pnl={pnl_estimate:.2f} qty={self._quantity}"
         )
         self._log_decision(
             "EXIT",

@@ -161,6 +161,14 @@ class IronCondorParams(BaseStrategyParams):
     adjustment_threshold_pct: float = 60.0   # Tightened from 70 — adjust earlier
     stop_loss_pct: float = 40.0              # Tightened from 60 — faster exit on losers
     profit_target_pct: float = 25.0          # Tightened from 30 — lock profits earlier
+    # Apr 29 2026: liquidity filter. The Apr 28 chain-gap diagnostic
+    # (reports/diagnose_ic_chain_gap/comparison.md) showed gdfl_v2's
+    # deeper chain includes strikes whose realistic bid-ask spreads cost
+    # ~₹723/fill (vs ~₹8 on gdfl_snapshots). Reject any candidate strike
+    # whose bid-ask spread exceeds this fraction of mid; the strategy's
+    # realized PnL is dominated by spread crossing, so trading into wide
+    # markets eats the entire edge. 0 disables the check.
+    max_spread_pct: float = 5.0              # Reject strikes with spread/mid > 5%
 
 
 class IronButterflyParams(IronCondorParams):
