@@ -481,6 +481,39 @@ class BaseStrategy(ABC):
             return None
         return ((ask - bid) / mid) * 100.0
 
+    def _check_strike_liquidity(self, opt: Any, leg_label: str) -> str | None:
+        """Reject a candidate strike whose bid-ask spread exceeds
+        ``self.params.max_spread_pct`` (% of mid). Returns ``None`` if
+        the strike is liquid enough to trade, otherwise a human-readable
+        reason for the entry-skip log.
+
+        ``params.max_spread_pct <= 0`` disables the filter — kept as a
+        bisection / regression-test escape hatch.
+
+        Apr 29 2026 Phase 2: promoted from ``IronCondorStrategy`` to
+        BaseStrategy. The filter operates on a generic ``OptionData``-
+        shaped object (any leg with ``bid_price`` / ``ask_price`` /
+        ``tradingsymbol`` attributes) so strangle / straddle / calendar
+        share the same gate. ``params.max_spread_pct`` lives on
+        BaseStrategyParams for the same reason.
+        """
+        if getattr(self.params, "max_spread_pct", 0) <= 0:
+            return None
+        if opt is None:
+            return f"{leg_label}: missing chain entry"
+        bid = float(opt.bid_price or 0)
+        ask = float(opt.ask_price or 0)
+        spread_pct = self._spread_pct(bid, ask)
+        if spread_pct is None:
+            return f"{leg_label}: bid/ask invalid (bid={bid}, ask={ask})"
+        if spread_pct > self.params.max_spread_pct:
+            return (
+                f"{leg_label} {getattr(opt, 'tradingsymbol', '?')}: spread "
+                f"{spread_pct:.1f}% > max {self.params.max_spread_pct}% "
+                f"(bid={bid}, ask={ask})"
+            )
+        return None
+
     def _check_vix_filter(self) -> str | None:
         """Check if VIX is within the strategy's allowed band.
 

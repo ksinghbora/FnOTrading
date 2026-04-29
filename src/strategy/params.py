@@ -98,6 +98,26 @@ class BaseStrategyParams(BaseModel):
     pt_vol_k: float = 5.8
     trail_vol_k: float = 4.8
 
+    # ─── Apr 29 2026 Phase 2 — uniform cross-strategy gates ──────────
+    # Promoted from IronCondorParams so strangle/straddle/calendar share
+    # the same liquidity filter and score threshold. Subclasses can
+    # override via their own field definitions if a strategy needs a
+    # tighter or looser default (none currently do — calibrated values
+    # were the same constant repeated in IC's _try_entry).
+
+    # Reject any candidate strike whose bid-ask spread exceeds this
+    # fraction of mid. The chain-gap diagnostic showed spreads on
+    # deep-OTM wings can easily eat the IC's edge; the same risk
+    # applies to far-OTM strangle / straddle / calendar legs. 0
+    # disables the filter (kept for bisection / regression-test use).
+    max_spread_pct: float = 5.0
+    # Minimum signal score (0-100) required to fire entry. Strategies
+    # that compute their own multi-factor score gate against this.
+    # Default 60 reproduces the prior hardcoded literal at three
+    # different sites (iron_condor.py:244, short_strangle.py:130,
+    # short_straddle.py:137) which were never sweepable until now.
+    entry_score_threshold: int = 60
+
     # ─── P1.5 regime gate ─────────────────────────────────────────────
     # Block new entries when the current tick classifies into any of these
     # regime labels. Labels use the EXACT thresholds from the harness
@@ -161,14 +181,9 @@ class IronCondorParams(BaseStrategyParams):
     adjustment_threshold_pct: float = 60.0   # Tightened from 70 — adjust earlier
     stop_loss_pct: float = 40.0              # Tightened from 60 — faster exit on losers
     profit_target_pct: float = 25.0          # Tightened from 30 — lock profits earlier
-    # Apr 29 2026: liquidity filter. The Apr 28 chain-gap diagnostic
-    # (reports/diagnose_ic_chain_gap/comparison.md) showed gdfl_v2's
-    # deeper chain includes strikes whose realistic bid-ask spreads cost
-    # ~₹723/fill (vs ~₹8 on gdfl_snapshots). Reject any candidate strike
-    # whose bid-ask spread exceeds this fraction of mid; the strategy's
-    # realized PnL is dominated by spread crossing, so trading into wide
-    # markets eats the entire edge. 0 disables the check.
-    max_spread_pct: float = 5.0              # Reject strikes with spread/mid > 5%
+    # max_spread_pct moved to BaseStrategyParams (Apr 29 Phase 2) so
+    # strangle/straddle/calendar share the filter. Override here if IC
+    # ever needs a different default.
 
 
 class IronButterflyParams(IronCondorParams):

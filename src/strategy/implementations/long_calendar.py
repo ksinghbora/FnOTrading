@@ -282,6 +282,24 @@ class LongCalendarStrategy(BaseStrategy):
             )
             return None
 
+        # Apr 29 Phase 2: liquidity gate — reject either leg whose
+        # bid-ask spread exceeds params.max_spread_pct of mid. Promoted
+        # to BaseStrategy so calendar inherits the same filter as IC.
+        # Front leg (sold) and back leg (bought) BOTH cross the spread,
+        # so wide quotes erode the calendar's already-thin debit edge.
+        liquidity_blocks: list[str] = []
+        for opt, label in ((front_opt, "front"), (back_opt, "back")):
+            block = self._check_strike_liquidity(opt, label)
+            if block:
+                liquidity_blocks.append(block)
+        if liquidity_blocks:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_ILLIQUID",
+                f"[{self.strategy_id}] Entry skipped — illiquid leg(s): "
+                + "; ".join(liquidity_blocks),
+            )
+            return None
+
         # Build LIMIT-at-mid legs via base helper (returns None if un-priceable)
         front_leg = self._build_option_leg(
             front_opt.tradingsymbol,

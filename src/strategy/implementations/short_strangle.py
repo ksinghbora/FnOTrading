@@ -152,10 +152,12 @@ class ShortStrangleStrategy(BaseStrategy):
         # identical "Entry skipped" lines per strategy. The dedup key
         # partitions reasons so a state flip (e.g. VIX moves out of band
         # → score recovers) surfaces on the next tick.
-        if score < 60:
+        # Apr 29 Phase 2: threshold sourced from params (was hardcoded 60).
+        score_thr = int(self.params.entry_score_threshold)
+        if score < score_thr:
             self._log_skip_throttled(
                 "ENTRY_SKIP_SCORE",
-                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
+                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
             )
             return None
 
@@ -239,6 +241,22 @@ class ShortStrangleStrategy(BaseStrategy):
             logger.warning(f"[{self.strategy_id}] Could not find suitable strikes")
             return None
 
+        # Apr 29 Phase 2: liquidity gate — reject either leg whose
+        # bid-ask spread exceeds params.max_spread_pct of mid. Promoted
+        # to BaseStrategy so strangle inherits the same filter as IC.
+        liquidity_blocks: list[str] = []
+        for opt, label in ((best_ce.ce, "ce"), (best_pe.pe, "pe")):
+            block = self._check_strike_liquidity(opt, label)
+            if block:
+                liquidity_blocks.append(block)
+        if liquidity_blocks:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_ILLIQUID",
+                f"[{self.strategy_id}] Entry skipped — illiquid leg(s): "
+                + "; ".join(liquidity_blocks),
+            )
+            return None
+
         self._ce_token = best_ce.ce.instrument_token
         self._ce_symbol = best_ce.ce.tradingsymbol
         self._ce_strike = float(best_ce.strike)
@@ -291,7 +309,7 @@ class ShortStrangleStrategy(BaseStrategy):
             leg="PREMIUM",
             mode="strangle",
             rule_score=score,
-            threshold=60,
+            threshold=int(self.params.entry_score_threshold),
             entry_premium=float(self._entry_premium),
             quantity=self._quantity,
         )

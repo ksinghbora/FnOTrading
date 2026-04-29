@@ -157,10 +157,12 @@ class ShortStraddleStrategy(BaseStrategy):
         # Per-tick → per-minute throttling for all entry-skip logs. Mirrors
         # the parallel changes in short_strangle and iron_condor; see
         # _log_skip_throttled docstring on BaseStrategy for rationale.
-        if score < 60:
+        # Apr 29 Phase 2: threshold sourced from params (was hardcoded 60).
+        score_thr = int(self.params.entry_score_threshold)
+        if score < score_thr:
             self._log_skip_throttled(
                 "ENTRY_SKIP_SCORE",
-                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
+                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
             )
             return None
 
@@ -231,20 +233,41 @@ class ShortStraddleStrategy(BaseStrategy):
             logger.warning(f"[{self.strategy_id}] No option chain available")
             return None
 
-        # Find CE and PE at ATM strike
+        # Find CE and PE at ATM strike. We hold OptionData refs locally
+        # so the Phase-2 liquidity filter (below) can inspect bid/ask
+        # before committing instance state.
+        atm_ce_opt = None
+        atm_pe_opt = None
         for entry in chain.strikes:
             if float(entry.strike) == self._atm_strike:
-                if entry.ce:
-                    self._ce_token = entry.ce.instrument_token
-                    self._ce_symbol = entry.ce.tradingsymbol
-                if entry.pe:
-                    self._pe_token = entry.pe.instrument_token
-                    self._pe_symbol = entry.pe.tradingsymbol
+                atm_ce_opt = entry.ce
+                atm_pe_opt = entry.pe
                 break
 
-        if not self._ce_token or not self._pe_token:
+        if not atm_ce_opt or not atm_pe_opt:
             logger.warning(f"[{self.strategy_id}] Could not find ATM options at strike {self._atm_strike}")
             return None
+
+        # Apr 29 Phase 2: liquidity gate — reject either leg whose
+        # bid-ask spread exceeds params.max_spread_pct of mid.
+        liquidity_blocks: list[str] = []
+        for opt, label in ((atm_ce_opt, "ce"), (atm_pe_opt, "pe")):
+            block = self._check_strike_liquidity(opt, label)
+            if block:
+                liquidity_blocks.append(block)
+        if liquidity_blocks:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_ILLIQUID",
+                f"[{self.strategy_id}] Entry skipped — illiquid leg(s): "
+                + "; ".join(liquidity_blocks),
+            )
+            return None
+
+        # Commit tokens / symbols only after liquidity check passes.
+        self._ce_token = atm_ce_opt.instrument_token
+        self._ce_symbol = atm_ce_opt.tradingsymbol
+        self._pe_token = atm_pe_opt.instrument_token
+        self._pe_symbol = atm_pe_opt.tradingsymbol
 
         # Record entry premium using REALISTIC fills (bid for SELL legs).
         # Apr 29 2026 audit fix — see _entry_fill_credit docstring.
@@ -255,15 +278,9 @@ class ShortStraddleStrategy(BaseStrategy):
         self._ce_entry_fill, _ = self._bid_ask_for(self._ce_token)
         self._pe_entry_fill, _ = self._bid_ask_for(self._pe_token)
 
-        # F1: LIMIT-at-mid. Find the OptionData for the ATM strike so we
-        # can pass bid/ask directly.
-        atm_ce_opt = None
-        atm_pe_opt = None
-        for entry in chain.strikes:
-            if float(entry.strike) == self._atm_strike:
-                atm_ce_opt = entry.ce
-                atm_pe_opt = entry.pe
-                break
+        # F1: LIMIT-at-mid. atm_ce_opt / atm_pe_opt were resolved above
+        # for the liquidity check; reuse them here so we don't iterate
+        # the chain a second time.
         ce_leg = self._build_option_leg(
             self._ce_symbol, self._ce_token, OrderSide.SELL, self._quantity, opt=atm_ce_opt,
         )
@@ -302,7 +319,7 @@ class ShortStraddleStrategy(BaseStrategy):
             leg="PREMIUM",
             mode="straddle",
             rule_score=score,
-            threshold=60,
+            threshold=int(self.params.entry_score_threshold),
             entry_premium=float(self._entry_premium),
             quantity=self._quantity,
         )

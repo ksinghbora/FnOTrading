@@ -195,30 +195,6 @@ class IronCondorStrategy(BaseStrategy):
         long_pe_bid, _ = self._bid_ask_for(self._long_pe_token)
         return (short_ce_ask + short_pe_ask) - (long_ce_bid + long_pe_bid)
 
-    def _check_strike_liquidity(self, opt, leg_label: str) -> str | None:
-        """Reject a candidate strike whose bid-ask spread exceeds
-        ``params.max_spread_pct``. Returns ``None`` if liquid, otherwise
-        a human-readable reason for the entry-skip log.
-
-        ``params.max_spread_pct == 0`` disables the filter (kept for
-        bisection / regression-test use)."""
-        if self.params.max_spread_pct <= 0:
-            return None
-        if opt is None:
-            return f"{leg_label}: missing chain entry"
-        bid = float(opt.bid_price or 0)
-        ask = float(opt.ask_price or 0)
-        spread_pct = self._spread_pct(bid, ask)
-        if spread_pct is None:
-            return f"{leg_label}: bid/ask invalid (bid={bid}, ask={ask})"
-        if spread_pct > self.params.max_spread_pct:
-            return (
-                f"{leg_label} {opt.tradingsymbol}: spread "
-                f"{spread_pct:.1f}% > max {self.params.max_spread_pct}% "
-                f"(bid={bid}, ask={ask})"
-            )
-        return None
-
     async def _try_entry(self) -> Signal | None:
         """Select strikes by delta and enter the iron condor."""
         # --- Signal scoring ---
@@ -230,10 +206,12 @@ class IronCondorStrategy(BaseStrategy):
         # Per-tick → per-minute throttling for all entry-skip logs. See
         # _log_skip_throttled docstring on BaseStrategy for the 19,646-line/
         # 23-min Apr 21 audit-flood that motivated this.
-        if score < 60:
+        # Apr 29 Phase 2: threshold sourced from params (was hardcoded 60).
+        score_thr = int(self.params.entry_score_threshold)
+        if score < score_thr:
             self._log_skip_throttled(
                 "ENTRY_SKIP_SCORE",
-                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < 60",
+                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
             )
             return None
 
@@ -282,6 +260,20 @@ class IronCondorStrategy(BaseStrategy):
             self._log_skip_throttled(
                 "ENTRY_SKIP_MP",
                 f"[{self.strategy_id}] Entry skipped: {mp_block}",
+            )
+            return None
+
+        # Apr 29 Phase 2: trend filter. IC is a range-bound strategy —
+        # entering on a strongly-trending day means one short side gets
+        # tagged as spot drifts. short_strangle and short_straddle have
+        # always called this filter; IC was an oversight (only 2/6
+        # reviewers caught it but the asymmetry is real). IB inherits
+        # this branch verbatim, so this commit fixes both at once.
+        trend_block = self._check_trend_filter(self.params.underlying)
+        if trend_block:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_TREND",
+                f"[{self.strategy_id}] Entry skipped: {trend_block}",
             )
             return None
 
@@ -449,7 +441,7 @@ class IronCondorStrategy(BaseStrategy):
             leg="PREMIUM",
             mode="iron_condor",
             rule_score=score,
-            threshold=60,
+            threshold=int(self.params.entry_score_threshold),
             entry_premium=float(self._entry_credit),
             quantity=self._quantity,
         )
