@@ -55,6 +55,13 @@ class BaseStrategy(ABC):
         # Entry timestamp — set by _log_decision on ENTER, read on EXIT
         # to compute held_minutes without each strategy tracking it.
         self._decision_entry_ts: Any = None
+        # Apr 29 2026 audit: snapshot of cumulative strategy charges at
+        # the most recent ENTER. The EXIT row writes (current - this) as
+        # the round-trip charge cost. Reset to current at each EXIT so
+        # the next ENTER starts fresh. Float (not Decimal) because the
+        # decision-row schema is float and rounding noise is irrelevant
+        # at the ~₹100s scale we're tracking.
+        self._charges_at_entry: float = 0.0
         # Per-(strategy, key) dedup state for entry-skip log throttling.
         # See _log_skip_throttled below for why this lives on the base —
         # without it, every structural skip (expiry day 0DTE, VIX gate,
@@ -1013,6 +1020,27 @@ class BaseStrategy(ABC):
                 delta = now - self._decision_entry_ts
                 held_minutes = int(delta.total_seconds() // 60)
 
+            # Apr 29 2026 audit: snapshot cumulative strategy-level charges
+            # at ENTER, write the entry→exit delta on EXIT. Lets downstream
+            # stratifiers compute net-of-charges PnL without re-deriving
+            # per-trade STT/brokerage/GST/SEBI from broker.trades. Wrapped
+            # in try/except — charges are observational, never block
+            # logging if the portfolio path isn't wired (e.g. early
+            # on_start, unit-test fixtures with mocked context).
+            charges_now: float = 0.0
+            try:
+                pnl = self.ctx.get_pnl()
+                charges_now = float(pnl.charges) if pnl is not None else 0.0
+            except Exception:
+                charges_now = 0.0
+            charges_for_row: float = 0.0
+            if decision == "ENTER":
+                self._charges_at_entry = charges_now
+            elif decision == "EXIT":
+                charges_for_row = max(0.0, charges_now - self._charges_at_entry)
+                # Reset for the next ENTER cycle
+                self._charges_at_entry = charges_now
+
             snap = DecisionSnapshot(
                 timestamp=now.isoformat(),
                 strategy_id=self.strategy_id,
@@ -1033,6 +1061,7 @@ class BaseStrategy(ABC):
                 exit_reason=exit_reason,
                 outcome_pnl=outcome_pnl,
                 held_minutes=held_minutes,
+                charges=charges_for_row,
             )
             self._decision_logger.log(snap)
         except Exception:

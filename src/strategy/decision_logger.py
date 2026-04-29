@@ -71,6 +71,15 @@ COLUMNS = [
     "score_clamp_hit",
     # Live threshold at decision time (catches future config drift):
     "trend_signal_threshold",
+    # Apr 29 2026 multi-model audit: per-trade realised charges
+    # (STT + brokerage + GST + SEBI + stamp) — populated on EXIT rows
+    # only, as the cumulative-since-ENTER delta. Net outcome_pnl =
+    # outcome_pnl - charges. Without this column, downstream stratifiers
+    # (regime.py, ML training) systematically over-report Sharpe by the
+    # ~₹100-300/round-trip charge load, which is non-trivial on weekly
+    # NIFTY options. ENTER rows leave it 0 (charges only realise on
+    # round-trip close).
+    "charges",
 ]
 
 
@@ -149,6 +158,10 @@ class DecisionSnapshot:
     # Outcome (backfilled on exit)
     outcome_pnl: float | None = None
     held_minutes: int | None = None
+    # Realised charges over this round trip (entry→exit delta from
+    # PortfolioManager.charges). Populated on EXIT only — see COLUMNS
+    # for rationale. Apr 29 2026 multi-model audit fix.
+    charges: float = 0.0
 
     # Actual day outcome (backfilled end-of-day for ML training labels)
     actual_day_regime: str = ""        # Ground truth: RANGE_BOUND / CHOPPY / TRENDING
