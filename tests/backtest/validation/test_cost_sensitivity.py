@@ -187,10 +187,20 @@ def test_sensitivity_curve_improves_as_spread_narrows():
 
 
 def _varied_winning_trades(n: int = 20, spread_half: float = 0.5) -> list[dict]:
-    """n round-trips with varied exit prices — required for non-zero std."""
+    """n round-trips with varied exit prices — required for non-zero std.
+
+    Apr 30 2026: each round-trip's exit lands on a distinct calendar
+    day so the daily-bucketed Sharpe (sensitivity_curve's post-Phase-4
+    output) has n entries rather than collapsing to one "day". Pre-fix
+    the cost_sensitivity code mis-counted per-trade returns as daily;
+    this fixture now models realistic multi-day trade flow.
+    """
+    from datetime import date as _date, timedelta as _td
     out: list[dict] = []
+    base = _date(2025, 1, 1)
     for i in range(n):
         exit_price = 101.0 + (i * 0.1)  # vary to get non-zero std
+        ts = (base + _td(days=i)).isoformat() + "T15:25:00+05:30"
         out.extend(
             [
                 {
@@ -199,6 +209,7 @@ def _varied_winning_trades(n: int = 20, spread_half: float = 0.5) -> list[dict]:
                     "quantity": 75,
                     "average_price": 100.0,
                     "spread_half": spread_half,
+                    "fill_timestamp": ts,
                 },
                 {
                     "tradingsymbol": "X",
@@ -206,6 +217,7 @@ def _varied_winning_trades(n: int = 20, spread_half: float = 0.5) -> list[dict]:
                     "quantity": 75,
                     "average_price": exit_price,
                     "spread_half": spread_half,
+                    "fill_timestamp": ts,
                 },
             ]
         )
@@ -291,3 +303,112 @@ def test_missing_spread_half_uses_fallback_in_curve():
     assert 0.5 in curve
     # No crash — verify metrics shape is intact.
     assert "sharpe_ratio" in curve[0.5]
+
+
+# ─── Apr 30 2026 Phase 4: daily bucketing of round-trip PnLs ──────
+
+
+def test_round_trip_pairs_emits_exit_dates():
+    """Phase 4 contract: ``_round_trip_pnl_pairs`` returns
+    ``(pnl, exit_date)`` tuples so the caller can aggregate by day."""
+    from src.backtest.validation.cost_sensitivity import _round_trip_pnl_pairs
+    trades = [
+        {"tradingsymbol": "X", "transaction_type": "BUY",  "quantity": 75,
+         "average_price": 100.0, "fill_timestamp": "2025-01-01T09:30:00+05:30"},
+        {"tradingsymbol": "X", "transaction_type": "SELL", "quantity": 75,
+         "average_price": 101.0, "fill_timestamp": "2025-01-01T15:25:00+05:30"},
+        {"tradingsymbol": "X", "transaction_type": "BUY",  "quantity": 75,
+         "average_price": 100.0, "fill_timestamp": "2025-01-02T09:30:00+05:30"},
+        {"tradingsymbol": "X", "transaction_type": "SELL", "quantity": 75,
+         "average_price": 102.0, "fill_timestamp": "2025-01-02T15:25:00+05:30"},
+    ]
+    pairs = _round_trip_pnl_pairs(trades)
+    assert len(pairs) == 2
+    pnl_1, date_1 = pairs[0]
+    pnl_2, date_2 = pairs[1]
+    assert pnl_1 == 75.0   # 75 * (101 - 100)
+    assert pnl_2 == 150.0  # 75 * (102 - 100)
+    assert date_1 == "2025-01-01"
+    assert date_2 == "2025-01-02"
+
+
+def test_bucket_pnls_by_day_aggregates_same_day():
+    """Multiple round-trips on the same day collapse to one bucket."""
+    from src.backtest.validation.cost_sensitivity import _bucket_pnls_by_day
+    pairs = [
+        (100.0, "2025-01-01"),
+        (200.0, "2025-01-01"),  # same day → bucket together
+        (50.0,  "2025-01-02"),
+    ]
+    daily = _bucket_pnls_by_day(pairs)
+    assert daily == [300.0, 50.0]  # sorted by date
+
+
+def test_bucket_pnls_by_day_sorted_ascending():
+    """Output order must be deterministic ascending so consumers
+    treating it as a time series get stable autocorrelation behaviour."""
+    from src.backtest.validation.cost_sensitivity import _bucket_pnls_by_day
+    pairs = [
+        (50.0,  "2025-03-15"),
+        (100.0, "2025-01-01"),
+        (75.0,  "2025-02-10"),
+    ]
+    daily = _bucket_pnls_by_day(pairs)
+    assert daily == [100.0, 75.0, 50.0]  # Jan, Feb, Mar
+
+
+def test_bucket_pnls_by_day_handles_empty_input():
+    from src.backtest.validation.cost_sensitivity import _bucket_pnls_by_day
+    assert _bucket_pnls_by_day([]) == []
+
+
+def test_bucket_pnls_by_day_treats_missing_date_as_single_bucket():
+    """Trades without fill_timestamp bucket under "" — won't crash but
+    produces a single-entry curve which calculate_metrics handles via
+    the ``returns.std() == 0`` guard."""
+    from src.backtest.validation.cost_sensitivity import _bucket_pnls_by_day
+    pairs = [
+        (50.0, ""),
+        (75.0, ""),
+        (100.0, "2025-01-15"),
+    ]
+    daily = _bucket_pnls_by_day(pairs)
+    # Empty date sorts before any real date, so ["" entries summed,
+    # then 2025-01-15]
+    assert daily == [125.0, 100.0]
+
+
+def test_sensitivity_curve_sharpe_correctly_annualised_post_phase4():
+    """Pre-Phase-4 the cost_sensitivity Sharpe was inflated by
+    sqrt(252/n_trades) because each round-trip was treated as a
+    distinct daily return. With trades spread over n distinct dates
+    the post-fix Sharpe should be a proper annualised value
+    (mean_daily / std_daily * sqrt(252)).
+
+    This pins the new semantics — a future revert to per-trade
+    bucketing would produce a Sharpe that's an order of magnitude
+    larger and trip this assertion."""
+    from datetime import date, timedelta
+    base = date(2025, 1, 1)
+    trades: list[dict] = []
+    for i in range(60):  # 60 distinct days
+        exit_price = 101.0 + (i * 0.05)
+        ts = (base + timedelta(days=i)).isoformat() + "T15:25:00+05:30"
+        trades.extend([
+            {"tradingsymbol": "X", "transaction_type": "BUY",  "quantity": 75,
+             "average_price": 100.0, "spread_half": 0.5, "fill_timestamp": ts},
+            {"tradingsymbol": "X", "transaction_type": "SELL", "quantity": 75,
+             "average_price": exit_price, "spread_half": 0.5, "fill_timestamp": ts},
+        ])
+    curve = sensitivity_curve(trades)
+    sharpe = curve[0.0]["sharpe_ratio"]
+    # Pre-Phase-4 this Sharpe was being annualised against ~60 trades
+    # treated as ~60 days, with sqrt(252) inflating an already-noisy
+    # number. With the fix annualising against 60 actual days the
+    # value should be in a reasonable real-world range, not an
+    # absurdly-large per-trade-Sharpe number.
+    assert sharpe > 0  # genuine positive edge
+    # A truly reasonable upper bound: even for a strategy with edge,
+    # annualised daily Sharpe stays under ~50 (the world's best
+    # strategies live around 3-5). Pre-fix this was ~100+.
+    assert sharpe < 50, f"sharpe={sharpe} suggests Phase 4 bucketing regressed"

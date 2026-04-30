@@ -131,13 +131,24 @@ def sensitivity_curve(
 
     For each ``shift`` we:
       1. Re-price every trade via ``shift_fill_pnl``.
-      2. Reconstruct a daily P&L curve from the shifted trades (one bucket
-         per fill-pair P&L, since the trade list is fills not rounds).
-      3. Pass the synthetic curve + shifted trades to ``calculate_metrics``.
+      2. FIFO-pair the shifted trades into round-trips, recording each
+         pair's exit-date alongside the P&L.
+      3. Bucket the round-trip P&Ls by exit-date → one entry per
+         calendar trading day. This is the daily-PnL series that
+         ``calculate_metrics``'s ``sqrt(252)`` annualisation actually
+         expects.
+      4. Pass the daily curve to ``calculate_metrics``.
 
     Trades with neither ``spread_half`` nor ``average_price`` are skipped
     (they'd produce nonsense P&L). The call is stable across shifts: if
     the input is degenerate, every shift returns the empty-metrics dict.
+
+    Apr 30 2026 Phase 4 fix: prior code passed the per-round-trip P&L
+    list directly to ``calculate_metrics``, which treats each entry as
+    a daily return. With ~50-100 round-trips on a 227-day window, the
+    sqrt(252) factor was annualising a per-trade Sharpe and inflating
+    the reported number by ~sqrt(252 / num_trades) — a 2-3x distortion
+    that the cost-sensitivity gate was inadvertently calibrated to.
     """
     results: dict[float, dict] = {}
     for shift in shifts:
@@ -151,7 +162,8 @@ def sensitivity_curve(
                 continue
             shifted.append(sh)
 
-        pnl_curve = _round_trip_pnl_curve(shifted)
+        pairs = _round_trip_pnl_pairs(shifted)
+        pnl_curve = _bucket_pnls_by_day(pairs)
         metrics = calculate_metrics(pnl_curve, shifted, initial_capital)
         results[float(shift)] = metrics
 
@@ -189,17 +201,23 @@ def sensitivity_accepted(
         return False
 
 
-def _round_trip_pnl_curve(trades: list[dict]) -> list[float]:
-    """Pair fills into round trips and emit per-trade P&L.
+def _round_trip_pnl_pairs(trades: list[dict]) -> list[tuple[float, str]]:
+    """FIFO-pair fills into round trips, returning ``(pnl, exit_date)``
+    tuples.
+
+    Apr 30 2026 Phase 4: previously named ``_round_trip_pnl_curve`` and
+    returned only the P&L list. The exit-date — the ISO ``YYYY-MM-DD``
+    of the closing fill — is now emitted alongside so
+    ``_bucket_pnls_by_day`` can aggregate to a true daily PnL series
+    before ``calculate_metrics`` annualises with sqrt(252).
 
     Mirrors the ``_compute_trade_pnls`` helper in ``src.backtest.metrics``
     but keeps its own copy so cost_sensitivity doesn't depend on a private
-    function. Returns a list of float P&Ls — the length matches
-    ``calculate_metrics`` downstream which treats each element as a
-    daily-bucket value (fine for Sharpe comparison; the curve's shape
-    between shifts is what we're measuring, not absolute values).
+    function. Trades missing fill_timestamp fall back to the empty
+    string (which buckets together as a single "undated" group — a
+    quote-quality alarm but not a crash).
     """
-    pnls: list[float] = []
+    pairs: list[tuple[float, str]] = []
     positions: dict[str, list[dict]] = {}
 
     for trade in trades:
@@ -207,6 +225,11 @@ def _round_trip_pnl_curve(trades: list[dict]) -> list[float]:
         side = _normalise_side(trade.get("transaction_type"))
         price = float(trade.get("average_price", 0) or 0)
         qty = int(trade.get("quantity", 0) or 0)
+        # ISO timestamp like "2025-09-09T09:30:15+05:30"; we slice the
+        # date portion. Bucketing by full timestamp would split each
+        # round-trip into its own bucket, defeating the daily aggregate.
+        ts = str(trade.get("fill_timestamp", "") or "")
+        exit_date = ts[:10]  # "YYYY-MM-DD" or "" if ts is empty
 
         if qty <= 0 or price <= 0 or side not in ("BUY", "SELL"):
             continue
@@ -224,11 +247,33 @@ def _round_trip_pnl_curve(trades: list[dict]) -> list[float]:
                     pnl = close_qty * (price - pos["price"])
                 else:
                     pnl = close_qty * (pos["price"] - price)
-                pnls.append(float(pnl))
+                pairs.append((float(pnl), exit_date))
                 pos["qty"] -= close_qty
                 remaining -= close_qty
 
         if remaining > 0:
             positions[symbol].append({"qty": remaining, "price": price, "side": side})
 
-    return pnls
+    return pairs
+
+
+def _bucket_pnls_by_day(pairs: list[tuple[float, str]]) -> list[float]:
+    """Aggregate ``(pnl, exit_date)`` pairs into a daily P&L series
+    sorted ascending by date.
+
+    Empty-string dates (fills missing fill_timestamp) bucket together
+    under a single "" key — surfaced first in the sorted output so
+    downstream metrics treat them as the earliest "day". This is a
+    pragmatic fallback; in practice GDFL backtest fills always carry
+    timestamps.
+
+    Returns ``[]`` for an empty input — callers must guard against
+    feeding an empty curve to ``calculate_metrics`` (which already
+    handles it via _empty_metrics).
+    """
+    if not pairs:
+        return []
+    by_day: dict[str, float] = {}
+    for pnl, day in pairs:
+        by_day[day] = by_day.get(day, 0.0) + pnl
+    return [by_day[k] for k in sorted(by_day.keys())]
