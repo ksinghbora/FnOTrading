@@ -35,6 +35,20 @@ class TickerManager:
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_tick_time: datetime | None = None
+        # Apr 30 2026: track the last successful WebSocket connect/reconnect
+        # separately from the last tick. Used by the heartbeat loop to give
+        # a fresh subscription a grace period (HEARTBEAT_TIMEOUT seconds)
+        # to start delivering ticks before complaining. Without this, a
+        # market-open reconnect at 09:10 + the first post-open tick at
+        # 09:15 would have ``_last_tick_time = None`` (or yesterday's
+        # last tick), so the heartbeat at 09:15:39 fired "tick gap
+        # exceeded" → forced reconnect → repeat every 30s. The flap
+        # blocked entries for the entire morning. _last_tick_time stays
+        # semantic — "when was the last REAL tick" — because main.py:624
+        # uses it to decide whether the market-open ticker needs a full
+        # restart, and that check must still see None when no ticks have
+        # arrived since startup.
+        self._last_reconnect_time: datetime | None = None
         self._heartbeat_task: asyncio.Task | None = None
         self._tick_log_count: int = 0
 
@@ -132,6 +146,10 @@ class TickerManager:
 
     def _on_connect(self, ws: Any, response: Any) -> None:
         """Callback: WebSocket connected."""
+        # Mark the connect time so the heartbeat grants the new subscription
+        # a HEARTBEAT_TIMEOUT-wide grace window before declaring tick gap.
+        # Apr 30 2026 fix — see _last_reconnect_time docstring.
+        self._last_reconnect_time = now_ist()
         logger.info(
             "ticker connected",
             extra={"tag": Tag.TICKER, "subscribed_tokens": len(self._subscribed_tokens)},
@@ -214,15 +232,28 @@ class TickerManager:
                     continue
 
                 # During market hours: check every HEARTBEAT_TIMEOUT seconds.
-                # No grace period — if the 9:10 reconnect worked and market opened normally,
-                # ticks arrive within seconds of 9:15 and elapsed stays < HEARTBEAT_TIMEOUT.
-                # If ticks are absent, we should reconnect immediately — not wait 3 minutes.
+                # Apr 30 2026 fix — heartbeat baseline is the LATEST of the
+                # last real tick and the last reconnect. A fresh subscription
+                # needs ~5-15 seconds to deliver its first tick after the
+                # broker accepts the subscribe call; without the reconnect
+                # baseline the heartbeat would fire one HEARTBEAT_TIMEOUT
+                # window after every reconnect and force another reconnect,
+                # producing the 30s-flap loop observed Apr 27-30 mornings.
+                # See _last_reconnect_time docstring on this class.
                 await asyncio.sleep(self.HEARTBEAT_TIMEOUT)
                 if not self._running or not self._subscribed_tokens:
                     continue
 
-                if self._last_tick_time:
-                    elapsed = (now_ist() - self._last_tick_time).total_seconds()
+                # Heartbeat baseline: latest of (last real tick, last
+                # reconnect). If neither is set, treat elapsed as
+                # "infinite" so the heartbeat triggers (covers the
+                # never-connected edge case).
+                baselines = [
+                    t for t in (self._last_tick_time, self._last_reconnect_time)
+                    if t is not None
+                ]
+                if baselines:
+                    elapsed = (now_ist() - max(baselines)).total_seconds()
                 else:
                     elapsed = 999
 
