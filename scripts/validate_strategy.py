@@ -61,6 +61,30 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--train-end", required=True, help="ISO date (YYYY-MM-DD)")
     p.add_argument("--val-end", required=True)
     p.add_argument("--holdout-end", required=True)
+    # ─── Apr 30 2026: Indian-market corpus-split flags ────────────────
+    # The 227-day GDFL corpus straddles the SEBI Nov 20 2024 regime
+    # change (NIFTY lot 25→75, options-sell STT 0.0625%→0.1%, BANKNIFTY
+    # weekly expiry discontinued). Pre-break dates simulate at the
+    # current LOT_SIZES["NIFTY"]=75 — i.e. P&L magnitude on those
+    # ~50 days is ~3× over-stated. The clean Indian-calibrated path
+    # is to validate ONLY post-break or ONLY pre-break, with these
+    # flags providing the cutoff. Date-aware lot-size + STT lookup is
+    # tracked as a deeper follow-up.
+    p.add_argument(
+        "--corpus-from", default="",
+        help="ISO date (YYYY-MM-DD) — drop train+val days before this. "
+             "Recommended: 2024-11-20 to validate ONLY the post-SEBI "
+             "regime (lot=75, STT=0.1%%). Pre-break dates in the corpus "
+             "use the current lot-size constant which is wrong for "
+             "those dates and over-states P&L by ~3x.",
+    )
+    p.add_argument(
+        "--corpus-to", default="",
+        help="ISO date (YYYY-MM-DD) — drop train+val days on or after "
+             "this. Useful for validating ONLY pre-break window (small "
+             "data: ~50 days for Sep–mid-Nov 2024 — likely too short "
+             "for stable CPCV but informative as a counter-test).",
+    )
     p.add_argument("--parquet-dir", required=True)
     p.add_argument("--underlying", default="NIFTY")
     p.add_argument("--spot-token", type=int, default=NIFTY_SPOT_TOKEN)
@@ -137,6 +161,43 @@ def setup_logging(level: str) -> None:
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+
+def filter_corpus_window(
+    days: list[date],
+    *,
+    cut_from: date | None,
+    cut_to: date | None,
+) -> list[date]:
+    """Drop ``days`` outside the half-open interval ``[cut_from, cut_to)``.
+
+    Apr 30 2026 Indian-market calibration. The 227-day GDFL corpus
+    straddles the SEBI Nov 20 2024 regime change (NIFTY lot 25→75,
+    options-sell STT 0.0625%→0.1%). A backtest on the full corpus
+    silently uses the post-SEBI lot-size constant for pre-break days,
+    distorting P&L magnitude by ~3x on those ~50 days. Filtering with
+    ``cut_from=2024-11-20`` runs the harness on ONLY post-break data.
+
+    ``cut_from`` is inclusive (kept), ``cut_to`` is exclusive (dropped) —
+    matches Python slice convention so adjacent ranges with the same
+    boundary date don't double-count.
+
+    Either argument may be ``None`` (no clip on that side). When both
+    are ``None`` the input list is returned unchanged.
+
+    Extracted from validate_strategy.py's main_async so it's
+    independently testable without spinning up the full harness.
+    """
+    if cut_from is None and cut_to is None:
+        return list(days)
+    out: list[date] = []
+    for d in days:
+        if cut_from is not None and d < cut_from:
+            continue
+        if cut_to is not None and d >= cut_to:
+            continue
+        out.append(d)
+    return out
 
 
 def load_baseline_params(path: str) -> dict:
@@ -239,10 +300,43 @@ async def main_async(args: argparse.Namespace) -> int:
         train_days = [d for d in train_days if d >= ts]
     val_days = loader.val_days()
     combined = train_days + val_days
+
+    # ─── Apr 30 2026: SEBI corpus-split filtering ─────────────────────
+    # Filter both train and val day lists so the report reflects the
+    # actually-validated window. Without filtering train_days/val_days
+    # too, the report's section-2 metadata would claim it ran on N
+    # days but the harness only saw len(combined)-after-filter days —
+    # an honesty regression.
+    if args.corpus_from or args.corpus_to:
+        before = len(combined)
+        cut_from = date.fromisoformat(args.corpus_from) if args.corpus_from else None
+        cut_to = date.fromisoformat(args.corpus_to) if args.corpus_to else None
+
+        train_days = filter_corpus_window(train_days, cut_from=cut_from, cut_to=cut_to)
+        val_days = filter_corpus_window(val_days, cut_from=cut_from, cut_to=cut_to)
+        combined = train_days + val_days
+        logger.info(
+            "[VALIDATE] corpus filter: from=%s to=%s — %d → %d days "
+            "(dropped %d)",
+            cut_from, cut_to, before, len(combined), before - len(combined),
+        )
+        # CPCV needs reasonable n_folds × per-fold-days. With n_folds=10
+        # and the default 90/30 train/test, a < 90-day combined window
+        # produces unstable Sharpe distributions. Surface clearly.
+        if combined and len(combined) < 90:
+            logger.warning(
+                "[VALIDATE] filtered window has only %d days; CPCV / "
+                "walk-forward results will be unreliable below ~90 "
+                "days. Consider widening the filter or using a larger "
+                "corpus.", len(combined),
+            )
+
     if not combined:
         logger.error(
-            "No GDFL data for window train_end=%s val_end=%s — aborting",
+            "No GDFL data for window train_end=%s val_end=%s "
+            "(corpus_from=%s corpus_to=%s) — aborting",
             split.train_end, split.val_end,
+            args.corpus_from or "—", args.corpus_to or "—",
         )
         return 2
 
