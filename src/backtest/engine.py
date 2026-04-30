@@ -541,6 +541,15 @@ class BacktestEngine:
             # Consumed by the validation harness (cost sensitivity +
             # capacity modules) without re-reading GDFL parquet files.
             "trades": list(broker._trades),
+            # Apr 30 2026 (sonnet's quote-fallback probe): how many of
+            # the strategy's ``_bid_ask_for`` calls served real bid/ask
+            # vs degraded to the LTP-symmetric fallback. Surfaced by
+            # the validation harness so a high-fallback-pct run can be
+            # treated with the same skepticism as a pre-audit LTP run.
+            "quote_fallback_stats": (
+                strategy.get_quote_fallback_stats()
+                if hasattr(strategy, "get_quote_fallback_stats") else None
+            ),
         }
 
         logger.info(

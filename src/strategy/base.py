@@ -81,6 +81,16 @@ class BaseStrategy(ABC):
         # mid-session vol regime change vs. morning baseline.
         self._intraday_vix_morning: float | None = None
         self._intraday_vix_capture_date: date | None = None
+        # Apr 30 2026 (sonnet's quote-fallback probe — Step 2 of the
+        # multi-model audit follow-up): track how often ``_bid_ask_for``
+        # serves real bid/ask vs. how often it falls back to LTP-symmetric
+        # because the tick has no quote, a zero side, or a crossed
+        # market. The validation harness prints (total, fallback,
+        # fallback_pct) at the end of each run so operators can tell
+        # whether a "realistic-fill" pass actually saw bid/ask or was
+        # silently degrading to the same LTP fiction the audit removed.
+        self._bid_ask_total: int = 0
+        self._bid_ask_fallback: int = 0
 
     def set_context(self, context: "StrategyContext") -> None:
         """Inject the strategy context (called by runner, not by strategy)."""
@@ -461,15 +471,55 @@ class BaseStrategy(ABC):
         resort; it will inflate PnL the same way the old LTP path did,
         so callers should treat that as a quote-quality alarm, not a
         clean signal.
+
+        Apr 30 2026: bumps the per-strategy ``_bid_ask_total`` /
+        ``_bid_ask_fallback`` counters so the validation harness can
+        print a quote-quality summary at end of run. Without this an
+        operator can't tell whether a "realistic-fill" CPCV pass
+        actually saw bid/ask or silently degraded to LTP for most
+        legs (which would put the audit fix back to where it started).
         """
+        self._bid_ask_total += 1
         tick = self.ctx.get_tick(token)
         if tick is not None:
             bid = float(tick.bid_price or 0)
             ask = float(tick.ask_price or 0)
             if bid > 0 and ask > 0 and ask >= bid:
                 return bid, ask
+        # Fallback path. Log at DEBUG so a verbose run can locate which
+        # legs/timestamps degraded; the counter is the main signal.
+        self._bid_ask_fallback += 1
+        if logger.isEnabledFor(logging.DEBUG):
+            reason = (
+                "no tick" if tick is None
+                else f"bad quote bid={float(tick.bid_price or 0)} ask={float(tick.ask_price or 0)}"
+            )
+            logger.debug(
+                f"[{self.strategy_id}] BID_ASK_FALLBACK token={token} reason={reason}"
+            )
         ltp = float(self.ctx.get_ltp(token) or 0)
         return ltp, ltp
+
+    def get_quote_fallback_stats(self) -> dict:
+        """Return the realistic-fill quote-quality counters for this run.
+
+        ``total`` is the number of ``_bid_ask_for`` calls; ``fallback``
+        is how many of those calls hit the LTP-symmetric fallback;
+        ``fallback_pct`` is the percentage. Consumed by the validation
+        harness to surface "X% of quote lookups degraded to LTP"
+        alongside the rest of the run summary. A high percentage is a
+        signal that the source feed lacked usable bid/ask for the
+        traded strikes — typically the exact deep-OTM legs the
+        liquidity filter is supposed to gate.
+        """
+        total = int(self._bid_ask_total)
+        fallback = int(self._bid_ask_fallback)
+        fallback_pct = (fallback / total * 100.0) if total > 0 else 0.0
+        return {
+            "total": total,
+            "fallback": fallback,
+            "fallback_pct": round(fallback_pct, 2),
+        }
 
     @staticmethod
     def _spread_pct(bid: float, ask: float) -> float | None:

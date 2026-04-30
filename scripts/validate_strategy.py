@@ -452,6 +452,31 @@ async def main_async(args: argparse.Namespace) -> int:
         len(daily_pnl_series),
     )
 
+    # ─── Apr 30 2026: quote-fallback probe summary ─────────────────
+    # Surface how often the strategy's ``_bid_ask_for`` served real
+    # bid/ask vs degraded to the LTP-symmetric fallback. A high
+    # fallback_pct means the "realistic-fill" claim on this run is
+    # weak — the same LTP fiction the audit just removed is creeping
+    # back through the fallback path. Operators should re-evaluate
+    # results on a chain with denser quotes (or tighten the strike
+    # liquidity filter) before trusting the verdict.
+    qstats = full_result.get("quote_fallback_stats") or {}
+    if qstats.get("total"):
+        msg = (
+            "[VALIDATE] quote_quality: %d/%d _bid_ask_for calls (%s%%) "
+            "fell back to LTP-symmetric (no tick / zero side / crossed)"
+        )
+        pct_str = f"{qstats['fallback_pct']:.2f}"
+        if qstats["fallback_pct"] >= 25.0:
+            logger.warning(
+                msg + "  ⚠ HIGH FALLBACK — realistic-fill claim weak on this run",
+                qstats["fallback"], qstats["total"], pct_str,
+            )
+        else:
+            logger.info(
+                msg, qstats["fallback"], qstats["total"], pct_str,
+            )
+
     # ─── Regime stratification (must run AFTER full-window write) ──
     decisions = loader.load_decisions(combined)
     event_dates = load_event_dates()
