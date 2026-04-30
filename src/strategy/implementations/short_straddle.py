@@ -331,10 +331,13 @@ class ShortStraddleStrategy(BaseStrategy):
         if not self._entered:
             return None
 
-        # Calculate current premium
+        # Apr 30 2026 multi-model audit fix: PT/SL/trail thresholds
+        # use the REALISTIC close cost (BUY both legs at ask), not LTP
+        # midpoint. Mirror of the strangle/IC fix — see those strategies'
+        # _check_adjustments docstrings for the rationale.
         ce_ltp = self.ctx.get_ltp(self._ce_token)
         pe_ltp = self.ctx.get_ltp(self._pe_token)
-        current_premium = ce_ltp + pe_ltp
+        current_premium = Decimal(str(round(self._exit_fill_debit(), 2)))
 
         if self._entry_premium <= 0:
             return None

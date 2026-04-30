@@ -388,12 +388,19 @@ class LongCalendarStrategy(BaseStrategy):
         """Continuous exit checks: profit target, stop loss, underlying move."""
         if not self._entered:
             return None
+        # Apr 30 2026 multi-model audit fix: profit-target / stop-loss
+        # thresholds evaluate against the REALISTIC close credit (sell
+        # back at bid, buy front at ask) — what the broker actually
+        # books — not LTP-mid. Mirrors the IC/strangle/straddle fix.
+        # ``_exit_fill_credit`` returns ``back_bid − front_ask`` and
+        # falls back to LTP-symmetric only when bid/ask are missing.
         front_ltp = self.ctx.get_ltp(self._front_token)
         back_ltp = self.ctx.get_ltp(self._back_token)
         if front_ltp <= 0 or back_ltp <= 0:
             return None  # Pricing not available, hold position
 
-        current_value = back_ltp - front_ltp  # spread MTM
+        current_value_f = self._exit_fill_credit()
+        current_value = Decimal(str(round(current_value_f, 2)))
         if current_value > self._peak_value:
             self._peak_value = current_value
 

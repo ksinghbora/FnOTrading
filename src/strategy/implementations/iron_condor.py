@@ -457,13 +457,25 @@ class IronCondorStrategy(BaseStrategy):
         if not self._entered or self._entry_credit <= 0:
             return None
 
-        # Calculate current net value of the position
+        # Apr 30 2026 multi-model audit fix (3/3 reviewers flagged):
+        # use REALISTIC fill cost for the threshold check, not LTP
+        # midpoint. The strategy's outcome_pnl, the engine's broker
+        # fills, and now this threshold all evaluate against bid/ask
+        # crossing — eliminating the prior "decide on mid, fill on
+        # bid/ask" inconsistency that biased profit-target firings
+        # too early and stop-loss firings too late. ``_exit_fill_debit``
+        # returns ``(short_ce_ask + short_pe_ask) − (long_ce_bid +
+        # long_pe_bid)`` — exactly what the broker books on close.
+        # LTPs are still cached for the human-readable log line below.
         short_ce_ltp = self.ctx.get_ltp(self._short_ce_token)
         short_pe_ltp = self.ctx.get_ltp(self._short_pe_token)
         long_ce_ltp = self.ctx.get_ltp(self._long_ce_token)
         long_pe_ltp = self.ctx.get_ltp(self._long_pe_token)
 
-        current_debit = (short_ce_ltp + short_pe_ltp) - (long_ce_ltp + long_pe_ltp)
+        # Wrap to Decimal so the arithmetic with ``self._entry_credit``
+        # (also Decimal) doesn't TypeError. ``_exit_fill_debit`` returns
+        # ``float`` by design (it composes ``_bid_ask_for`` floats).
+        current_debit = Decimal(str(round(self._exit_fill_debit(), 2)))
 
         # Resolve exit thresholds — vol-scaled when opt-in, hardcoded otherwise.
         dte = (self._expiry - self.ctx.clock.now().date()).days if self._expiry else 7
@@ -519,11 +531,19 @@ class IronCondorStrategy(BaseStrategy):
             )
             return None
 
-        # Check if one side is threatened
-        # Cost to close a spread = buy back short - sell long
-        # Positive value = spread is losing money for seller (short leg ITM)
-        call_close_cost = float(short_ce_ltp - long_ce_ltp)
-        put_close_cost = float(short_pe_ltp - long_pe_ltp)
+        # Check if one side is threatened.
+        # Cost to close a spread = buy back short at ask − sell long at bid.
+        # Apr 30 2026 multi-model audit fix: was LTP midpoint here too,
+        # so the adjustment trigger fired on a different valuation than
+        # the actual close fill. Per-leg bid/ask via _bid_ask_for keeps
+        # the trigger consistent with what the rolling adjustment will
+        # actually pay.
+        _, _short_ce_ask = self._bid_ask_for(self._short_ce_token)
+        _, _short_pe_ask = self._bid_ask_for(self._short_pe_token)
+        _long_ce_bid, _ = self._bid_ask_for(self._long_ce_token)
+        _long_pe_bid, _ = self._bid_ask_for(self._long_pe_token)
+        call_close_cost = float(_short_ce_ask - _long_ce_bid)
+        put_close_cost = float(_short_pe_ask - _long_pe_bid)
         entry_credit_f = float(self._entry_credit)
         threshold = self.params.adjustment_threshold_pct / 100.0
 

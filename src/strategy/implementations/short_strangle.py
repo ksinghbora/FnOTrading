@@ -324,9 +324,16 @@ class ShortStrangleStrategy(BaseStrategy):
         if self._entry_premium <= 0:
             return None
 
+        # Apr 30 2026 multi-model audit fix: PT/SL/trail thresholds
+        # use the REALISTIC close cost (BUY both legs at ask), not LTP
+        # midpoint. Eliminates the prior decide-on-mid-fill-on-bid/ask
+        # inconsistency. ``_exit_fill_debit`` is what the broker
+        # actually books on close. LTPs cached for human-readable logs.
+        # Wrap to Decimal so the existing Decimal arithmetic on
+        # ``_entry_premium`` / ``_peak_premium`` doesn't TypeError.
         ce_ltp = self.ctx.get_ltp(self._ce_token)
         pe_ltp = self.ctx.get_ltp(self._pe_token)
-        current_premium = ce_ltp + pe_ltp
+        current_premium = Decimal(str(round(self._exit_fill_debit(), 2)))
 
         change_pct = float((current_premium - self._entry_premium) / self._entry_premium * 100)
 
