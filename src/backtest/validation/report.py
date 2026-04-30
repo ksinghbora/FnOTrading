@@ -138,35 +138,60 @@ def evaluate_gates(
         (penalises any tail of losing paths even if median is
         strong, which is unrealistic for premium-collection
         strategies that get tagged hard during vol shocks).
+      - Apr 30 2026 (Phase 3 honest rename, multi-model audit):
+        renamed ``cpcv_median_sharpe`` → ``fold_stability_median_sharpe``
+        and ``cpcv_pbo`` → ``fold_stability_pbo``. The underlying
+        ``CombinatorialPurgedCV`` class still calls the runner with
+        ``train_dates`` (in-sample fold-stability), NOT ``test_dates``
+        (true OOS) — see cpcv.py:38-43 docstring. The old gate names
+        implied this was a real López de Prado CPCV measuring OOS
+        skill; in fact every Sharpe value in the distribution is the
+        strategy's in-sample performance on a different random
+        sub-window of the train+val data. Honest renaming clarifies
+        what's actually being measured. A separate ``--oos-cpcv``
+        evaluation mode (added in cpcv.py same date) can be opted
+        into when true OOS evaluation is wanted.
     """
     gates: dict[str, tuple[bool, str]] = {}
 
-    # ─── cpcv_median_sharpe: median > 0.3 (relaxed from 0.5 per Apr 27 research) ──
-    # The p05 > 0 secondary check from the prior gate is preserved as a
-    # diagnostic in the markdown report (CPCV Distribution section) but
-    # does not fail this gate — left-tail events on a 227-day corpus
-    # spanning the SEBI Nov 20 2024 regime break shouldn't gate ship.
+    # ─── fold_stability_median_sharpe: median > 0.3 ─────────────────
+    # Median annualised Sharpe across the CPCV path distribution. By
+    # default each path runs the strategy on a different *training*
+    # sub-window — so this gate measures how stable the strategy's
+    # in-sample fit is across resampled training subsets, NOT how it
+    # generalises to held-out test folds. Relaxed Apr 27 from >0.5
+    # to >0.3 per Indian-market methodology research. The p05 > 0
+    # secondary check from the prior gate is preserved as a
+    # diagnostic in the markdown report (Fold-Stability Distribution
+    # section) but does not fail this gate — left-tail events on a
+    # 227-day corpus spanning the SEBI Nov 20 2024 regime break
+    # shouldn't gate ship.
     median = float(cpcv_result.get("sharpe_median", 0.0))
     p05 = float(cpcv_result.get("sharpe_p05", 0.0))
-    gates["cpcv_median_sharpe"] = (
+    gates["fold_stability_median_sharpe"] = (
         median > 0.3,
         f"median={median:.3f} (>0.3); p05={p05:.3f} [diagnostic]",
     )
 
-    # ─── cpcv_pbo: < 0.5 (None → WARN, don't fail) ──────────────────
+    # ─── fold_stability_pbo: < 0.5 (None → WARN, don't fail) ────────
+    # PBO requires a multi-config grid (compare each config's train vs
+    # test rank); the single-config CPCV path produces None. Like the
+    # median-sharpe gate above, this is computed off the same in-
+    # sample fold distribution unless ``evaluation_mode='test_oos'``
+    # was passed at evaluate() time.
     pbo_val = cpcv_result.get("pbo")
     if pbo_val is None:
-        gates["cpcv_pbo"] = (True, "PBO not computed (single-config CPCV) — WARN")
+        gates["fold_stability_pbo"] = (True, "PBO not computed (single-config CPCV) — WARN")
     else:
         pbo_f = float(pbo_val)
-        gates["cpcv_pbo"] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
+        gates["fold_stability_pbo"] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
 
     # ─── dsr: dropped Apr 27 2026. DSR penalises any strategy whose
     # path-distribution variance was inflated by the SEBI regime break
     # in our corpus, making it a poor gate for the current data. Future
     # replacement: Monte Carlo permutation test (10k shuffles, p<0.10).
     # DSR value itself is still computed and shown in the markdown
-    # report's CPCV section as a diagnostic.
+    # report's Fold-Stability section as a diagnostic.
 
     # ─── wf_decay: median_decay < 0.5 ───────────────────────────────
     median_decay = float(getattr(wf_report, "median_decay", 0.0))
@@ -389,10 +414,21 @@ def render_markdown(report: ValidationReport, out_path: Path) -> None:
     )
     lines.append("")
 
-    # ─── 3. CPCV Distribution ───────────────────────────────────────
-    lines.append("## 3. CPCV Distribution")
+    # ─── 3. Fold-Stability Distribution ─────────────────────────────
+    # Apr 30 2026 honest rename: this section was called "CPCV
+    # Distribution" but the underlying CPCV evaluator runs the
+    # strategy on each path's *training* dates, not the test fold.
+    # That makes the resulting Sharpe distribution a measure of in-
+    # sample fold-stability, not OOS skill. Renamed for clarity.
+    # ``evaluation_mode`` annotation surfaces which mode the path was
+    # generated under so the reader knows whether to interpret
+    # numbers as in-sample or true OOS.
+    lines.append("## 3. Fold-Stability Distribution")
     lines.append("")
     cpcv = report.cpcv_result or {}
+    eval_mode = str(cpcv.get("evaluation_mode", "train_in_sample"))
+    mode_note = "in-sample fold stability" if eval_mode == "train_in_sample" else "true OOS (test_dates)"
+    lines.append(f"- Evaluation mode: `{eval_mode}` — {mode_note}")
     dist = np.asarray(cpcv.get("sharpe_distribution", []), dtype=float)
     n_paths = int(dist.size)
     lines.append(f"- Paths: {n_paths}")

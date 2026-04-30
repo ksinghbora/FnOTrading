@@ -68,6 +68,19 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--cpcv-n-test-folds", type=int, default=2)
     p.add_argument("--cpcv-max-paths", type=int, default=50)
     p.add_argument(
+        "--oos-cpcv", action="store_true",
+        help=(
+            "Apr 30 2026 Phase 3 honest-rename: when set, the CPCV "
+            "evaluator runs each path on test_dates (proper OOS). "
+            "Default is train_in_sample — runs on train_dates and "
+            "produces an in-sample fold-stability distribution. The "
+            "report's `fold_stability_*` gates are calibrated against "
+            "the default mode; OOS Sharpe distributions are typically "
+            "lower (real OOS variance > resampled-train variance) so "
+            "expect to recalibrate gates when flipping this on."
+        ),
+    )
+    p.add_argument(
         "--workers", type=int, default=1,
         help=(
             "Number of parallel CPCV worker subprocesses. 1 = sequential "
@@ -277,6 +290,7 @@ async def main_async(args: argparse.Namespace) -> int:
         baseline_params, runner, combined,
         runner_spec=runner_spec,
         n_workers=args.workers,
+        evaluation_mode="test_oos" if args.oos_cpcv else "train_in_sample",
     )
 
     # ─── Walk-forward on train ∪ val ───────────────────────────────

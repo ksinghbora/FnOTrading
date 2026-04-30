@@ -175,6 +175,7 @@ async def parallel_evaluate_paths(
     paths_args: list[tuple[int, list[date], list[date], tuple[int, ...]]],
     param_set: dict[str, Any],
     n_workers: int,
+    evaluation_mode: str = "train_in_sample",
 ) -> dict[int, tuple[list[date], list[date], tuple[int, ...], dict]]:
     """Run all CPCV paths across ``n_workers`` subprocesses.
 
@@ -185,6 +186,10 @@ async def parallel_evaluate_paths(
         param_set: Strategy parameter overrides (same for all paths).
         n_workers: Number of subprocesses. ``1`` falls through to the
             sequential path so the same code path covers both modes.
+        evaluation_mode: ``"train_in_sample"`` (default) feeds each
+            worker the path's ``train_dates`` — fold-stability metric.
+            ``"test_oos"`` feeds ``test_dates`` for proper OOS
+            evaluation. Apr 30 2026 Phase 3 honest-rename addition.
 
     Returns:
         ``{path_id: (train_dates, test_dates, fold_ids, metrics)}``. The
@@ -214,24 +219,26 @@ async def parallel_evaluate_paths(
     # branch. Useful for debugging when n_workers=1.
     if n_workers <= 1:
         for path_id, train_dates, test_dates, fold_ids in paths_args:
+            eval_dates = test_dates if evaluation_mode == "test_oos" else train_dates
             _, metrics = run_path_in_subprocess(
-                spec_dict, train_dates, dict(param_set), path_id
+                spec_dict, eval_dates, dict(param_set), path_id
             )
             out[path_id] = (train_dates, test_dates, fold_ids, metrics)
         return out
 
     logger.info(
-        "[CPCV] running %d paths across %d workers (spawn) — base_seed=%d",
-        len(paths_args), n_workers, spec.base_seed,
+        "[CPCV] running %d paths across %d workers (spawn) — base_seed=%d, mode=%s",
+        len(paths_args), n_workers, spec.base_seed, evaluation_mode,
     )
 
     loop = asyncio.get_event_loop()
     with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as pool:
         futures = {}
         for path_id, train_dates, test_dates, fold_ids in paths_args:
+            eval_dates = test_dates if evaluation_mode == "test_oos" else train_dates
             fut = pool.submit(
                 run_path_in_subprocess,
-                spec_dict, train_dates, dict(param_set), path_id,
+                spec_dict, eval_dates, dict(param_set), path_id,
             )
             futures[fut] = (path_id, train_dates, test_dates, fold_ids)
 

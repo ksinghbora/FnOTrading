@@ -221,15 +221,16 @@ class CombinatorialPurgedCV:
         dates: list[date],
         runner_spec: "RunnerSpec | None" = None,
         n_workers: int = 1,
+        evaluation_mode: str = "train_in_sample",
     ) -> dict[str, Any]:
         """Run one CPCV path per fold-combination and aggregate.
 
         Two execution modes:
 
-        1. **Sequential (default).** Calls ``runner_fn(train_dates,
-           param_set)`` for each path in order. ``runner_fn`` must be an
-           async callable. Used when ``n_workers <= 1`` or
-           ``runner_spec`` is None.
+        1. **Sequential (default).** Calls
+           ``runner_fn(<dates_for_mode>, param_set)`` for each path in
+           order. ``runner_fn`` must be an async callable. Used when
+           ``n_workers <= 1`` or ``runner_spec`` is None.
 
         2. **Parallel.** When ``runner_spec`` is given AND ``n_workers
            > 1``, paths are dispatched to a process pool via
@@ -242,12 +243,36 @@ class CombinatorialPurgedCV:
            guarantees that ``n_workers=1`` and ``n_workers=N`` produce
            identical CPCV path metrics for the same ``base_seed``.
 
+        Two evaluation modes (Apr 30 2026 honest-rename Phase 3):
+
+        * ``"train_in_sample"`` (default — historical behaviour, kept
+          as default to avoid silently breaking existing reports). For
+          each path, runs the strategy on ``train_dates`` and reports
+          its Sharpe. The resulting distribution measures the
+          strategy's *in-sample* performance across resampled training
+          subsets — a fold-stability metric, NOT out-of-sample skill.
+          The harness's ``fold_stability_*`` gates are calibrated
+          against this mode.
+
+        * ``"test_oos"`` (proper López-de-Prado CPCV). For each path,
+          runs the strategy on ``test_dates`` (the held-out fold) and
+          reports its Sharpe. The distribution then measures genuine
+          out-of-sample skill across non-overlapping test folds. Use
+          via ``--oos-cpcv`` on validate_strategy.py.
+
         Returns:
             Dict with ``paths`` (list[CPCVPath]), Sharpe distribution
             stats (``sharpe_median``, ``sharpe_mean``, ``sharpe_p05``,
             ``sharpe_p95``, ``sharpe_distribution`` as np.ndarray),
-            ``num_trades_mean``, and ``pbo=None`` placeholder.
+            ``num_trades_mean``, ``pbo=None`` placeholder, and
+            ``evaluation_mode`` echoed back so downstream renderers
+            can label the section correctly.
         """
+        if evaluation_mode not in ("train_in_sample", "test_oos"):
+            raise ValueError(
+                f"evaluation_mode must be 'train_in_sample' or 'test_oos', "
+                f"got: {evaluation_mode!r}"
+            )
         paths: list[CPCVPath] = []
 
         # Materialise all paths up-front so both modes use the same
@@ -269,6 +294,7 @@ class CombinatorialPurgedCV:
                 paths_args=all_paths,
                 param_set=param_set,
                 n_workers=n_workers,
+                evaluation_mode=evaluation_mode,
             )
             # Iterate path_id in order so the returned ``paths`` list is
             # deterministic regardless of completion order in the pool.
@@ -294,7 +320,14 @@ class CombinatorialPurgedCV:
             for path_id, train_dates, test_dates, fold_ids in all_paths:
                 # Defensive: don't let path logic mutate caller's param dict
                 params_copy = dict(param_set)
-                result = await runner_fn(train_dates, params_copy)
+                # Apr 30 2026 Phase 3: pick the dates per evaluation_mode.
+                # train_in_sample (default) preserves historical behaviour;
+                # test_oos runs the strategy on the held-out test fold for
+                # proper out-of-sample evaluation.
+                eval_dates = (
+                    test_dates if evaluation_mode == "test_oos" else train_dates
+                )
+                result = await runner_fn(eval_dates, params_copy)
                 metrics = dict(result.get("metrics", {}))
 
                 num_trades = int(metrics.get("num_trades", 0))
@@ -325,6 +358,7 @@ class CombinatorialPurgedCV:
                 "sharpe_p95": 0.0,
                 "pbo": None,
                 "num_trades_mean": 0.0,
+                "evaluation_mode": evaluation_mode,
             }
 
         sharpes = np.array(
@@ -352,4 +386,5 @@ class CombinatorialPurgedCV:
             "sharpe_p95": float(np.percentile(sharpes, 95)),
             "pbo": None,  # computed by caller with multi-config matrices
             "num_trades_mean": float(np.mean(trades)),
+            "evaluation_mode": evaluation_mode,
         }

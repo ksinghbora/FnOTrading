@@ -150,7 +150,7 @@ def test_evaluate_gates_all_pass() -> None:
         assert passed, f"gate {name} unexpectedly failed: {reason}"
 
 
-def test_evaluate_gates_cpcv_median_sharpe_fail() -> None:
+def test_evaluate_gates_fold_stability_median_sharpe_fail() -> None:
     gates = evaluate_gates(
         cpcv_result=_failing_cpcv(),
         wf_report=_wf(median_decay=0.2, frac_pos=0.8),
@@ -159,14 +159,18 @@ def test_evaluate_gates_cpcv_median_sharpe_fail() -> None:
         capacity_df=_capacity_df_pass(),
     )
     # Median Sharpe in _failing_cpcv() is ~-0.2 → fails > 0.3 threshold
-    assert gates["cpcv_median_sharpe"][0] is False
-    # The failing cpcv has pbo=0.7 → should also fail cpcv_pbo
-    assert gates["cpcv_pbo"][0] is False
+    assert gates["fold_stability_median_sharpe"][0] is False
+    # The failing cpcv has pbo=0.7 → should also fail PBO gate
+    assert gates["fold_stability_pbo"][0] is False
 
 
 def test_evaluate_gates_dsr_dropped() -> None:
     """DSR was dropped as a hard gate on Apr 27 2026 — must not appear
-    in the gate table even when the run would otherwise pass DSR."""
+    in the gate table even when the run would otherwise pass DSR.
+
+    Apr 30 2026: also pin that the prior gate-key names (cpcv_stability,
+    cpcv_median_sharpe, cpcv_pbo) are no longer present — the honest
+    rename to fold_stability_* is the contract going forward."""
     gates = evaluate_gates(
         cpcv_result=_passing_cpcv(),
         wf_report=_wf(median_decay=0.2, frac_pos=0.8),
@@ -175,7 +179,11 @@ def test_evaluate_gates_dsr_dropped() -> None:
         capacity_df=_capacity_df_pass(),
     )
     assert "dsr" not in gates
-    assert "cpcv_stability" not in gates  # renamed to cpcv_median_sharpe
+    assert "cpcv_stability" not in gates    # original Apr 23 name
+    assert "cpcv_median_sharpe" not in gates  # Apr 27 intermediate name
+    assert "cpcv_pbo" not in gates            # Apr 27 intermediate name
+    assert "fold_stability_median_sharpe" in gates
+    assert "fold_stability_pbo" in gates
 
 
 def test_evaluate_gates_cpcv_median_borderline() -> None:
@@ -200,7 +208,7 @@ def test_evaluate_gates_cpcv_median_borderline() -> None:
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    assert gates["cpcv_median_sharpe"][0] is True
+    assert gates["fold_stability_median_sharpe"][0] is True
 
 
 def test_evaluate_gates_wf_coverage_borderline_60pct() -> None:
@@ -325,8 +333,8 @@ def test_evaluate_gates_pbo_warn_when_missing() -> None:
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    assert gates["cpcv_pbo"][0] is True
-    assert "WARN" in gates["cpcv_pbo"][1]
+    assert gates["fold_stability_pbo"][0] is True
+    assert "WARN" in gates["fold_stability_pbo"][1]
 
 
 def test_evaluate_gates_wf_decay_fail() -> None:
@@ -447,7 +455,7 @@ def test_render_markdown_passing(tmp_path: Path) -> None:
     assert "# Validation Report" in text
     assert "## 1. Executive Summary" in text
     assert "## 2. Split" in text
-    assert "## 3. CPCV Distribution" in text
+    assert "## 3. Fold-Stability Distribution" in text
     assert "## 4. Walk-Forward" in text
     assert "## 5. Regime Stratification" in text
     assert "## 6. Cost Sensitivity" in text
