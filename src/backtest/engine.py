@@ -386,6 +386,17 @@ class BacktestEngine:
             f"days={num_days} capital={initial_capital:,.0f}"
         )
 
+        # Apr 30 2026 Phase 4B: snapshot of cumulative ``pnl.realized``
+        # at each day's START. realized_today = current_realized -
+        # day_start_realized. Without this baseline, multi-day positions
+        # double-count: on day N the running_pnl includes (N-1)'s MTM
+        # plus today's MTM plus today's realized — three things,
+        # summed across days. With it, daily_results carries a true
+        # incremental realised P&L that the MC + bootstrap CI gates
+        # can use without contamination from open-position price
+        # swings that aren't actually money in the bank.
+        day_start_realized: float = 0.0
+
         for day_idx, day in enumerate(trading_days):
             # Day boundary reset (except first day)
             if day_idx > 0:
@@ -399,6 +410,11 @@ class BacktestEngine:
                 # window, corrupting move_from_open_pct, the trend
                 # filter, and the trend-leg's morning range detection.
                 aggregator.clear_day()
+            # Snapshot the day-start realized AFTER reset_daily so it
+            # reflects the post-_closed.clear baseline. For intraday
+            # strategies this is always 0; for multi-day open positions
+            # whose pos.pnl is still 0 (no fills yet), also 0.
+            day_start_realized = float(portfolio.get_pnl(strategy_id).realized)
 
             # Expiry rollover (GDFL only — the synthetic BS path is gone).
             clock.set_time(IST.localize(datetime.combine(day, time(9, 15))))
@@ -455,16 +471,33 @@ class BacktestEngine:
 
             # ─── Day end ──────────────────────────────────────────
             pnl = portfolio.get_pnl(strategy_id)
-            day_pnl = pnl.net
+            day_pnl = pnl.net  # legacy field — preserved for back-compat
             running_pnl += day_pnl
             day_trades = len(broker._trades) - day_trades_start
+
+            # Apr 30 2026 Phase 4B: split into incremental realised vs
+            # current-MTM unrealized. The MC + bootstrap CI gates
+            # (validate_strategy.py:332) consume this series; using
+            # ``realized_pnl`` instead of ``pnl`` (mtm-contaminated)
+            # makes those gates measure execution variance rather than
+            # market price-noise on open positions.
+            current_realized = float(pnl.realized)
+            realized_today = current_realized - day_start_realized
+            unrealized_mtm = float(pnl.unrealized)
 
             daily_results.append({
                 "date": day.isoformat(),
                 "day_of_week": day.strftime("%A"),
                 "spot_open": round(day_open, 2),
                 "spot_close": round(spot, 2),
+                # Legacy field — kept for any consumer that hasn't
+                # migrated to realized_pnl/unrealized_mtm. For
+                # intraday strategies (positions close EOD) this
+                # equals realized_pnl; for multi-day strategies
+                # (long_calendar) it includes today's MTM.
                 "pnl": round(float(day_pnl), 2),
+                "realized_pnl": round(realized_today, 2),
+                "unrealized_mtm": round(unrealized_mtm, 2),
                 "charges": round(float(pnl.charges), 2),
                 "trades": day_trades,
                 "equity": round(initial_capital + float(running_pnl), 2),

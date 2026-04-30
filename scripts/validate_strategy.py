@@ -341,11 +341,16 @@ async def main_async(args: argparse.Namespace) -> int:
     trades = list(full_result.get("trades", []))
     # Daily-PnL series for the MC permutation + block-bootstrap-CI gates
     # added Apr 27 2026 alongside the DSR drop. The engine emits one row
-    # per session in ``daily_results``; we read the ``pnl`` field which
-    # is the end-of-day P&L net of charges (₹).
+    # per session in ``daily_results``; we read the ``realized_pnl``
+    # field (Apr 30 2026 Phase 4B addition) so the gates measure
+    # incremental realised P&L per day, not the legacy ``pnl`` which
+    # included unrealized mark-to-market on open positions and
+    # double-counted across days for multi-day strategies. Falls back
+    # to ``pnl`` for older runner outputs that predate the split.
+    rows = full_result.get("daily_results", [])
     daily_pnl_series = [
-        float(d.get("pnl", 0.0))
-        for d in full_result.get("daily_results", [])
+        float(d.get("realized_pnl", d.get("pnl", 0.0)))
+        for d in rows
     ]
     logger.info(
         "[VALIDATE] collected %d trades, %d daily-PnL points",
