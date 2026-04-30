@@ -154,37 +154,60 @@ def evaluate_gates(
     """
     gates: dict[str, tuple[bool, str]] = {}
 
-    # ─── fold_stability_median_sharpe: median > 0.3 ─────────────────
-    # Median annualised Sharpe across the CPCV path distribution. By
-    # default each path runs the strategy on a different *training*
-    # sub-window — so this gate measures how stable the strategy's
-    # in-sample fit is across resampled training subsets, NOT how it
-    # generalises to held-out test folds. Relaxed Apr 27 from >0.5
-    # to >0.3 per Indian-market methodology research. The p05 > 0
-    # secondary check from the prior gate is preserved as a
-    # diagnostic in the markdown report (Fold-Stability Distribution
-    # section) but does not fail this gate — left-tail events on a
-    # 227-day corpus spanning the SEBI Nov 20 2024 regime break
-    # shouldn't gate ship.
+    # ─── Apr 30 2026 Phase 5: mode-aware CPCV gates ────────────────
+    # The Phase 3 honest-rename made the fold-stability gates explicit.
+    # When the runner is invoked in ``evaluation_mode='test_oos'`` the
+    # underlying distribution is genuinely different — it represents
+    # OOS Sharpe across non-overlapping test folds, not in-sample
+    # fold-stability. Different distributions need different gate
+    # thresholds AND different gate names (so reports unambiguously
+    # show which metric is being measured).
+    #
+    # Calibration rationale (median Sharpe):
+    #
+    # * Fold-stability mode (>0.3): Indian premium-collection
+    #   strategies typically run 0.6-1.2 in-sample after costs per
+    #   reports/phase3b_research/validation_methodology_indian.md;
+    #   path distributions tighten around the centre, so 0.3 is a
+    #   "must clear half the in-sample baseline" floor.
+    # * Test-OOS mode (>0.1): per-fold OOS test windows are short
+    #   (~6 weeks at n_folds=10/n_test=2 on a 227-day corpus) so
+    #   per-path Sharpe variance is much higher than the full-window
+    #   number. A 0.6 full-corpus Sharpe routinely produces per-fold
+    #   Sharpes spanning -0.5 to +1.5; a >0.1 median floor catches
+    #   "no edge at all" without rejecting strategies with real-but-
+    #   modest edge masked by short-window noise. López de Prado
+    #   notes >0.5 OOS median is exceptional; >0.1 is the must-clear
+    #   floor for live consideration.
+    #
+    # PBO threshold (<0.5) is the same in both modes — PBO is a rank-
+    # comparison metric and the threshold semantics don't depend on
+    # which date subset the runner saw. Single-config CPCV emits
+    # ``pbo=None`` either way → WARN row.
+    eval_mode = str(cpcv_result.get("evaluation_mode", "train_in_sample"))
     median = float(cpcv_result.get("sharpe_median", 0.0))
     p05 = float(cpcv_result.get("sharpe_p05", 0.0))
-    gates["fold_stability_median_sharpe"] = (
-        median > 0.3,
-        f"median={median:.3f} (>0.3); p05={p05:.3f} [diagnostic]",
+    pbo_val = cpcv_result.get("pbo")
+
+    if eval_mode == "test_oos":
+        median_threshold = 0.1
+        median_key = "oos_median_sharpe"
+        pbo_key = "oos_pbo"
+    else:
+        median_threshold = 0.3
+        median_key = "fold_stability_median_sharpe"
+        pbo_key = "fold_stability_pbo"
+
+    gates[median_key] = (
+        median > median_threshold,
+        f"median={median:.3f} (>{median_threshold:.1f}); p05={p05:.3f} [diagnostic]",
     )
 
-    # ─── fold_stability_pbo: < 0.5 (None → WARN, don't fail) ────────
-    # PBO requires a multi-config grid (compare each config's train vs
-    # test rank); the single-config CPCV path produces None. Like the
-    # median-sharpe gate above, this is computed off the same in-
-    # sample fold distribution unless ``evaluation_mode='test_oos'``
-    # was passed at evaluate() time.
-    pbo_val = cpcv_result.get("pbo")
     if pbo_val is None:
-        gates["fold_stability_pbo"] = (True, "PBO not computed (single-config CPCV) — WARN")
+        gates[pbo_key] = (True, "PBO not computed (single-config CPCV) — WARN")
     else:
         pbo_f = float(pbo_val)
-        gates["fold_stability_pbo"] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
+        gates[pbo_key] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
 
     # ─── dsr: dropped Apr 27 2026. DSR penalises any strategy whose
     # path-distribution variance was inflated by the SEBI regime break
@@ -414,20 +437,22 @@ def render_markdown(report: ValidationReport, out_path: Path) -> None:
     )
     lines.append("")
 
-    # ─── 3. Fold-Stability Distribution ─────────────────────────────
-    # Apr 30 2026 honest rename: this section was called "CPCV
-    # Distribution" but the underlying CPCV evaluator runs the
-    # strategy on each path's *training* dates, not the test fold.
-    # That makes the resulting Sharpe distribution a measure of in-
-    # sample fold-stability, not OOS skill. Renamed for clarity.
-    # ``evaluation_mode`` annotation surfaces which mode the path was
-    # generated under so the reader knows whether to interpret
-    # numbers as in-sample or true OOS.
-    lines.append("## 3. Fold-Stability Distribution")
-    lines.append("")
+    # ─── 3. CPCV Distribution (mode-aware heading) ──────────────────
+    # Apr 30 2026 Phase 3 honest rename + Phase 5 mode-aware heading:
+    # the same CPCV-fold mechanism produces two different distributions
+    # depending on evaluation_mode. The section heading now reflects
+    # which one this report contains so a reader can't mistake an
+    # in-sample fold-stability number for a true OOS Sharpe.
     cpcv = report.cpcv_result or {}
     eval_mode = str(cpcv.get("evaluation_mode", "train_in_sample"))
-    mode_note = "in-sample fold stability" if eval_mode == "train_in_sample" else "true OOS (test_dates)"
+    if eval_mode == "test_oos":
+        section_heading = "## 3. CPCV Out-Of-Sample Distribution"
+        mode_note = "true OOS (runner invoked with test_dates)"
+    else:
+        section_heading = "## 3. Fold-Stability Distribution"
+        mode_note = "in-sample fold stability (runner invoked with train_dates)"
+    lines.append(section_heading)
+    lines.append("")
     lines.append(f"- Evaluation mode: `{eval_mode}` — {mode_note}")
     dist = np.asarray(cpcv.get("sharpe_distribution", []), dtype=float)
     n_paths = int(dist.size)
