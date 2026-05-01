@@ -569,10 +569,12 @@ class TrendITMParams(BaseStrategyParams):
     """
 
     # ─── VIX band ─────────────────────────────────────────────────
-    # Below 12: too calm, breakouts mean-revert. Above 22: stressed,
-    # mean-reverts the other way. 12-22 is the band where directional
-    # momentum has historically had the best edge on US/EM indices.
-    vix_entry_min: float = 12.0
+    # Below 10: pathological calm (rare on NIFTY). Above 22: stressed,
+    # mean-reverts the other way. May 1 2026 calibration: lowered floor
+    # from 12 to 10 after smoke showed VIX 10-12 gates ~half the corpus
+    # despite being normal NIFTY calm (typical post-SEBI VIX ranges
+    # 12-18; floor of 12 was too tight a "complacency" definition).
+    vix_entry_min: float = 10.0
     vix_entry_max: float = 22.0
     vix_reduce_above: float = 20.0
 
@@ -587,8 +589,14 @@ class TrendITMParams(BaseStrategyParams):
     breakout_confirmation_pts: float = 5.0    # Spot must close MORE than this many points beyond the channel — filters tick noise
 
     # ─── ATR(14) Wilder smoothing ────────────────────────────────
+    # May 1 2026 calibration: GDFL spot ticks once per minute (375 unique
+    # values per day); within-minute true range is 0; inter-minute median
+    # TR is 3-7 pts on NIFTY 23-24K spot = 0.015-0.025% of spot. The
+    # original 0.4% floor (≈90 pts) gated 100% of trades. New floor
+    # 0.025% (≈6 pts on NIFTY 24K) keeps out only the dead-quiet days
+    # while admitting median-and-above activity.
     atr_period: int = 14                      # Standard
-    atr_floor_pct_of_spot: float = 0.4        # Skip entry if ATR/spot < this — market too calm to trend
+    atr_floor_pct_of_spot: float = 0.025      # Skip entry if ATR/spot < this — market too calm to trend
     atr_stop_mult: float = 2.0                # Trailing stop = peak_favorable_price ± atr_stop_mult × ATR
 
     # ─── ITM strike selection ────────────────────────────────────

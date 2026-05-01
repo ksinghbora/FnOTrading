@@ -88,8 +88,13 @@ def test_default_params_match_design_doc():
     assert p.atr_period == 14
     assert p.atr_stop_mult == 2.0
     assert p.itm_offset_pts == 500
-    assert p.vix_entry_min == 12.0
+    # May 1 2026 calibration after smoke run found 0.4% / 12.0 gates
+    # ~100% of the corpus on the GDFL spot data (synthesized 1-min
+    # tick frequency means inter-minute TR is single-digit pts, not
+    # the 90+ pts a 0.4% floor implies). See params.py docstring.
+    assert p.vix_entry_min == 10.0
     assert p.vix_entry_max == 22.0
+    assert p.atr_floor_pct_of_spot == 0.025
     assert p.entry_time == time(9, 30)
     assert p.exit_time == time(14, 45)
 
