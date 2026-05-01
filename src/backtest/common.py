@@ -186,14 +186,23 @@ def _load_vix_csv(filepath: str | Path) -> dict[date, list[dict]]:
 
 
 def _register_options(chain_builder, underlying, spot, step, num_strikes, expiry, alloc_token):
-    """Register option instruments in the chain builder."""
+    """Register option instruments in the chain builder.
+
+    May 1 2026 fix: ``alloc_token`` now takes ``expiry`` so the same
+    strike across multiple expiries maps to distinct tokens. Pre-fix
+    bug let weekly + monthly expiries on the same strike collide on a
+    single token, breaking the broker's symbol→token resolution.
+    """
     atm = round(spot / step) * step
     for i in range(-num_strikes, num_strikes + 1):
         strike = atm + i * step
         strike_dec = Decimal(str(strike))
         for opt_type in (OptionType.CE, OptionType.PE):
-            token = alloc_token(underlying, strike, opt_type.value)
-            expiry_str = expiry.strftime("%y%b").upper()
+            token = alloc_token(underlying, strike, opt_type.value, expiry)
+            # May 1 2026 fix part 2: ``%y%b%d`` so weekly expiries within
+            # the same month produce distinct tradingsymbols — see
+            # gdfl_market_source.register_options for the rationale.
+            expiry_str = expiry.strftime("%y%b%d").upper()
             symbol = f"{underlying}{expiry_str}{int(strike)}{opt_type.value}"
             chain_builder.register_option(
                 token, underlying, expiry, strike_dec, opt_type, symbol,
@@ -374,7 +383,9 @@ def _update_market(
     oi_arr = np.maximum(1000, 50000 * np.exp(-distance_arr * 30)).astype(int)
 
     # Expiry string (computed once)
-    exp_str = expiry.strftime("%y%b").upper()
+    # May 1 2026 fix part 2: ``%y%b%d`` so weekly expiries get distinct
+    # tradingsymbols. See _register_options for the rationale.
+    exp_str = expiry.strftime("%y%b%d").upper()
     _SPREAD_MIN = Decimal("0.05")
     _SPREAD_FACTOR = Decimal("0.01")
 
@@ -390,9 +401,11 @@ def _update_market(
             ("CE", float(ce_prices_arr[idx]), float(N_d1[idx]), float(ce_theta_arr[idx]), float(ce_rho_arr[idx])),
             ("PE", float(pe_prices_arr[idx]), float(N_d1[idx] - 1), float(pe_theta_arr[idx]), float(pe_rho_arr[idx])),
         ):
-            key = (underlying, strike, opt_str)
+            # May 1 2026 fix: key now 4-tuple to disambiguate same-strike
+            # across multiple expiries.
+            key = (underlying, strike, opt_str, expiry)
             if key not in option_tokens:
-                token = alloc_token(underlying, strike, opt_str)
+                token = alloc_token(underlying, strike, opt_str, expiry)
                 opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
                 sym = f"{underlying}{exp_str}{int(strike)}{opt_str}"
                 chain_builder.register_option(

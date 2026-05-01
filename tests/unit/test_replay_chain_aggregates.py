@@ -87,11 +87,13 @@ async def _setup_engine(spot: float, day: date) -> dict:
     expiry = date(2026, 4, 21)
     cb.register_spot(spot_token, underlying)
 
+    # May 1 2026 fix: 4-tuple key (with expiry) — see engine.py
+    # alloc_token rationale.
     next_token = [9_000_000]
-    option_tokens: dict[tuple[str, float, str], int] = {}
+    option_tokens: dict[tuple[str, float, str, date], int] = {}
 
-    def alloc(ul: str, s: float, ot: str) -> int:
-        k = (ul, s, ot)
+    def alloc(ul: str, s: float, ot: str, exp: date) -> int:
+        k = (ul, s, ot, exp)
         if k not in option_tokens:
             option_tokens[k] = next_token[0]
             next_token[0] += 1

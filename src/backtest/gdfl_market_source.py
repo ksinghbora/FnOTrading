@@ -110,27 +110,39 @@ class GDFLMarketSource:
 
     # ─── Pre-register options with chain_builder ───────────────────────
 
-    def register_options(self, chain_builder, alloc_token) -> dict[tuple[str, float, str], int]:
-        """Pre-register every (expiry, strike, side) in the day with chain_builder.
+    def register_options(self, chain_builder, alloc_token) -> dict[tuple[str, float, str, date], int]:
+        """Pre-register every (underlying, strike, side, expiry) in the day with chain_builder.
 
         Mirrors _register_options() in engine.py so strategies find their
         expected instruments on first tick.
+
+        May 1 2026 fix: key now includes ``expiry`` (4-tuple). Pre-fix
+        the 3-tuple key collapsed all expiries for the same (strike,
+        side) into a single token, causing broker symbol→token lookups
+        to fail for all but the last-registered expiry.
         """
         if self._day_df is None:
             return {}
 
-        option_tokens: dict[tuple[str, float, str], int] = {}
-        for expiry in sorted(self._day_df["expiry"].unique()):
-            exp_str = pd.Timestamp(expiry).strftime("%y%b").upper()
-            for strike in sorted(self._day_df[self._day_df["expiry"] == expiry]["strike"].unique()):
+        option_tokens: dict[tuple[str, float, str, date], int] = {}
+        for expiry_ts in sorted(self._day_df["expiry"].unique()):
+            exp_date = pd.Timestamp(expiry_ts).date()
+            # May 1 2026 fix part 2: include DAY in the symbol so weekly
+            # expiries within the same month don't share a tradingsymbol
+            # (the bug had Dec-5 / Dec-12 / Dec-19 / Dec-26 all collapsed
+            # to "24DEC", so even with distinct tokens the broker's
+            # symbol→token resolution returned only the first-registered
+            # of the four). New format ``%y%b%d`` → ``24DEC05``.
+            exp_str = pd.Timestamp(expiry_ts).strftime("%y%b%d").upper()
+            for strike in sorted(self._day_df[self._day_df["expiry"] == expiry_ts]["strike"].unique()):
                 for ot in ("CE", "PE"):
-                    token = alloc_token(self.underlying, float(strike), ot)
-                    option_tokens[(self.underlying, float(strike), ot)] = token
+                    token = alloc_token(self.underlying, float(strike), ot, exp_date)
+                    option_tokens[(self.underlying, float(strike), ot, exp_date)] = token
                     symbol = f"{self.underlying}{exp_str}{int(strike)}{ot}"
                     strike_dec = Decimal(str(int(strike))) if strike == int(strike) else Decimal(str(strike))
                     opt_type_enum = OptionType.CE if ot == "CE" else OptionType.PE
                     chain_builder.register_option(
-                        token, self.underlying, expiry, strike_dec, opt_type_enum, symbol,
+                        token, self.underlying, exp_date, strike_dec, opt_type_enum, symbol,
                     )
         return option_tokens
 
@@ -143,7 +155,7 @@ class GDFLMarketSource:
         broker,
         chain_builder,
         portfolio,
-        option_tokens: dict[tuple[str, float, str], int],
+        option_tokens: dict[tuple[str, float, str, date], int],
     ) -> tuple[float | None, float | None]:
         """Write the current minute's snapshot into all runtime caches.
 
@@ -241,7 +253,10 @@ class GDFLMarketSource:
             atm = round(float(spot) / step) * step
             chain.atm_strike = Decimal(str(int(atm)))
 
-            exp_str = pd.Timestamp(expiry).strftime("%y%b").upper()
+            # May 1 2026 fix part 2: must match register_options' symbol
+            # format (``%y%b%d``) so chain entries the strategy reads
+            # have the same tradingsymbol the broker resolves against.
+            exp_str = pd.Timestamp(expiry).strftime("%y%b%d").upper()
 
             for i in range(len(strikes)):
                 strike = float(strikes[i])
@@ -250,7 +265,11 @@ class GDFLMarketSource:
                 opt_type_enum = OptionType.CE if ot == "CE" else OptionType.PE
 
                 symbol = f"{self.underlying}{exp_str}{int(strike)}{ot}"
-                token = option_tokens.get((self.underlying, strike, ot))
+                # May 1 2026 fix: key by 4-tuple including ``exp_date`` so
+                # the same strike across multiple expiries maps to
+                # distinct tokens and the broker can resolve the
+                # strategy's symbol → token correctly.
+                token = option_tokens.get((self.underlying, strike, ot, exp_date))
                 if token is None:
                     continue
 

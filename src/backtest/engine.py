@@ -274,11 +274,18 @@ class BacktestEngine:
         chain_builder.register_spot(spot_token, underlying)
 
         # Token allocator
+        # May 1 2026 fix: key includes EXPIRY. Pre-fix, NIFTY 24100 CE
+        # for Dec-5 / Dec-12 / Dec-19 / Dec-26 / Jan-2 expiries all
+        # collided on a single token. Last expiry registered overwrote
+        # symbol_map, so the broker couldn't resolve the strategy's
+        # symbol → token → fell back to slippage_model (LTP+4bps),
+        # producing fictional ~Sharpe-10 results for trend_itm and
+        # subtle bid/ask contamination for all premium-sellers.
         next_token = [_TOKEN_BASE]
-        option_tokens: dict[tuple[str, float, str], int] = {}
+        option_tokens: dict[tuple[str, float, str, date], int] = {}
 
-        def alloc_token(ul: str, strike: float, ot: str) -> int:
-            key = (ul, strike, ot)
+        def alloc_token(ul: str, strike: float, ot: str, expiry: date) -> int:
+            key = (ul, strike, ot, expiry)
             if key not in option_tokens:
                 option_tokens[key] = next_token[0]
                 next_token[0] += 1

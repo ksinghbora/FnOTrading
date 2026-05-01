@@ -288,11 +288,14 @@ class ReplayBacktestEngine:
 
         chain_builder.register_spot(spot_token, underlying)
 
+        # May 1 2026 fix: key includes ``expiry`` so the same strike
+        # across multiple expiries gets distinct tokens. See engine.py
+        # for the full bug rationale.
         next_token = [_TOKEN_BASE]
-        option_tokens: dict[tuple[str, float, str], int] = {}
+        option_tokens: dict[tuple[str, float, str, date], int] = {}
 
-        def alloc_token(ul: str, strike: float, ot: str) -> int:
-            key = (ul, strike, ot)
+        def alloc_token(ul: str, strike: float, ot: str, expiry: date) -> int:
+            key = (ul, strike, ot, expiry)
             if key not in option_tokens:
                 option_tokens[key] = next_token[0]
                 next_token[0] += 1
@@ -594,16 +597,19 @@ def _apply_snapshot(
     if not chain:
         return
 
-    exp_str = expiry.strftime("%y%b").upper()
+    # May 1 2026 fix part 2: full date in symbol — see common.py.
+    exp_str = expiry.strftime("%y%b%d").upper()
 
     for (strike, opt_str), data in snap_data.items():
         strike_dec = Decimal(str(int(strike))) if strike == int(strike) else Decimal(str(strike))
 
         entry = chain_builder._find_or_create_entry(chain, strike_dec)
 
-        key = (underlying, strike, opt_str)
+        # May 1 2026 fix: 4-tuple key (with expiry) so same-strike across
+        # multiple expiries doesn't collide on a single token.
+        key = (underlying, strike, opt_str, expiry)
         if key not in option_tokens:
-            token = alloc_token(underlying, strike, opt_str)
+            token = alloc_token(underlying, strike, opt_str, expiry)
             opt_type_enum = OptionType.CE if opt_str == "CE" else OptionType.PE
             sym = f"{underlying}{exp_str}{int(strike)}{opt_str}"
             chain_builder.register_option(
