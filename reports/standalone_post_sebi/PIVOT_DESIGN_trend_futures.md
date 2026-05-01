@@ -2,6 +2,17 @@
 
 **Status:** Design proposal, May 1 2026.
 
+**May 1 update — implementation constraint discovered:** the GDFL corpus
+(`data/gdfl_v2/`) contains options + spot + VIX only. No futures ticks.
+Adding futures data would be a 2-3 week pivot rather than the 1-2 week
+plan below. Adopted *Option A: deep-ITM single-leg CE/PE as a futures
+proxy* — delta ~0.95 approximates futures price action, single leg
+preserves the cost-reduction-vs-IC argument, and zero new
+infrastructure means we can validate this week. The signal mechanic
+(Donchian + ATR + VIX/time gates) is unchanged; only the execution leg
+is now an option contract. Implementation file: `trend_itm.py` (not
+`trend_futures.py`). Strategy registered as `trend_itm`.
+
 **Why this pivot:** the cross-strategy validation
 ([SUMMARY.md](./SUMMARY.md)) shows premium-selling on Indian retail
 F&O has no edge post-SEBI. Trend-following is **structurally inverse**

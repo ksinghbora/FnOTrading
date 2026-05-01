@@ -533,3 +533,80 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     max_trades_per_day: int = 1              # Reduced from 2 — avoid whipsaw re-entries
     oi_confirm: bool = True                  # Require OI level breach to confirm breakout
     log_only: bool = False                   # Enabled for trading (validated on real data)
+
+
+class TrendITMParams(BaseStrategyParams):
+    """Parameters for Trend ITM strategy — Donchian breakout, single-leg deep-ITM CE/PE.
+
+    May 1 2026 pivot from premium-selling. The post-SEBI cross-strategy
+    validation (reports/standalone_post_sebi/SUMMARY.md) showed every
+    premium-seller (IC / strangle / straddle / calendar) loses 3-8
+    Sharpe with MC p-value ≥ 0.9997 (worse than random) on the
+    regime-clean 173-day corpus. The pivot direction is *trend
+    following* — profits on the breakouts that destroyed premium
+    sellers; opposite cost structure (single leg vs 4 legs).
+
+    GDFL corpus has no futures ticks — using deep-ITM single-leg
+    options as a futures proxy. Delta ~0.95 mimics futures price
+    action; theta is small relative to intrinsic value. See
+    PIVOT_DESIGN_trend_futures.md "May 1 update" for the full rationale.
+
+    Signal:
+      - 20-bar Donchian channel breakout on 1-min spot bars
+      - ATR(14) floor (require minimum tradeable range)
+      - VIX 12-22 band (avoid extreme complacency AND extreme stress)
+      - 09:30 → 14:30 IST entry window (skip auction noise + close squaring)
+
+    Execution:
+      - Long bias → BUY a CE strike `itm_offset_pts` BELOW spot
+      - Short bias → BUY a PE strike `itm_offset_pts` ABOVE spot
+      - Single leg, BUY at ask (debit position)
+
+    Exit:
+      - 2× ATR trailing stop on spot
+      - 14:45 IST hard time stop (square off intraday — no overnight gap)
+      - Reverse on opposite-side Donchian breakout (rare with time stop)
+    """
+
+    # ─── VIX band ─────────────────────────────────────────────────
+    # Below 12: too calm, breakouts mean-revert. Above 22: stressed,
+    # mean-reverts the other way. 12-22 is the band where directional
+    # momentum has historically had the best edge on US/EM indices.
+    vix_entry_min: float = 12.0
+    vix_entry_max: float = 22.0
+    vix_reduce_above: float = 20.0
+
+    # ─── Time gates (IST) ────────────────────────────────────────
+    entry_time: time = time(9, 30)            # Skip auction-imbalance noise (9:15-9:30)
+    exit_time: time = time(14, 45)            # Hard square-off; avoid 14:45-15:30 squaring vol
+    # entry window CLOSE — don't enter new positions late even if signal triggers
+    last_entry_time: time = time(14, 30)
+
+    # ─── Donchian breakout ───────────────────────────────────────
+    donchian_lookback: int = 20               # Use last 20 bars; today's close compared to high/low of 20 prior bars
+    breakout_confirmation_pts: float = 5.0    # Spot must close MORE than this many points beyond the channel — filters tick noise
+
+    # ─── ATR(14) Wilder smoothing ────────────────────────────────
+    atr_period: int = 14                      # Standard
+    atr_floor_pct_of_spot: float = 0.4        # Skip entry if ATR/spot < this — market too calm to trend
+    atr_stop_mult: float = 2.0                # Trailing stop = peak_favorable_price ± atr_stop_mult × ATR
+
+    # ─── ITM strike selection ────────────────────────────────────
+    # 500 pts ITM at NIFTY 22500 = ~2.2% intrinsic. Delta ~0.95.
+    # Spread % is ~1-3% on these strikes (tight); theta is small
+    # relative to the ₹500 intrinsic.
+    itm_offset_pts: int = 500                 # Strike offset from spot in points
+    # Don't enter if no ITM strike is available within tolerance (e.g., very thin chain)
+    itm_max_strike_search_pts: int = 100      # Allowed +/- from the ideal strike
+
+    # ─── Risk management ─────────────────────────────────────────
+    profit_target_pct: float = 100.0          # Exit when option premium gains 100% (debit doubled)
+    stop_loss_pct: float = 40.0               # Exit when option premium drops 40% — disaster cap
+    max_trades_per_day: int = 3               # Cap whipsaw re-entries
+
+    # ─── Entry filters inherited from base ───────────────────────
+    # PCR / max-pain filters mostly informative for premium-sellers; for
+    # directional ITM longs they're less directly relevant. Disable
+    # by default; opt-in if you want to A/B them.
+    pcr_filter_enabled: bool = False
+    max_pain_filter_enabled: bool = False

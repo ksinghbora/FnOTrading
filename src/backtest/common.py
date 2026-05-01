@@ -98,6 +98,7 @@ def import_strategies() -> None:
         import src.strategy.implementations.long_calendar  # noqa: F401
         import src.strategy.implementations.delta_neutral  # noqa: F401
         import src.strategy.implementations.trend_debit_spread  # noqa: F401
+        import src.strategy.implementations.trend_itm  # noqa: F401
         import src.strategy.implementations.portfolio_strategy  # noqa: F401
         import src.strategy.implementations.orchestrator  # noqa: F401
     except ImportError:
