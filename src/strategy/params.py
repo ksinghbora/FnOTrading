@@ -587,6 +587,12 @@ class TrendITMParams(BaseStrategyParams):
     # ─── Donchian breakout ───────────────────────────────────────
     donchian_lookback: int = 20               # Use last 20 bars; today's close compared to high/low of 20 prior bars
     breakout_confirmation_pts: float = 5.0    # Spot must close MORE than this many points beyond the channel — filters tick noise
+    # v2 (May 1 2026): also require breakout to exceed N × ATR — gates
+    # out marginal breakouts that have low forward-edge. Set to 0.0 to
+    # disable (v1 behaviour). v1 smoke showed PF 1.14 at zero cost but
+    # very fragile; stricter entry should fire fewer but higher-quality
+    # trades.
+    breakout_atr_mult: float = 1.0            # 0.0 = disabled (v1)
 
     # ─── ATR(14) Wilder smoothing ────────────────────────────────
     # May 1 2026 calibration: GDFL spot ticks once per minute (375 unique
@@ -597,7 +603,21 @@ class TrendITMParams(BaseStrategyParams):
     # while admitting median-and-above activity.
     atr_period: int = 14                      # Standard
     atr_floor_pct_of_spot: float = 0.025      # Skip entry if ATR/spot < this — market too calm to trend
-    atr_stop_mult: float = 2.0                # Trailing stop = peak_favorable_price ± atr_stop_mult × ATR
+    # v2 (May 1 2026): widened from 2.0 → 3.5. v1 smoke had trades exiting
+    # within seconds of entry on small post-breakout giveback; 3.5×ATR
+    # gives the position room to breathe through normal noise while still
+    # capping disaster moves.
+    atr_stop_mult: float = 3.5                # Trailing stop = peak_favorable_price ± atr_stop_mult × ATR
+    # v2 (May 1 2026): minimum hold period — block trail-stop firing for
+    # the first N minutes after entry. Even with a wider stop, fresh
+    # positions bounce around the entry price; a hard minimum-hold
+    # prevents the "exit within seconds" pattern v1 logs showed.
+    min_hold_minutes: int = 5
+    # v2: skip window for the choppy intra-day range (11:30-13:00 IST is
+    # historically the lowest-realised-vol window on NIFTY). Set both
+    # to ``time(0,0)`` to disable.
+    skip_chop_window_start: time = time(11, 30)
+    skip_chop_window_end: time = time(13, 0)
 
     # ─── ITM strike selection ────────────────────────────────────
     # 500 pts ITM at NIFTY 22500 = ~2.2% intrinsic. Delta ~0.95.

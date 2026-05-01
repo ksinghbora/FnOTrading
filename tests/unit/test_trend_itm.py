@@ -86,7 +86,6 @@ def test_default_params_match_design_doc():
     p = s.params
     assert p.donchian_lookback == 20
     assert p.atr_period == 14
-    assert p.atr_stop_mult == 2.0
     assert p.itm_offset_pts == 500
     # May 1 2026 calibration after smoke run found 0.4% / 12.0 gates
     # ~100% of the corpus on the GDFL spot data (synthesized 1-min
@@ -97,6 +96,15 @@ def test_default_params_match_design_doc():
     assert p.atr_floor_pct_of_spot == 0.025
     assert p.entry_time == time(9, 30)
     assert p.exit_time == time(14, 45)
+    # v2 (May 1 2026): wider trail (2.0→3.5), min-hold gate, ATR-multiple
+    # breakout filter, chop-window skip. v1 had Sharpe -0.09 with PF
+    # 1.14 at zero cost — too marginal; v2 trades fewer but higher-
+    # quality breakouts.
+    assert p.atr_stop_mult == 3.5
+    assert p.breakout_atr_mult == 1.0
+    assert p.min_hold_minutes == 5
+    assert p.skip_chop_window_start == time(11, 30)
+    assert p.skip_chop_window_end == time(13, 0)
 
 
 def test_buffer_size_accommodates_donchian_and_atr():
@@ -235,6 +243,10 @@ async def test_long_entry_fires_on_upside_breakout():
         # spot 22610 (~90). The signal is the breakout, not the ATR
         # tested here, so loosen the floor.
         atr_floor_pct_of_spot=0.05,
+        # v2 disables: this test pins the legacy fixed-pts breakout path.
+        # The new ATR-multiple breakout gate is exercised in the v2 tests
+        # below.
+        breakout_atr_mult=0.0,
     )
     _populate_buffer_for_entry(s, latest_close=22610, ch_high=22600, ch_low=22500)
     # latest_close 22610 > ch_high 22600 + 5 = 22605 → LONG breakout
@@ -267,6 +279,7 @@ async def test_long_entry_fires_on_upside_breakout():
 async def test_short_entry_fires_on_downside_breakout():
     s, ctx = _strategy(
         breakout_confirmation_pts=5.0, itm_offset_pts=200, itm_max_strike_search_pts=100,
+        breakout_atr_mult=0.0,  # v2: pin legacy path; ATR-mult tested separately
     )
     _populate_buffer_for_entry(s, latest_close=22390, ch_high=22500, ch_low=22400)
     # latest_close 22390 < ch_low 22400 - 5 = 22395 → SHORT breakout
@@ -540,3 +553,200 @@ def test_select_itm_short_picks_pe_above_spot_at_offset():
     assert opt_type == "PE"
     assert strike == 23000.0
     assert opt.instrument_token == 11
+
+
+# ── v2 (May 1 2026) features ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_v2_chop_window_blocks_entry():
+    """11:30-13:00 IST is the historical NIFTY low-vol window. v2 skips
+    entries during this window even if a breakout fires."""
+    s, ctx = _strategy(
+        breakout_confirmation_pts=5.0, breakout_atr_mult=0.0,
+        skip_chop_window_start=time(11, 30),
+        skip_chop_window_end=time(13, 0),
+    )
+    _populate_buffer_for_entry(s, latest_close=22610, ch_high=22600, ch_low=22500)
+    # Inside the chop window
+    ctx.clock.now.return_value = datetime(2025, 5, 1, 12, 15)
+    ctx.get_spot_price.return_value = Decimal("22610")
+    ctx.get_vix.return_value = 15.0
+    s._expiry = date(2025, 5, 8)
+    sig = await s._try_entry(ctx.clock.now())
+    assert sig is None
+    assert s._entered is False
+
+
+@pytest.mark.asyncio
+async def test_v2_chop_window_allows_entry_outside_window():
+    """Same setup as the chop test but at 10:30 (before the window) —
+    entry should fire."""
+    s, ctx = _strategy(
+        breakout_confirmation_pts=5.0, breakout_atr_mult=0.0,
+        itm_offset_pts=200, itm_max_strike_search_pts=100,
+        atr_floor_pct_of_spot=0.05,
+    )
+    _populate_buffer_for_entry(s, latest_close=22610, ch_high=22600, ch_low=22500)
+    ctx.clock.now.return_value = datetime(2025, 5, 1, 10, 30)  # before chop
+    ctx.get_spot_price.return_value = Decimal("22610")
+    ctx.get_vix.return_value = 15.0
+    s._expiry = date(2025, 5, 8)
+    ce_22410 = _opt(bid=210, ask=212, token=42, symbol="NIFTY25MAY22410CE")
+    ctx.get_option_chain.return_value = _chain([(22410, ce_22410, _opt(bid=2, ask=3))])
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("210"), ask_price=Decimal("212")
+    )
+    sig = await s._try_entry(ctx.clock.now())
+    assert sig is not None
+
+
+@pytest.mark.asyncio
+async def test_v2_chop_window_disabled_when_both_zeroed():
+    """Operator opt-out: setting both ends to time(0,0) disables the
+    chop window. Useful for bisecting against the v1 behaviour."""
+    s, ctx = _strategy(
+        breakout_confirmation_pts=5.0, breakout_atr_mult=0.0,
+        itm_offset_pts=200, itm_max_strike_search_pts=100,
+        atr_floor_pct_of_spot=0.05,
+        skip_chop_window_start=time(0, 0),
+        skip_chop_window_end=time(0, 0),
+    )
+    _populate_buffer_for_entry(s, latest_close=22610, ch_high=22600, ch_low=22500)
+    ctx.clock.now.return_value = datetime(2025, 5, 1, 12, 15)  # mid-chop
+    ctx.get_spot_price.return_value = Decimal("22610")
+    ctx.get_vix.return_value = 15.0
+    s._expiry = date(2025, 5, 8)
+    ce_22410 = _opt(bid=210, ask=212, token=42, symbol="NIFTY25MAY22410CE")
+    ctx.get_option_chain.return_value = _chain([(22410, ce_22410, _opt(bid=2, ask=3))])
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("210"), ask_price=Decimal("212")
+    )
+    sig = await s._try_entry(ctx.clock.now())
+    assert sig is not None
+
+
+@pytest.mark.asyncio
+async def test_v2_breakout_atr_mult_blocks_marginal_breakout():
+    """Marginal breakout (close just above ch_high by < ATR×mult) must
+    NOT fire under v2's stricter gate. The fixed-pts threshold alone is
+    insufficient."""
+    s, ctx = _strategy(
+        breakout_confirmation_pts=5.0, breakout_atr_mult=2.0,
+        atr_floor_pct_of_spot=0.05,
+    )
+    # latest_close 22610, ch_high 22600 → 10pt overshoot.
+    # ATR for the test setup is set to abs(latest-ch_high)*2 = 20.
+    # With breakout_atr_mult=2.0, threshold = max(5, 2.0×20) = 40.
+    # 10 < 40 → no fire.
+    _populate_buffer_for_entry(s, latest_close=22610, ch_high=22600, ch_low=22500)
+    ctx.clock.now.return_value = datetime(2025, 5, 1, 10, 0)
+    ctx.get_spot_price.return_value = Decimal("22610")
+    ctx.get_vix.return_value = 15.0
+    s._expiry = date(2025, 5, 8)
+    sig = await s._try_entry(ctx.clock.now())
+    assert sig is None
+
+
+@pytest.mark.asyncio
+async def test_v2_breakout_atr_mult_allows_strong_breakout():
+    """A breakout that clears BOTH the fixed-pts AND the ATR-mult
+    thresholds should still fire under v2."""
+    s, ctx = _strategy(
+        breakout_confirmation_pts=5.0, breakout_atr_mult=2.0,
+        itm_offset_pts=200, itm_max_strike_search_pts=100,
+        atr_floor_pct_of_spot=0.05,
+    )
+    # latest_close 22700, ch_high 22600 → 100pt overshoot.
+    # ATR = 200 from helper. threshold = max(5, 2.0×200) = 400. Hmm,
+    # 100 < 400 — to make this a passing test we need a clearer setup.
+    # Set _atr manually low so the threshold is clearable.
+    _populate_buffer_for_entry(s, latest_close=22700, ch_high=22600, ch_low=22500)
+    s._atr = 30.0  # threshold = max(5, 2.0×30) = 60. 100 > 60 → fires.
+    ctx.clock.now.return_value = datetime(2025, 5, 1, 10, 0)
+    ctx.get_spot_price.return_value = Decimal("22700")
+    ctx.get_vix.return_value = 15.0
+    s._expiry = date(2025, 5, 8)
+    ce_22500 = _opt(bid=210, ask=212, token=42, symbol="NIFTY25MAY22500CE")
+    ctx.get_option_chain.return_value = _chain([(22500, ce_22500, _opt(bid=2, ask=3))])
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("210"), ask_price=Decimal("212")
+    )
+    sig = await s._try_entry(ctx.clock.now())
+    assert sig is not None
+
+
+@pytest.mark.asyncio
+async def test_v2_min_hold_blocks_trail_stop_within_window():
+    """v1 had trades exiting within seconds of entry on small post-
+    breakout giveback. v2 gates the trail stop for the first
+    ``min_hold_minutes`` so positions can breathe through initial chop.
+    PT/SL premium gates remain active even within hold."""
+    s, ctx = _strategy(min_hold_minutes=5, atr_stop_mult=2.0)
+    s._entered = True
+    s._side = "long"
+    s._entry_token = 42
+    s._entry_symbol = "NIFTY_test"
+    s._entry_premium = Decimal("100")
+    s._atr = 20.0
+    s._entry_spot = 22600
+    s._peak_favorable_spot = 22640
+    s._entry_datetime = datetime(2025, 5, 1, 10, 0)
+    # Spot dropped 50 below peak — would trigger trail (50 > 2×20=40)
+    # but only 2 min into the position.
+    ctx.get_spot_price.return_value = Decimal("22590")
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("90"), ask_price=Decimal("92")
+    )
+    sig = s._check_exit_conditions(datetime(2025, 5, 1, 10, 2))
+    assert sig is None
+
+
+@pytest.mark.asyncio
+async def test_v2_min_hold_releases_after_window_expires():
+    """Once min_hold_minutes has passed, trail-stop fires normally."""
+    s, ctx = _strategy(min_hold_minutes=5, atr_stop_mult=2.0)
+    s._entered = True
+    s._side = "long"
+    s._entry_token = 42
+    s._entry_symbol = "NIFTY_test"
+    s._entry_premium = Decimal("100")
+    s._atr = 20.0
+    s._entry_spot = 22600
+    s._peak_favorable_spot = 22640
+    s._entry_datetime = datetime(2025, 5, 1, 10, 0)
+    ctx.get_spot_price.return_value = Decimal("22590")
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("90"), ask_price=Decimal("92")
+    )
+    # 6 min in — past the 5-min hold window
+    sig = s._check_exit_conditions(datetime(2025, 5, 1, 10, 6))
+    assert sig is not None
+    assert "ATR trail" in (sig.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_v2_min_hold_does_not_block_premium_pt_sl():
+    """The min-hold gate is for the trail stop only. Premium PT/SL are
+    disaster caps that must fire even within the hold window — a 40%
+    premium drop in the first minute is a structural break, not chop."""
+    s, ctx = _strategy(
+        min_hold_minutes=10, atr_stop_mult=2.0,
+        profit_target_pct=999.0, stop_loss_pct=40.0,
+    )
+    s._entered = True
+    s._side = "long"
+    s._entry_token = 42
+    s._entry_symbol = "NIFTY_test"
+    s._entry_premium = Decimal("100")
+    s._atr = 20.0
+    s._peak_favorable_spot = 22640
+    s._entry_datetime = datetime(2025, 5, 1, 10, 0)
+    ctx.get_spot_price.return_value = Decimal("22640")
+    # Premium collapsed to 50 → -50% < -40% SL → fires within hold window
+    ctx.get_tick.return_value = MagicMock(
+        bid_price=Decimal("50"), ask_price=Decimal("52")
+    )
+    sig = s._check_exit_conditions(datetime(2025, 5, 1, 10, 1))
+    assert sig is not None
+    assert "Stop loss" in (sig.reason or "")

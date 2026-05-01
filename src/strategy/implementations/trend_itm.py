@@ -105,6 +105,10 @@ class TrendITMStrategy(BaseStrategy):
         self._stopped_for_day: bool = False
         self._trades_today: int = 0
         self._last_trade_date: date | None = None
+        # v2 (May 1 2026): minimum hold period state. Trail-stop is
+        # gated until ``self._entry_time + min_hold_minutes``. Set on
+        # ENTER, cleared on EXIT.
+        self._entry_datetime: datetime | None = None
 
         # ─── 1-min OHLC ring buffer on spot ──────────────────────
         # Each completed bar is (bar_close_minute_iso, open, high, low, close).
@@ -336,10 +340,32 @@ class TrendITMStrategy(BaseStrategy):
         ch_high = max(b["high"] for b in prior_window)
         ch_low = min(b["low"] for b in prior_window)
 
+        # v2 (May 1 2026): chop-window skip — historical NIFTY low-vol
+        # window 11:30-13:00 IST produces low-quality breakouts; gate
+        # them out unless the operator disabled the window (both ends
+        # set to 00:00).
+        cw_start = self.params.skip_chop_window_start
+        cw_end = self.params.skip_chop_window_end
+        if cw_start != cw_end and cw_start <= now.time() < cw_end:
+            self._log_skip_throttled(
+                "ENTRY_SKIP_CHOP_WINDOW",
+                f"[{self.strategy_id}] Entry skipped: chop window "
+                f"{cw_start}-{cw_end} IST",
+            )
+            return None
+
+        # v2: breakout must clear by max(fixed_pts, atr_mult × ATR).
+        # The ATR-multiple gate filters marginal breakouts where the
+        # signal-to-noise is too weak for a directional bet.
+        breakout_threshold = max(
+            self.params.breakout_confirmation_pts,
+            self.params.breakout_atr_mult * self._atr,
+        )
+
         side: str = ""
-        if latest_close > ch_high + self.params.breakout_confirmation_pts:
+        if latest_close > ch_high + breakout_threshold:
             side = "long"
-        elif latest_close < ch_low - self.params.breakout_confirmation_pts:
+        elif latest_close < ch_low - breakout_threshold:
             side = "short"
         else:
             # No breakout this bar
@@ -390,6 +416,8 @@ class TrendITMStrategy(BaseStrategy):
         self._entry_option_type = opt_type
         self._entry_spot = spot
         self._peak_favorable_spot = spot
+        # v2: stamp the entry timestamp for the min-hold gate.
+        self._entry_datetime = now
         # Use the realistic-fill ask (we BUY, so we cross the ask). The
         # base helper writes mid as the LIMIT price, but we want to
         # track the ASK as the cost-basis for PT/SL because the
@@ -488,6 +516,25 @@ class TrendITMStrategy(BaseStrategy):
         if spot <= 0 or self._atr <= 0:
             return None
 
+        # v2 (May 1 2026): minimum hold period — gate the trail stop for
+        # the first ``min_hold_minutes`` after entry. v1 logs showed
+        # trades exiting within seconds of entry on small post-breakout
+        # giveback; the min-hold lets the position breathe through the
+        # initial chop. PT/SL premium gates above remain active even
+        # within the hold period (those are intentional disaster caps).
+        if (
+            self._entry_datetime is not None
+            and self.params.min_hold_minutes > 0
+            and (now - self._entry_datetime).total_seconds() < self.params.min_hold_minutes * 60
+        ):
+            # Still update the favorable-spot tracker so the trail uses
+            # the real peak/trough, just don't fire the stop yet.
+            if self._side == "long" and spot > self._peak_favorable_spot:
+                self._peak_favorable_spot = spot
+            elif self._side == "short" and spot < self._peak_favorable_spot:
+                self._peak_favorable_spot = spot
+            return None
+
         if self._side == "long":
             if spot > self._peak_favorable_spot:
                 self._peak_favorable_spot = spot
@@ -555,6 +602,7 @@ class TrendITMStrategy(BaseStrategy):
         self._entry_premium = Decimal("0")
         self._entry_spot = 0.0
         self._peak_favorable_spot = 0.0
+        self._entry_datetime = None  # v2: clear min-hold timer
         self._stopped_for_day = True
 
         return exit_signal(self.strategy_id, [leg], reason)
