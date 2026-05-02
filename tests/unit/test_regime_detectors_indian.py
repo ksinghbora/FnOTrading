@@ -318,3 +318,40 @@ def test_ic_param_can_be_enabled_via_override():
         "require_premium_selling_regime": True,
     })
     assert p.require_premium_selling_regime is True
+
+
+def test_ic_regime_only_mode_bypasses_legacy_filters():
+    """When require_premium_selling_regime=True, the IC entry path
+    bypasses the legacy heuristic filters (score, VIX, PCR, max-pain,
+    trend) and gates SOLELY on the regime detector + expiry-day safety.
+
+    Pin this contract with an inspection of the entry source — a future
+    refactor that re-introduces a legacy filter into the regime-gate
+    branch would silently regress the user-driven 'remove everything
+    else' simplification."""
+    import inspect
+    from src.strategy.implementations import iron_condor
+    src = inspect.getsource(iron_condor.IronCondorStrategy._try_entry)
+    # The regime branch should appear BEFORE the legacy else-branch
+    regime_idx = src.find("require_premium_selling_regime")
+    else_idx = src.find("else:\n            # ─── Legacy heuristic-filter pipeline")
+    assert regime_idx > 0 and else_idx > regime_idx, (
+        "Expected regime-only mode to short-circuit before legacy filters; "
+        "source layout suggests the bypass was lost"
+    )
+    # Specifically: score / VIX / PCR / max-pain / trend filter calls
+    # must live INSIDE the else branch, not before it.
+    score_idx = src.find("entry_score_threshold")
+    vix_idx = src.find("_check_vix_filter()")
+    pcr_idx = src.find("_check_pcr_filter")
+    mp_idx = src.find("_check_max_pain_filter")
+    trend_idx = src.find("_check_trend_filter")
+    for name, idx in (
+        ("score", score_idx), ("vix", vix_idx), ("pcr", pcr_idx),
+        ("max-pain", mp_idx), ("trend", trend_idx),
+    ):
+        assert idx > else_idx, (
+            f"Expected legacy {name} filter inside the else-branch (after "
+            f"line {else_idx}), but found it at line {idx} (before the "
+            f"regime-only short-circuit)"
+        )

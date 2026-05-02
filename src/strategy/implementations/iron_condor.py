@@ -206,16 +206,12 @@ class IronCondorStrategy(BaseStrategy):
         # Per-tick → per-minute throttling for all entry-skip logs. See
         # _log_skip_throttled docstring on BaseStrategy for the 19,646-line/
         # 23-min Apr 21 audit-flood that motivated this.
-        # Apr 29 Phase 2: threshold sourced from params (was hardcoded 60).
-        score_thr = int(self.params.entry_score_threshold)
-        if score < score_thr:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_SCORE",
-                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
-            )
-            return None
 
-        # Expiry-day 0DTE block — wings go illiquid + STT trap if ITM at close
+        # Expiry-day 0DTE block — wings go illiquid + STT trap if ITM at
+        # close. STRUCTURAL safety, not a heuristic filter — kept in both
+        # legacy and regime-gate-only modes because the failure mode is
+        # catastrophic (unbounded gamma + auto-exercise STT) regardless
+        # of strategy belief about market regime.
         expiry_block = self._check_expiry_day_block(self.params.underlying)
         if expiry_block:
             self._log_skip_throttled(
@@ -224,73 +220,94 @@ class IronCondorStrategy(BaseStrategy):
             )
             return None
 
-        # VIX filter
-        vix_block = self._check_vix_filter()
-        if vix_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_VIX",
-                f"[{self.strategy_id}] Entry skipped: {vix_block}",
-            )
-            return None
-
-        # Phase 3b Gate B — intraday VIX spike filter (PRE-REGISTERED, opt-in
-        # via params.intraday_vix_spike_enabled). When enabled, blocks new IC
-        # entries after activate_after time if VIX has risen >= threshold% from
-        # morning open. Designed for the May 8 2025 spike pattern.
-        spike_block = self._check_intraday_vix_spike_filter()
-        if spike_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_VIX_SPIKE",
-                f"[{self.strategy_id}] Entry skipped: {spike_block}",
-            )
-            return None
-
-        # PCR filter
-        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
-        if pcr_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_PCR",
-                f"[{self.strategy_id}] Entry skipped: {pcr_block}",
-            )
-            return None
-
-        # Max pain filter
-        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
-        if mp_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_MP",
-                f"[{self.strategy_id}] Entry skipped: {mp_block}",
-            )
-            return None
-
-        # Apr 29 Phase 2: trend filter. IC is a range-bound strategy —
-        # entering on a strongly-trending day means one short side gets
-        # tagged as spot drifts. short_strangle and short_straddle have
-        # always called this filter; IC was an oversight (only 2/6
-        # reviewers caught it but the asymmetry is real). IB inherits
-        # this branch verbatim, so this commit fixes both at once.
-        trend_block = self._check_trend_filter(self.params.underlying)
-        if trend_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_TREND",
-                f"[{self.strategy_id}] Entry skipped: {trend_block}",
-            )
-            return None
-
-        # May 2 2026: Indian-market range-detection HARD gate.
-        # ADX(14)<22 + BB-squeeze active + RV/IV<0.80. All three must
-        # agree. Opt-in via ``require_premium_selling_regime`` param.
-        # This is the user's "small loss / big profit / limit losses"
-        # principle applied at entry — only fire when proven indicators
-        # agree the regime is genuinely favourable for premium selling,
-        # not just when our hand-coded morning-range heuristic says so.
-        if getattr(self.params, "require_premium_selling_regime", False) and self._regime:
+        # ─── May 2 2026: regime-gate-only mode ───────────────────
+        # When ``require_premium_selling_regime=True`` the strategy
+        # bypasses every legacy heuristic filter (score, VIX, intraday-
+        # spike, PCR, max-pain, trend) and gates entries SOLELY on the
+        # proven Indian-market detectors: ADX(14)<22 AND BB squeeze
+        # active AND RV/IV<0.80. The expiry-day block above is the only
+        # structural safety retained.
+        #
+        # Rationale: the legacy filters are hand-coded heuristics on
+        # intraday range. The new gate is institutional indicators
+        # calibrated for Indian markets. Stacking both was producing
+        # over-restriction (28 trades / 173 days, sample-thin, PF 0.85
+        # ceiling). Replacing instead of stacking lets the proven
+        # indicators do the work without competing with weaker
+        # heuristics.
+        if getattr(self.params, "require_premium_selling_regime", False):
+            if not self._regime:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_NO_DETECTOR",
+                    f"[{self.strategy_id}] Entry skipped: regime detector unavailable",
+                )
+                return None
             ok, metrics = self._regime.is_premium_selling_favorable(self.params.underlying)
             if not ok:
                 self._log_skip_throttled(
                     "ENTRY_SKIP_REGIME_GATE",
                     f"[{self.strategy_id}] Entry skipped: regime gate "
                     f"{metrics.get('reason', '?')}",
+                )
+                return None
+            # Pure regime-gate mode: skip all legacy filters and proceed
+            # directly to chain selection.
+        else:
+            # ─── Legacy heuristic-filter pipeline (default behaviour) ─
+            # Apr 29 Phase 2: threshold sourced from params (was
+            # hardcoded 60).
+            score_thr = int(self.params.entry_score_threshold)
+            if score < score_thr:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_SCORE",
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
+                )
+                return None
+
+            # VIX filter
+            vix_block = self._check_vix_filter()
+            if vix_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX",
+                    f"[{self.strategy_id}] Entry skipped: {vix_block}",
+                )
+                return None
+
+            # Phase 3b Gate B — intraday VIX spike filter (opt-in)
+            spike_block = self._check_intraday_vix_spike_filter()
+            if spike_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX_SPIKE",
+                    f"[{self.strategy_id}] Entry skipped: {spike_block}",
+                )
+                return None
+
+            # PCR filter
+            pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+            if pcr_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_PCR",
+                    f"[{self.strategy_id}] Entry skipped: {pcr_block}",
+                )
+                return None
+
+            # Max pain filter
+            mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+            if mp_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_MP",
+                    f"[{self.strategy_id}] Entry skipped: {mp_block}",
+                )
+                return None
+
+            # Apr 29 Phase 2: trend filter. IC is a range-bound strategy —
+            # entering on a strongly-trending day means one short side
+            # gets tagged as spot drifts.
+            trend_block = self._check_trend_filter(self.params.underlying)
+            if trend_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_TREND",
+                    f"[{self.strategy_id}] Entry skipped: {trend_block}",
                 )
                 return None
 

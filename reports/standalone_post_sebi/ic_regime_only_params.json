@@ -1,0 +1,17 @@
+{
+  "_doc": "IC NIFTY regime-gate-ONLY config — May 2 2026. Per user direction: remove all legacy heuristic filters (score, VIX, PCR, max-pain, trend) and gate entries solely on the proven Indian-market detectors (ADX(14)<22 AND BB squeeze active AND RV/IV<0.80). Only structural safety retained is the expiry-day 0DTE block. Tests whether the proven institutional indicators alone produce real edge — without competing with hand-coded heuristics.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "adjustment_threshold_pct": 85.0,
+  "stop_loss_pct": 40.0,
+  "profit_target_pct": 25.0,
+  "wing_width_strikes": 8,
+  "short_call_delta": 0.15,
+  "short_put_delta": -0.15,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime": true
+}
