@@ -124,110 +124,108 @@ def evaluate_gates(
     Gate calibration history:
       - Apr 23 2026 (Phase 3a): tightened to expert-review thresholds
         (median>0.5, DSR>0.95, wf_coverage>=0.7).
-      - Apr 27 2026 (Phase 3b, post Indian-market methodology research,
-        ``reports/phase3b_research/validation_methodology_indian.md``):
-        DSR gate dropped (regime-break in 227-day corpus crushes paths
-        below the deflation benchmark; replace via Monte Carlo
-        permutation in a follow-up); median Sharpe threshold relaxed
-        0.5→0.3 (research finds Indian options strategies typically
-        annualise 0.6–1.2 net of costs but exhibit high path-variance,
-        so 0.3 is a more realistic floor); wf_coverage relaxed
-        0.7→0.6 (Nov 20 2024 SEBI lot/STT changes contaminate the
-        first 6 weeks of the corpus, biasing fraction_positive
-        downward); cpcv_stability p05>0 demoted to diagnostic
-        (penalises any tail of losing paths even if median is
-        strong, which is unrealistic for premium-collection
-        strategies that get tagged hard during vol shocks).
-      - Apr 30 2026 (Phase 3 honest rename, multi-model audit):
-        renamed ``cpcv_median_sharpe`` → ``fold_stability_median_sharpe``
-        and ``cpcv_pbo`` → ``fold_stability_pbo``. The underlying
-        ``CombinatorialPurgedCV`` class still calls the runner with
-        ``train_dates`` (in-sample fold-stability), NOT ``test_dates``
-        (true OOS) — see cpcv.py:38-43 docstring. The old gate names
-        implied this was a real López de Prado CPCV measuring OOS
-        skill; in fact every Sharpe value in the distribution is the
-        strategy's in-sample performance on a different random
-        sub-window of the train+val data. Honest renaming clarifies
-        what's actually being measured. A separate ``--oos-cpcv``
-        evaluation mode (added in cpcv.py same date) can be opted
-        into when true OOS evaluation is wanted.
+      - Apr 27 2026 (Phase 3b): DSR dropped, median 0.5→0.3, wf_coverage
+        0.7→0.6 (post-SEBI regime contamination).
+      - Apr 30 2026 (multi-model audit): renamed cpcv_* →
+        fold_stability_* (CPCV ran train_dates, not OOS test_dates).
+      - **May 2 2026 (WF-primary refactor):** CPCV demoted to
+        DIAGNOSTIC ONLY; never produces a pass/fail gate. Walk-forward
+        is now the primary OOS verdict because (1) WF preserves time
+        ordering, day-of-week structure, and regime continuity which
+        CPCV's random fold-shuffling destroys, (2) CPCV's PBO benefit
+        only applies when testing multiple configs in parallel — we
+        always test one at a time, (3) CPCV folds suffer cold-start
+        warm-up problems (e.g., RV/IV detector needs 20 daily closes;
+        random sub-fold has zero), and (4) WF mechanics match live
+        deployment by definition (rolling-forward in time).
+        The CPCV result block is still computed and rendered to the
+        markdown report's section 3 as a diagnostic — informative but
+        never gating. Two new WF gates (``wf_test_sharpe_mean``,
+        ``wf_test_sharpe_p25``) replace what fold_stability_* used to
+        report.
     """
     gates: dict[str, tuple[bool, str]] = {}
 
-    # ─── Apr 30 2026 Phase 5: mode-aware CPCV gates ────────────────
-    # The Phase 3 honest-rename made the fold-stability gates explicit.
-    # When the runner is invoked in ``evaluation_mode='test_oos'`` the
-    # underlying distribution is genuinely different — it represents
-    # OOS Sharpe across non-overlapping test folds, not in-sample
-    # fold-stability. Different distributions need different gate
-    # thresholds AND different gate names (so reports unambiguously
-    # show which metric is being measured).
+    # ─── Walk-forward = PRIMARY OOS verdict (May 2 2026) ───────────
+    # Four WF gates aimed at different aspects of generalisation:
     #
-    # Calibration rationale (median Sharpe):
-    #
-    # * Fold-stability mode (>0.3): Indian premium-collection
-    #   strategies typically run 0.6-1.2 in-sample after costs per
-    #   reports/phase3b_research/validation_methodology_indian.md;
-    #   path distributions tighten around the centre, so 0.3 is a
-    #   "must clear half the in-sample baseline" floor.
-    # * Test-OOS mode (>0.1): per-fold OOS test windows are short
-    #   (~6 weeks at n_folds=10/n_test=2 on a 227-day corpus) so
-    #   per-path Sharpe variance is much higher than the full-window
-    #   number. A 0.6 full-corpus Sharpe routinely produces per-fold
-    #   Sharpes spanning -0.5 to +1.5; a >0.1 median floor catches
-    #   "no edge at all" without rejecting strategies with real-but-
-    #   modest edge masked by short-window noise. López de Prado
-    #   notes >0.5 OOS median is exceptional; >0.1 is the must-clear
-    #   floor for live consideration.
-    #
-    # PBO threshold (<0.5) is the same in both modes — PBO is a rank-
-    # comparison metric and the threshold semantics don't depend on
-    # which date subset the runner saw. Single-config CPCV emits
-    # ``pbo=None`` either way → WARN row.
+    # * wf_test_sharpe_mean (>=0.3) — headline OOS performance.
+    #   Threshold matches Indian-options median target from the Phase
+    #   3b methodology research. A strategy with strong full-corpus
+    #   Sharpe but poor per-window means is curve-fit to specific
+    #   regime episodes; this gate catches that.
+    # * wf_coverage (>=0.55) — fraction of windows with positive test
+    #   Sharpe. Slightly relaxed from the historical 0.6 because the
+    #   May-2 refactor uses fewer (typically 4-5) windows on the
+    #   post-SEBI corpus, so individual-window noise has more weight.
+    #   55% = "more wins than losses on the rolling cycle" floor.
+    # * wf_decay (<1.0) — median(train_sharpe - test_sharpe). Catches
+    #   strategies whose train Sharpe vastly exceeds test, i.e.,
+    #   curve-fit to recent regime. Relaxed from 0.5 to 1.0 after
+    #   April runs showed Indian regime breaks routinely produce
+    #   train→test deltas of 0.5-0.8 even on stable strategies.
+    # * wf_test_sharpe_p25 (>=-0.5) — worst-quartile floor. Caps the
+    #   downside risk of "the strategy is brilliant 60% of the time
+    #   and loses 5 Sharpe the other 40%".
+    mean_test_sharpe = float(getattr(wf_report, "mean_test_sharpe", 0.0))
+    gates["wf_test_sharpe_mean"] = (
+        mean_test_sharpe >= 0.3,
+        f"mean_test_sharpe={mean_test_sharpe:.3f} (>=0.3)",
+    )
+
+    median_decay = float(getattr(wf_report, "median_decay", 0.0))
+    gates["wf_decay"] = (
+        median_decay < 1.0,
+        f"median_decay={median_decay:.3f} (<1.0)",
+    )
+
+    frac_pos = float(getattr(wf_report, "fraction_positive_test", 0.0))
+    gates["wf_coverage"] = (
+        frac_pos >= 0.55,
+        f"fraction_positive_test={frac_pos:.2f} (>=0.55)",
+    )
+
+    # 25th percentile of per-window test Sharpe — the worst quartile.
+    # Floor is -0.5 (loose for now; can tighten as evidence accumulates).
+    windows = getattr(wf_report, "windows", None) or []
+    test_sharpes = [float(w.test_sharpe) for w in windows if hasattr(w, "test_sharpe")]
+    if test_sharpes:
+        sorted_s = sorted(test_sharpes)
+        p25_idx = max(0, int(len(sorted_s) * 0.25) - 1) if len(sorted_s) >= 4 else 0
+        wf_p25 = sorted_s[p25_idx]
+        gates["wf_test_sharpe_p25"] = (
+            wf_p25 >= -0.5,
+            f"p25_test_sharpe={wf_p25:.3f} (>=-0.5; n_windows={len(test_sharpes)})",
+        )
+    else:
+        gates["wf_test_sharpe_p25"] = (
+            True,
+            "no windows available — WARN, gate skipped",
+        )
+
+    # ─── CPCV: DIAGNOSTIC ONLY (never gating, May 2 2026) ──────────
+    # The fold-stability median is informative — extreme negatives like
+    # -4.5 DO mean something — but we no longer pass/fail on it.
+    # Reasons:
+    #   * Random-fold shuffling destroys time/day-of-week structure
+    #   * Single-config testing means no PBO benefit
+    #   * Cold-start state warm-up (RV/IV) makes folds unreliable
+    #   * WF already covers OOS performance with fewer artifacts
+    # The full CPCV block is still rendered to section 3 of the
+    # markdown report so reviewers can inspect it; it just doesn't
+    # contribute to the final verdict.
     eval_mode = str(cpcv_result.get("evaluation_mode", "train_in_sample"))
     median = float(cpcv_result.get("sharpe_median", 0.0))
     p05 = float(cpcv_result.get("sharpe_p05", 0.0))
-    pbo_val = cpcv_result.get("pbo")
-
-    if eval_mode == "test_oos":
-        median_threshold = 0.1
-        median_key = "oos_median_sharpe"
-        pbo_key = "oos_pbo"
-    else:
-        median_threshold = 0.3
-        median_key = "fold_stability_median_sharpe"
-        pbo_key = "fold_stability_pbo"
-
-    gates[median_key] = (
-        median > median_threshold,
-        f"median={median:.3f} (>{median_threshold:.1f}); p05={p05:.3f} [diagnostic]",
+    diag_key = (
+        "cpcv_oos_median_diagnostic"
+        if eval_mode == "test_oos"
+        else "cpcv_fold_stability_diagnostic"
     )
-
-    if pbo_val is None:
-        gates[pbo_key] = (True, "PBO not computed (single-config CPCV) — WARN")
-    else:
-        pbo_f = float(pbo_val)
-        gates[pbo_key] = (pbo_f < 0.5, f"pbo={pbo_f:.3f} (<0.5)")
-
-    # ─── dsr: dropped Apr 27 2026. DSR penalises any strategy whose
-    # path-distribution variance was inflated by the SEBI regime break
-    # in our corpus, making it a poor gate for the current data. Future
-    # replacement: Monte Carlo permutation test (10k shuffles, p<0.10).
-    # DSR value itself is still computed and shown in the markdown
-    # report's Fold-Stability section as a diagnostic.
-
-    # ─── wf_decay: median_decay < 0.5 ───────────────────────────────
-    median_decay = float(getattr(wf_report, "median_decay", 0.0))
-    gates["wf_decay"] = (
-        median_decay < 0.5,
-        f"median_decay={median_decay:.3f} (<0.5)",
-    )
-
-    # ─── wf_coverage: fraction_positive_test >= 0.6 (relaxed Apr 27) ──
-    frac_pos = float(getattr(wf_report, "fraction_positive_test", 0.0))
-    gates["wf_coverage"] = (
-        frac_pos >= 0.6,
-        f"fraction_positive_test={frac_pos:.2f} (>=0.6)",
+    gates[diag_key] = (
+        True,
+        f"median={median:.3f} p05={p05:.3f} (diagnostic only — never gating; "
+        f"WF is the primary OOS verdict)",
     )
 
     # ─── regime: no bucket with sharpe < -0.5 AND num_trades > 20 ───
@@ -437,45 +435,8 @@ def render_markdown(report: ValidationReport, out_path: Path) -> None:
     )
     lines.append("")
 
-    # ─── 3. CPCV Distribution (mode-aware heading) ──────────────────
-    # Apr 30 2026 Phase 3 honest rename + Phase 5 mode-aware heading:
-    # the same CPCV-fold mechanism produces two different distributions
-    # depending on evaluation_mode. The section heading now reflects
-    # which one this report contains so a reader can't mistake an
-    # in-sample fold-stability number for a true OOS Sharpe.
-    cpcv = report.cpcv_result or {}
-    eval_mode = str(cpcv.get("evaluation_mode", "train_in_sample"))
-    if eval_mode == "test_oos":
-        section_heading = "## 3. CPCV Out-Of-Sample Distribution"
-        mode_note = "true OOS (runner invoked with test_dates)"
-    else:
-        section_heading = "## 3. Fold-Stability Distribution"
-        mode_note = "in-sample fold stability (runner invoked with train_dates)"
-    lines.append(section_heading)
-    lines.append("")
-    lines.append(f"- Evaluation mode: `{eval_mode}` — {mode_note}")
-    dist = np.asarray(cpcv.get("sharpe_distribution", []), dtype=float)
-    n_paths = int(dist.size)
-    lines.append(f"- Paths: {n_paths}")
-    lines.append(f"- Mean Sharpe: {_fmt_float(cpcv.get('sharpe_mean'))}")
-    lines.append(f"- Median Sharpe: {_fmt_float(cpcv.get('sharpe_median'))}")
-    lines.append(f"- 5th pct Sharpe: {_fmt_float(cpcv.get('sharpe_p05'))}")
-    lines.append(f"- 95th pct Sharpe: {_fmt_float(cpcv.get('sharpe_p95'))}")
-    pbo_val = cpcv.get("pbo")
-    lines.append(
-        f"- PBO: {_fmt_float(pbo_val) if pbo_val is not None else 'N/A (single-config)'}"
-    )
-    lines.append(f"- DSR: {_fmt_float(_dsr_from_cpcv(cpcv))}")
-    lines.append(f"- PSR: {_fmt_float(_psr_from_cpcv(cpcv))}")
-    lines.append("")
-    lines.append("```")
-    for line in _histogram(dist):
-        lines.append(line)
-    lines.append("```")
-    lines.append("")
-
-    # ─── 4. Walk-Forward ────────────────────────────────────────────
-    lines.append("## 4. Walk-Forward")
+    # ─── 3. Walk-Forward (PRIMARY OOS verdict, May 2 2026) ─────────
+    lines.append("## 3. Walk-Forward (Primary OOS Verdict)")
     lines.append("")
     wf = report.wf_report
     windows = list(getattr(wf, "windows", []) or [])
@@ -498,6 +459,47 @@ def render_markdown(report: ValidationReport, out_path: Path) -> None:
             f"| {_fmt_float(w.train_sharpe)} | {_fmt_float(w.test_sharpe)} "
             f"| {_fmt_float(decay)} | {w.num_test_trades} |"
         )
+    lines.append("")
+
+    # ─── 4. CPCV Distribution (DIAGNOSTIC, May 2 2026) ─────────────
+    # CPCV demoted to informative-only post-May-2 refactor. Section
+    # still rendered so reviewers can audit the distribution; gates
+    # never fail on this. Mode-aware heading kept so readers can tell
+    # in-sample fold-stability apart from true OOS test_dates run.
+    cpcv = report.cpcv_result or {}
+    eval_mode = str(cpcv.get("evaluation_mode", "train_in_sample"))
+    skipped = bool(cpcv.get("skipped", False))
+    if skipped:
+        section_heading = "## 4. CPCV (skipped via --skip-cpcv)"
+        mode_note = "skipped — diagnostic-only after May 2 2026 refactor"
+    elif eval_mode == "test_oos":
+        section_heading = "## 4. CPCV Out-Of-Sample Distribution (diagnostic)"
+        mode_note = "true OOS (runner invoked with test_dates) — diagnostic only"
+    else:
+        section_heading = "## 4. Fold-Stability Distribution (diagnostic)"
+        mode_note = "in-sample fold stability (runner invoked with train_dates) — diagnostic only"
+    lines.append(section_heading)
+    lines.append("")
+    lines.append(f"- Evaluation mode: `{eval_mode}` — {mode_note}")
+    if not skipped:
+        dist = np.asarray(cpcv.get("sharpe_distribution", []), dtype=float)
+        n_paths = int(dist.size)
+        lines.append(f"- Paths: {n_paths}")
+        lines.append(f"- Mean Sharpe: {_fmt_float(cpcv.get('sharpe_mean'))}")
+        lines.append(f"- Median Sharpe: {_fmt_float(cpcv.get('sharpe_median'))}")
+        lines.append(f"- 5th pct Sharpe: {_fmt_float(cpcv.get('sharpe_p05'))}")
+        lines.append(f"- 95th pct Sharpe: {_fmt_float(cpcv.get('sharpe_p95'))}")
+        pbo_val = cpcv.get("pbo")
+        lines.append(
+            f"- PBO: {_fmt_float(pbo_val) if pbo_val is not None else 'N/A (single-config)'}"
+        )
+        lines.append(f"- DSR: {_fmt_float(_dsr_from_cpcv(cpcv))}")
+        lines.append(f"- PSR: {_fmt_float(_psr_from_cpcv(cpcv))}")
+        lines.append("")
+        lines.append("```")
+        for line in _histogram(dist):
+            lines.append(line)
+        lines.append("```")
     lines.append("")
 
     # ─── 5. Regime Stratification ──────────────────────────────────

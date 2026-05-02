@@ -150,27 +150,32 @@ def test_evaluate_gates_all_pass() -> None:
         assert passed, f"gate {name} unexpectedly failed: {reason}"
 
 
-def test_evaluate_gates_fold_stability_median_sharpe_fail() -> None:
+def test_evaluate_gates_cpcv_demoted_to_diagnostic_only() -> None:
+    """May 2 2026: CPCV is no longer a pass/fail gate — even an
+    extremely poor cpcv distribution must produce a diagnostic gate
+    that does NOT fail. WF is now the primary OOS verdict."""
     gates = evaluate_gates(
-        cpcv_result=_failing_cpcv(),
+        cpcv_result=_failing_cpcv(),  # median ~-0.2, pbo 0.7
         wf_report=_wf(median_decay=0.2, frac_pos=0.8),
         regime_stats=_regimes_all_pass(),
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    # Median Sharpe in _failing_cpcv() is ~-0.2 → fails > 0.3 threshold
-    assert gates["fold_stability_median_sharpe"][0] is False
-    # The failing cpcv has pbo=0.7 → should also fail PBO gate
-    assert gates["fold_stability_pbo"][0] is False
+    # Old gate keys must be gone — they pinned the wrong methodology
+    assert "fold_stability_median_sharpe" not in gates
+    assert "fold_stability_pbo" not in gates
+    assert "oos_median_sharpe" not in gates
+    assert "oos_pbo" not in gates
+    # New diagnostic key must be present and ALWAYS pass (informative only)
+    assert "cpcv_fold_stability_diagnostic" in gates
+    passed, reason = gates["cpcv_fold_stability_diagnostic"]
+    assert passed is True
+    assert "diagnostic only" in reason.lower()
 
 
-def test_evaluate_gates_dsr_dropped() -> None:
-    """DSR was dropped as a hard gate on Apr 27 2026 — must not appear
-    in the gate table even when the run would otherwise pass DSR.
-
-    Apr 30 2026: also pin that the prior gate-key names (cpcv_stability,
-    cpcv_median_sharpe, cpcv_pbo) are no longer present — the honest
-    rename to fold_stability_* is the contract going forward."""
+def test_evaluate_gates_legacy_cpcv_keys_dropped() -> None:
+    """The old gate-key names must no longer appear in any run, regardless
+    of cpcv eval_mode. WF gates are the contract going forward."""
     gates = evaluate_gates(
         cpcv_result=_passing_cpcv(),
         wf_report=_wf(median_decay=0.2, frac_pos=0.8),
@@ -178,45 +183,44 @@ def test_evaluate_gates_dsr_dropped() -> None:
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    assert "dsr" not in gates
-    assert "cpcv_stability" not in gates    # original Apr 23 name
-    assert "cpcv_median_sharpe" not in gates  # Apr 27 intermediate name
-    assert "cpcv_pbo" not in gates            # Apr 27 intermediate name
-    assert "fold_stability_median_sharpe" in gates
-    assert "fold_stability_pbo" in gates
+    for legacy in (
+        "dsr", "cpcv_stability",
+        "cpcv_median_sharpe", "cpcv_pbo",
+        "fold_stability_median_sharpe", "fold_stability_pbo",
+        "oos_median_sharpe", "oos_pbo",
+    ):
+        assert legacy not in gates, f"legacy gate key {legacy!r} must be gone"
+    # New WF-primary gates must be present
+    for wf_gate in (
+        "wf_test_sharpe_mean", "wf_decay", "wf_coverage",
+        "wf_test_sharpe_p25",
+    ):
+        assert wf_gate in gates
 
 
-def test_evaluate_gates_cpcv_median_borderline() -> None:
-    """Median Sharpe between 0.3 and 0.5 — would have failed the old
-    cpcv_stability (>0.5) gate but passes the relaxed >0.3 floor."""
-    rng = np.random.default_rng(42)
-    dist = rng.normal(0.4, 0.2, size=40)
-    cpcv = {
-        "paths": [],
-        "sharpe_distribution": dist,
-        "sharpe_mean": float(dist.mean()),
-        "sharpe_median": float(np.median(dist)),
-        "sharpe_p05": float(np.percentile(dist, 5)),
-        "sharpe_p95": float(np.percentile(dist, 95)),
-        "pbo": 0.2,
-        "num_trades_mean": 80.0,
-    }
+def test_evaluate_gates_oos_mode_also_diagnostic_only() -> None:
+    """When CPCV is run in test_oos mode, the diagnostic key changes
+    name (cpcv_oos_median_diagnostic) but is still never gating."""
+    cpcv = _failing_cpcv()
+    cpcv["evaluation_mode"] = "test_oos"
     gates = evaluate_gates(
         cpcv_result=cpcv,
-        wf_report=_wf(median_decay=0.2, frac_pos=0.7),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
         regime_stats=_regimes_all_pass(),
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
-    assert gates["fold_stability_median_sharpe"][0] is True
+    assert "cpcv_oos_median_diagnostic" in gates
+    assert gates["cpcv_oos_median_diagnostic"][0] is True
 
 
-def test_evaluate_gates_wf_coverage_borderline_60pct() -> None:
-    """WF coverage at 0.6 — would have failed the old >=0.7 threshold
-    but passes the relaxed 0.6 floor introduced Apr 27."""
+def test_evaluate_gates_wf_coverage_borderline_55pct() -> None:
+    """WF coverage at 0.55 — relaxed floor in May 2 refactor (was 0.6).
+    Indian post-SEBI 4-5 windows sample is small; 55% is "more wins than
+    losses on the rolling cycle"."""
     gates = evaluate_gates(
         cpcv_result=_passing_cpcv(),
-        wf_report=_wf(median_decay=0.2, frac_pos=0.6),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.55),
         regime_stats=_regimes_all_pass(),
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
@@ -323,29 +327,44 @@ def test_evaluate_gates_accepts_list_daily_pnl() -> None:
     assert gates["bootstrap_sharpe_ci"][0] is True
 
 
-def test_evaluate_gates_pbo_warn_when_missing() -> None:
-    cpcv = _passing_cpcv()
-    cpcv["pbo"] = None
-    gates = evaluate_gates(
-        cpcv_result=cpcv,
-        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
-        regime_stats=_regimes_all_pass(),
-        cost_curve=_cost_curve_pass(),
-        capacity_df=_capacity_df_pass(),
-    )
-    assert gates["fold_stability_pbo"][0] is True
-    assert "WARN" in gates["fold_stability_pbo"][1]
-
-
 def test_evaluate_gates_wf_decay_fail() -> None:
+    """May 2 2026 refactor: wf_decay threshold relaxed 0.5 → 1.0
+    (SEBI regime breaks routinely produce 0.5-0.8 train→test deltas
+    on stable strategies). Failure now requires decay >= 1.0."""
     gates = evaluate_gates(
         cpcv_result=_passing_cpcv(),
-        wf_report=_wf(median_decay=0.9, frac_pos=0.8),
+        wf_report=_wf(median_decay=1.5, frac_pos=0.8),
         regime_stats=_regimes_all_pass(),
         cost_curve=_cost_curve_pass(),
         capacity_df=_capacity_df_pass(),
     )
     assert gates["wf_decay"][0] is False
+
+
+def test_evaluate_gates_wf_test_sharpe_mean_fail() -> None:
+    """New gate (May 2 2026): mean_test_sharpe must be >= 0.3."""
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8, mean_test=0.1),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert "wf_test_sharpe_mean" in gates
+    assert gates["wf_test_sharpe_mean"][0] is False
+
+
+def test_evaluate_gates_wf_test_sharpe_p25_in_gate_table() -> None:
+    """New gate (May 2 2026): p25 of test sharpes across windows >= -0.5.
+    With a single-window helper, p25 = the only window — passes if >= -0.5."""
+    gates = evaluate_gates(
+        cpcv_result=_passing_cpcv(),
+        wf_report=_wf(median_decay=0.2, frac_pos=0.8),
+        regime_stats=_regimes_all_pass(),
+        cost_curve=_cost_curve_pass(),
+        capacity_df=_capacity_df_pass(),
+    )
+    assert "wf_test_sharpe_p25" in gates
 
 
 def test_evaluate_gates_wf_coverage_fail() -> None:
@@ -451,12 +470,13 @@ def test_render_markdown_passing(tmp_path: Path) -> None:
     assert out.exists()
     text = out.read_text()
 
-    # Basic structure
+    # Basic structure (May 2 2026: WF moved to section 3 as primary,
+    # CPCV demoted to section 4 diagnostic)
     assert "# Validation Report" in text
     assert "## 1. Executive Summary" in text
     assert "## 2. Split" in text
-    assert "## 3. Fold-Stability Distribution" in text
-    assert "## 4. Walk-Forward" in text
+    assert "## 3. Walk-Forward (Primary OOS Verdict)" in text
+    assert "## 4. Fold-Stability Distribution (diagnostic)" in text
     assert "## 5. Regime Stratification" in text
     assert "## 6. Cost Sensitivity" in text
     assert "## 7. Capacity" in text

@@ -94,14 +94,22 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--oos-cpcv", action="store_true",
         help=(
-            "Apr 30 2026 Phase 3 honest-rename: when set, the CPCV "
-            "evaluator runs each path on test_dates (proper OOS). "
-            "Default is train_in_sample — runs on train_dates and "
-            "produces an in-sample fold-stability distribution. The "
-            "report's `fold_stability_*` gates are calibrated against "
-            "the default mode; OOS Sharpe distributions are typically "
-            "lower (real OOS variance > resampled-train variance) so "
-            "expect to recalibrate gates when flipping this on."
+            "When set, the CPCV evaluator runs each path on test_dates "
+            "(proper OOS). Default is train_in_sample. May 2 2026 note: "
+            "CPCV is now diagnostic-only — see --skip-cpcv to disable "
+            "entirely for ~50%% runtime savings."
+        ),
+    )
+    p.add_argument(
+        "--skip-cpcv", action="store_true",
+        help=(
+            "May 2 2026: skip the CPCV evaluation block entirely. WF is "
+            "the primary OOS verdict (gates: wf_test_sharpe_mean, "
+            "wf_decay, wf_coverage, wf_test_sharpe_p25); CPCV was "
+            "diagnostic-only after the May 2 refactor and never gating, "
+            "so skipping it loses no decision-grade signal and saves "
+            "~50%% of run time. Cached-empty CPCV result emitted to "
+            "the report so existing render code still works."
         ),
     )
     p.add_argument(
@@ -358,19 +366,7 @@ async def main_async(args: argparse.Namespace) -> int:
         seed=args.seed,
     )
 
-    # ─── CPCV on train ∪ val ───────────────────────────────────────
-    cpcv = CombinatorialPurgedCV(
-        n_folds=args.cpcv_folds,
-        n_test_folds=args.cpcv_n_test_folds,
-        max_paths=args.cpcv_max_paths,
-        seed=args.seed,
-    )
-    logger.info(
-        "[VALIDATE] Running CPCV on %d days (workers=%d)",
-        len(combined), args.workers,
-    )
-    # Build a RunnerSpec for parallel mode. Sequential mode (workers=1)
-    # ignores the spec and uses the closure ``runner`` defined above.
+    # ─── Build RunnerSpec (used by both CPCV and WF parallel paths) ─
     from src.backtest.validation.parallel_runner import RunnerSpec
     runner_spec = RunnerSpec(
         strategy_name=args.strategy,
@@ -380,12 +376,44 @@ async def main_async(args: argparse.Namespace) -> int:
         initial_capital=args.initial_capital,
         base_seed=args.seed,
     )
-    cpcv_result = await cpcv.evaluate(
-        baseline_params, runner, combined,
-        runner_spec=runner_spec,
-        n_workers=args.workers,
-        evaluation_mode="test_oos" if args.oos_cpcv else "train_in_sample",
-    )
+
+    # ─── CPCV (May 2 2026: diagnostic-only; skippable via --skip-cpcv) ─
+    if args.skip_cpcv:
+        logger.info(
+            "[VALIDATE] Skipping CPCV (--skip-cpcv); WF is the primary "
+            "OOS verdict. Empty cpcv_result emitted to the report.",
+        )
+        # Empty cpcv_result that the report and gate-evaluator handle
+        # gracefully — gates produce only the diagnostic key.
+        cpcv_result = {
+            "evaluation_mode": "test_oos" if args.oos_cpcv else "train_in_sample",
+            "paths": [],
+            "sharpe_distribution": [],
+            "sharpe_mean": 0.0,
+            "sharpe_median": 0.0,
+            "sharpe_p05": 0.0,
+            "sharpe_p95": 0.0,
+            "pbo": None,
+            "num_trades_mean": 0.0,
+            "skipped": True,
+        }
+    else:
+        cpcv = CombinatorialPurgedCV(
+            n_folds=args.cpcv_folds,
+            n_test_folds=args.cpcv_n_test_folds,
+            max_paths=args.cpcv_max_paths,
+            seed=args.seed,
+        )
+        logger.info(
+            "[VALIDATE] Running CPCV on %d days (workers=%d) [diagnostic only]",
+            len(combined), args.workers,
+        )
+        cpcv_result = await cpcv.evaluate(
+            baseline_params, runner, combined,
+            runner_spec=runner_spec,
+            n_workers=args.workers,
+            evaluation_mode="test_oos" if args.oos_cpcv else "train_in_sample",
+        )
 
     # ─── Walk-forward on train ∪ val ───────────────────────────────
     wf = WalkForwardValidator(

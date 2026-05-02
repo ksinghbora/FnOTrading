@@ -177,9 +177,11 @@ def test_render_markdown_labels_section_with_evaluation_mode():
     rng = np.random.default_rng(1)
     dist = rng.normal(1.0, 0.3, size=20)
 
+    # May 2 2026: CPCV moved from section 3 to section 4 (diagnostic)
+    # because WF is now the primary OOS verdict in section 3.
     for mode, expected_note, expected_heading in (
-        ("train_in_sample", "in-sample fold stability", "## 3. Fold-Stability Distribution"),
-        ("test_oos", "true OOS", "## 3. CPCV Out-Of-Sample Distribution"),
+        ("train_in_sample", "in-sample fold stability", "## 4. Fold-Stability Distribution (diagnostic)"),
+        ("test_oos", "true OOS", "## 4. CPCV Out-Of-Sample Distribution (diagnostic)"),
     ):
         cpcv = {
             "paths": [],
@@ -256,103 +258,44 @@ def _cost_passing():
     return {0.5: {"sharpe_ratio": 1.0, "profit_factor": 1.5, "total_pnl": 1000.0}}
 
 
-def test_default_mode_emits_fold_stability_gate_keys():
-    """train_in_sample mode produces ``fold_stability_*`` keys with
-    the calibrated >0.3 median floor — preserves Phase 3 behaviour."""
+def test_default_mode_emits_fold_stability_diagnostic_key():
+    """May 2 2026 refactor: train_in_sample mode produces a DIAGNOSTIC
+    cpcv key (cpcv_fold_stability_diagnostic), never a pass/fail gate.
+    WF is now the primary OOS verdict. Even very poor cpcv medians
+    must produce ``passed=True`` because cpcv is informative-only."""
     from src.backtest.validation.report import evaluate_gates
-    cpcv = _cpcv_with_median("train_in_sample", median_sharpe=0.5)
+    # Even a strongly negative median (-2.0) must NOT fail — diagnostic only
+    cpcv = _cpcv_with_median("train_in_sample", median_sharpe=-2.0)
     gates = evaluate_gates(
         cpcv_result=cpcv, wf_report=_wf_passing(),
         regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
     )
-    assert "fold_stability_median_sharpe" in gates
-    assert "fold_stability_pbo" in gates
-    assert "oos_median_sharpe" not in gates
-    assert "oos_pbo" not in gates
-    # Median 0.5 > 0.3 → passes
-    assert gates["fold_stability_median_sharpe"][0] is True
-
-
-def test_oos_mode_emits_oos_gate_keys():
-    from src.backtest.validation.report import evaluate_gates
-    cpcv = _cpcv_with_median("test_oos", median_sharpe=0.2)
-    gates = evaluate_gates(
-        cpcv_result=cpcv, wf_report=_wf_passing(),
-        regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
-    )
-    assert "oos_median_sharpe" in gates
-    assert "oos_pbo" in gates
+    assert "cpcv_fold_stability_diagnostic" in gates
+    assert "cpcv_oos_median_diagnostic" not in gates
+    # Old gating keys must be gone
     assert "fold_stability_median_sharpe" not in gates
     assert "fold_stability_pbo" not in gates
+    # Diagnostic always passes regardless of median value
+    assert gates["cpcv_fold_stability_diagnostic"][0] is True
 
 
-def test_oos_mode_threshold_is_lower_than_fold_stability():
-    """The same 0.2 median Sharpe FAILS fold-stability (>0.3) but
-    PASSES OOS (>0.1) — a deliberate calibration choice. OOS test
-    folds are short (~6 weeks), so per-path Sharpe variance is high
-    and the median floor is correspondingly lower."""
+def test_oos_mode_emits_oos_diagnostic_key():
+    """test_oos eval-mode renames the diagnostic key but it's still
+    informative-only."""
     from src.backtest.validation.report import evaluate_gates
-    median = 0.2
-    fs_gates = evaluate_gates(
-        cpcv_result=_cpcv_with_median("train_in_sample", median),
-        wf_report=_wf_passing(), regime_stats={}, cost_curve=_cost_passing(),
-        capacity_df=None,
+    cpcv = _cpcv_with_median("test_oos", median_sharpe=-1.0)
+    gates = evaluate_gates(
+        cpcv_result=cpcv, wf_report=_wf_passing(),
+        regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
     )
-    oos_gates = evaluate_gates(
-        cpcv_result=_cpcv_with_median("test_oos", median),
-        wf_report=_wf_passing(), regime_stats={}, cost_curve=_cost_passing(),
-        capacity_df=None,
-    )
-    assert fs_gates["fold_stability_median_sharpe"][0] is False  # 0.2 < 0.3
-    assert oos_gates["oos_median_sharpe"][0] is True              # 0.2 > 0.1
+    assert "cpcv_oos_median_diagnostic" in gates
+    assert "cpcv_fold_stability_diagnostic" not in gates
+    assert gates["cpcv_oos_median_diagnostic"][0] is True
 
 
-def test_oos_mode_floor_at_0_1():
-    """Right at the boundary: 0.1 fails (strict >), 0.11 passes."""
-    from src.backtest.validation.report import evaluate_gates
-    at_floor = evaluate_gates(
-        cpcv_result=_cpcv_with_median("test_oos", 0.1),
-        wf_report=_wf_passing(), regime_stats={}, cost_curve=_cost_passing(),
-        capacity_df=None,
-    )
-    just_above = evaluate_gates(
-        cpcv_result=_cpcv_with_median("test_oos", 0.11),
-        wf_report=_wf_passing(), regime_stats={}, cost_curve=_cost_passing(),
-        capacity_df=None,
-    )
-    assert at_floor["oos_median_sharpe"][0] is False
-    assert just_above["oos_median_sharpe"][0] is True
-
-
-def test_oos_pbo_threshold_unchanged_at_0_5():
-    """PBO threshold is mode-agnostic (the rank-comparison semantics
-    don't depend on which date subset). Pin both modes use <0.5."""
-    from src.backtest.validation.report import evaluate_gates
-    for mode, key in (
-        ("train_in_sample", "fold_stability_pbo"),
-        ("test_oos", "oos_pbo"),
-    ):
-        cpcv = _cpcv_with_median(mode, 0.5)
-        cpcv["pbo"] = 0.4  # below threshold → passes
-        gates = evaluate_gates(
-            cpcv_result=cpcv, wf_report=_wf_passing(),
-            regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
-        )
-        assert gates[key][0] is True
-        cpcv["pbo"] = 0.6  # above → fails
-        gates = evaluate_gates(
-            cpcv_result=cpcv, wf_report=_wf_passing(),
-            regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
-        )
-        assert gates[key][0] is False
-
-
-def test_legacy_cpcv_result_without_mode_defaults_to_fold_stability():
-    """Old cached cpcv_result dicts won't have ``evaluation_mode``.
-    They must default to fold_stability — preserves prior reports'
-    semantics. Adding ``evaluation_mode`` was a Phase 3 addition;
-    pre-existing fixtures shouldn't silently switch to the OOS gate
-    set."""
+def test_legacy_cpcv_result_without_mode_defaults_to_fold_stability_diagnostic():
+    """Old cached cpcv_result dicts may lack ``evaluation_mode``. Default
+    to fold-stability mode key (and still diagnostic-only)."""
     from src.backtest.validation.report import evaluate_gates
     legacy = _cpcv_with_median("train_in_sample", 0.5)
     legacy.pop("evaluation_mode")  # simulate pre-Phase-3 result dict
@@ -360,5 +303,5 @@ def test_legacy_cpcv_result_without_mode_defaults_to_fold_stability():
         cpcv_result=legacy, wf_report=_wf_passing(),
         regime_stats={}, cost_curve=_cost_passing(), capacity_df=None,
     )
-    assert "fold_stability_median_sharpe" in gates
-    assert "oos_median_sharpe" not in gates
+    assert "cpcv_fold_stability_diagnostic" in gates
+    assert "cpcv_oos_median_diagnostic" not in gates
