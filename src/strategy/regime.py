@@ -8,9 +8,18 @@ Three independent action scorers run in parallel. If two score high
 simultaneously, that's a CONFLICT — regime is transitioning, reduce risk.
 
 Strategy recommendation is a 2D lookup: Vol × Action × Confidence.
+
+May 2 2026 (post-honest-IC-analysis): also exposes proven range-detection
+methods (ADX, Bollinger Band squeeze, realized-vs-implied vol ratio)
+calibrated for Indian markets (NIFTY/BANKNIFTY 5-min spot bars). These
+power a unified ``is_premium_selling_favorable()`` gate that strategies
+can use as a HARD filter — only trade when proven indicators agree on
+range-bound + overpriced-IV regime.
 """
 
 import logging
+import math
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -24,6 +33,38 @@ from src.market_data.feed import TickFeedManager
 from src.market_data.option_chain import OptionChainBuilder
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Indian-market-calibrated range-detection thresholds ────────
+# May 2 2026: these are deliberately set to Indian NIFTY/BANKNIFTY
+# practitioner values, not US-textbook defaults.
+
+# ADX(14) on 5-min spot bars. Wilder 1978 standard period.
+# US default: <20 = no trend. Indian NIFTY 5-min has more "fake-trend"
+# microstructure noise, so threshold lifted to 22. ADX > 28 = strong
+# trend (avoid premium-selling). 22-28 = indeterminate.
+ADX_RANGE_THRESHOLD = 22.0
+ADX_TREND_THRESHOLD = 28.0
+ADX_PERIOD = 14
+
+# Bollinger Band squeeze on 5-min closes, 20-period, 2-std band.
+# BB width = (upper - lower) / middle * 100, expressed in %.
+# Squeeze = current width in bottom 25th percentile of last LOOKBACK
+# readings. NIFTY 5-min BB widths typically span 0.05-0.5% in normal
+# trading. Lookback 50 bars = ~4 hours of session context.
+BB_PERIOD = 20
+BB_STD_MULT = 2.0
+BB_SQUEEZE_LOOKBACK = 50
+BB_SQUEEZE_PERCENTILE = 25.0  # bottom-quartile width = consolidation
+
+# Realized vs implied vol ratio. India VIX has structural premium of
+# 15-30% over realized (similar to US but slightly larger). When 20-day
+# realized vol is < 80% of India VIX, IV is genuinely "rich" and
+# premium-selling has positive expectancy. When ratio > 1.0, IV is
+# under-priced — DON'T sell premium.
+RV_IV_FAVORABLE_THRESHOLD = 0.80
+RV_PERIOD_DAYS = 20
+RV_ANNUALIZATION_DAYS = 252  # NSE trading days per year
 
 
 # ─── Enums ──────────────────────────────────────────────────────
@@ -193,6 +234,12 @@ class RegimeDetector:
         self._session_opens: dict[str, float] = {}
         self._last_regime: dict[str, RegimeSnapshot] = {}
         self._last_session_date: date | None = None
+        # May 2 2026: daily-close history for realized-vol computation.
+        # Maintained per-underlying via rolling deque (need RV_PERIOD_DAYS+1
+        # closes to compute RV_PERIOD_DAYS log returns).
+        self._daily_closes: dict[str, deque] = {}
+        self._daily_close_running: dict[str, float] = {}
+        self._last_close_date: dict[str, date] = {}
 
     def assess(self, underlying: str) -> RegimeSnapshot:
         """Assess current market regime using 2D model.
@@ -214,6 +261,11 @@ class RegimeDetector:
         move_from_open = 0.0
         if session_open > 0 and spot > 0:
             move_from_open = abs(spot - session_open) / session_open * 100
+
+        # May 2 2026: maintain daily-close history for realized-vol calc.
+        # Captures the running close every tick; promotes to a stored
+        # close on day-rollover.
+        self._maybe_capture_daily_close(underlying, now, spot)
 
         # Pre-market — not enough data
         if now.time() < time(9, 20) or spot <= 0:
@@ -561,3 +613,247 @@ class RegimeDetector:
     def reset_session(self) -> None:
         self._session_opens.clear()
         self._last_regime.clear()
+
+    # ─── Indian-market range-detection methods (May 2 2026) ─────
+    # ADX, BB squeeze, RV/IV — proven institutional indicators
+    # calibrated for NIFTY/BANKNIFTY 5-min spot bars.
+
+    def compute_adx(
+        self, underlying: str, period: int = ADX_PERIOD,
+        timeframe: Timeframe = Timeframe.M5,
+    ) -> float | None:
+        """Compute ADX(period) on the latest spot bars.
+
+        ADX (Wilder 1978): measures trend strength independent of direction.
+        ADX < 22 = no trend = range-bound (Indian-calibrated; US default 20).
+        ADX > 28 = strong trend (avoid premium-selling).
+        Returns None when insufficient bars.
+        """
+        spot_token = self._find_spot_token(underlying)
+        if not spot_token:
+            return None
+        # Need period+1 bars to compute period TR/DM values, then another
+        # period bars to seed ATR/DI smoothing — total ~2×period+1.
+        need = period * 2 + 2
+        candles = self._aggregator.get_completed_candles(spot_token, timeframe, limit=need)
+        if len(candles) < period + 2:
+            return None
+
+        highs = [float(c.high) for c in candles]
+        lows = [float(c.low) for c in candles]
+        closes = [float(c.close) for c in candles]
+        n = len(highs)
+
+        # +DM, -DM, TR per bar (starting at i=1)
+        plus_dm: list[float] = []
+        minus_dm: list[float] = []
+        tr: list[float] = []
+        for i in range(1, n):
+            up_move = highs[i] - highs[i - 1]
+            down_move = lows[i - 1] - lows[i]
+            plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
+            minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
+            tr.append(max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            ))
+
+        if len(tr) < period:
+            return None
+
+        # Wilder smoothing: initialise as period-window sum, then
+        # smoothed_t = smoothed_{t-1} - smoothed_{t-1}/period + value_t
+        atr = sum(tr[:period])
+        plus_smooth = sum(plus_dm[:period])
+        minus_smooth = sum(minus_dm[:period])
+        dx_values: list[float] = []
+        for i in range(period, len(tr)):
+            atr = atr - atr / period + tr[i]
+            plus_smooth = plus_smooth - plus_smooth / period + plus_dm[i]
+            minus_smooth = minus_smooth - minus_smooth / period + minus_dm[i]
+            if atr <= 0:
+                continue
+            plus_di = 100.0 * plus_smooth / atr
+            minus_di = 100.0 * minus_smooth / atr
+            di_sum = plus_di + minus_di
+            if di_sum <= 0:
+                continue
+            dx = 100.0 * abs(plus_di - minus_di) / di_sum
+            dx_values.append(dx)
+
+        if len(dx_values) < period:
+            return None
+        # ADX = Wilder smoothing of DX over period
+        adx = sum(dx_values[:period]) / period
+        for i in range(period, len(dx_values)):
+            adx = (adx * (period - 1) + dx_values[i]) / period
+        return adx
+
+    def compute_bb_squeeze(
+        self, underlying: str, period: int = BB_PERIOD,
+        std_mult: float = BB_STD_MULT, lookback: int = BB_SQUEEZE_LOOKBACK,
+        timeframe: Timeframe = Timeframe.M5,
+    ) -> tuple[bool | None, float | None]:
+        """Detect Bollinger Band squeeze on spot closes.
+
+        BB width = (upper - lower) / middle expressed in %. A squeeze
+        is when current BB width is in the bottom ``BB_SQUEEZE_PERCENTILE``
+        of the last ``lookback`` readings — indicating compressed
+        volatility / consolidation period (favourable for IC entries).
+
+        Returns (is_squeeze, current_width_pct). Either may be None on
+        insufficient data.
+        """
+        spot_token = self._find_spot_token(underlying)
+        if not spot_token:
+            return None, None
+        need = period + lookback
+        candles = self._aggregator.get_completed_candles(spot_token, timeframe, limit=need)
+        if len(candles) < period + 5:  # Need at least 5 BB-width readings
+            return None, None
+
+        closes = [float(c.close) for c in candles]
+        bb_widths: list[float] = []
+        for i in range(period - 1, len(closes)):
+            window = closes[i - period + 1: i + 1]
+            mean = sum(window) / period
+            if mean <= 0:
+                continue
+            variance = sum((x - mean) ** 2 for x in window) / period
+            sd = math.sqrt(variance)
+            # Full BB band width as % of mid (2 × std on each side = 4 × std total)
+            width_pct = (2.0 * std_mult * sd) / mean * 100.0
+            bb_widths.append(width_pct)
+
+        if len(bb_widths) < 5:
+            return None, None
+        current = bb_widths[-1]
+        # Use the most-recent ``lookback`` readings (or whatever we have)
+        recent = bb_widths[-lookback:] if len(bb_widths) >= lookback else bb_widths
+        sorted_recent = sorted(recent)
+        idx = max(0, int(len(sorted_recent) * BB_SQUEEZE_PERCENTILE / 100.0) - 1)
+        threshold = sorted_recent[idx]
+        return current <= threshold, current
+
+    def _maybe_capture_daily_close(self, underlying: str, now: datetime, spot: float) -> None:
+        """Maintain rolling daily-close history for realized-vol calc.
+
+        Runs on every assess() call. Captures the latest spot as the
+        "running close" for the current day; on day rollover, the prior
+        running close becomes a stored daily close.
+        """
+        if spot <= 0:
+            return
+        today = now.date()
+        last_close_dt = self._last_close_date.get(underlying)
+        if last_close_dt is None:
+            self._last_close_date[underlying] = today
+            self._daily_close_running[underlying] = spot
+            return
+        if today != last_close_dt:
+            # New day — yesterday's running close becomes a stored close.
+            running = self._daily_close_running.get(underlying, 0.0)
+            if running > 0:
+                if underlying not in self._daily_closes:
+                    self._daily_closes[underlying] = deque(
+                        maxlen=RV_PERIOD_DAYS + 5  # small buffer
+                    )
+                self._daily_closes[underlying].append(running)
+            self._last_close_date[underlying] = today
+            self._daily_close_running[underlying] = spot
+        else:
+            self._daily_close_running[underlying] = spot
+
+    def compute_realized_vol(
+        self, underlying: str, period_days: int = RV_PERIOD_DAYS,
+    ) -> float | None:
+        """Compute annualised realized vol (%) from rolling daily closes.
+
+        Returns None when fewer than ``period_days+1`` daily closes are
+        stored (need N+1 closes for N daily log returns). Vol is
+        annualised using NSE ``RV_ANNUALIZATION_DAYS`` = 252 trading
+        days/year and reported as a percentage to match VIX scale.
+        """
+        closes = self._daily_closes.get(underlying)
+        if not closes or len(closes) < period_days + 1:
+            return None
+        # Use the last period_days+1 closes
+        seq = list(closes)[-(period_days + 1):]
+        log_returns: list[float] = []
+        for i in range(1, len(seq)):
+            if seq[i - 1] <= 0 or seq[i] <= 0:
+                continue
+            log_returns.append(math.log(seq[i] / seq[i - 1]))
+        if len(log_returns) < period_days // 2:  # need most of the window
+            return None
+        mean = sum(log_returns) / len(log_returns)
+        var = sum((r - mean) ** 2 for r in log_returns) / max(1, len(log_returns) - 1)
+        daily_std = math.sqrt(var)
+        annual_vol_pct = daily_std * math.sqrt(RV_ANNUALIZATION_DAYS) * 100.0
+        return annual_vol_pct
+
+    def compute_rv_iv_ratio(self, underlying: str) -> float | None:
+        """Realized vol / India VIX. Returns None on insufficient data.
+
+        ratio < 0.80  → IV is rich, premium-selling has positive expectancy
+        ratio 0.80-1.0 → IV approximately fair
+        ratio > 1.0  → IV is cheap or under-priced — DON'T sell premium
+        """
+        rv = self.compute_realized_vol(underlying)
+        if rv is None:
+            return None
+        vix = self._get_vix()
+        if vix <= 0:
+            return None
+        return rv / vix
+
+    def is_premium_selling_favorable(
+        self, underlying: str,
+    ) -> tuple[bool, dict[str, float | bool | None]]:
+        """Unified Indian-calibrated gate for premium-selling strategies.
+
+        Returns (favorable, metrics). ``favorable=True`` means ALL of:
+          - ADX(14) on 5-min spot < 22 (no trend / range)
+          - BB squeeze active (volatility compression on 5-min)
+          - RV/IV < 0.80 (IV genuinely overpriced vs realized)
+
+        ``metrics`` includes the raw values for logging/decision audit.
+        Any metric being None is treated as "insufficient data → NOT
+        favourable" — we err on the side of NOT trading rather than
+        guess. This is the user's principle: small loss / big profit /
+        limit losses applied to the entry gate.
+        """
+        adx = self.compute_adx(underlying)
+        bb_squeeze, bb_width = self.compute_bb_squeeze(underlying)
+        rv = self.compute_realized_vol(underlying)
+        rv_iv = self.compute_rv_iv_ratio(underlying)
+        vix = self._get_vix()
+
+        metrics = {
+            "adx": adx,
+            "adx_threshold": ADX_RANGE_THRESHOLD,
+            "bb_squeeze": bb_squeeze,
+            "bb_width_pct": bb_width,
+            "realized_vol_pct": rv,
+            "vix": vix,
+            "rv_iv_ratio": rv_iv,
+            "rv_iv_threshold": RV_IV_FAVORABLE_THRESHOLD,
+        }
+
+        # Any indicator missing → not favourable (insufficient data)
+        if adx is None or bb_squeeze is None or rv_iv is None:
+            metrics["reason"] = "insufficient_data"
+            return False, metrics
+
+        adx_ok = adx < ADX_RANGE_THRESHOLD
+        bb_ok = bool(bb_squeeze)
+        rv_iv_ok = rv_iv < RV_IV_FAVORABLE_THRESHOLD
+
+        favourable = adx_ok and bb_ok and rv_iv_ok
+        metrics["reason"] = (
+            f"adx={adx:.1f}({'OK' if adx_ok else 'FAIL'}) "
+            f"bb_sqz={bb_ok} "
+            f"rv/iv={rv_iv:.2f}({'OK' if rv_iv_ok else 'FAIL'})"
+        )
+        return favourable, metrics

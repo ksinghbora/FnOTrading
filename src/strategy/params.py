@@ -185,6 +185,14 @@ class IronCondorParams(BaseStrategyParams):
     # strangle/straddle/calendar share the filter. Override here if IC
     # ever needs a different default.
 
+    # May 2 2026: Indian-market range-detection gate. When True, IC
+    # entries require ADX(14)<22 AND BB-squeeze active AND RV/IV<0.80
+    # — proven institutional indicators calibrated for NIFTY/BANKNIFTY
+    # 5-min spot. See ``RegimeDetector.is_premium_selling_favorable``.
+    # Default False so existing validation reports remain reproducible.
+    # Strong-signal configs opt in via params override.
+    require_premium_selling_regime: bool = False
+
 
 class IronButterflyParams(IronCondorParams):
     """Parameters for Iron Butterfly strategy — Iron Condor with ATM body."""

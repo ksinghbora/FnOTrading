@@ -277,6 +277,23 @@ class IronCondorStrategy(BaseStrategy):
             )
             return None
 
+        # May 2 2026: Indian-market range-detection HARD gate.
+        # ADX(14)<22 + BB-squeeze active + RV/IV<0.80. All three must
+        # agree. Opt-in via ``require_premium_selling_regime`` param.
+        # This is the user's "small loss / big profit / limit losses"
+        # principle applied at entry — only fire when proven indicators
+        # agree the regime is genuinely favourable for premium selling,
+        # not just when our hand-coded morning-range heuristic says so.
+        if getattr(self.params, "require_premium_selling_regime", False) and self._regime:
+            ok, metrics = self._regime.is_premium_selling_favorable(self.params.underlying)
+            if not ok:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_GATE",
+                    f"[{self.strategy_id}] Entry skipped: regime gate "
+                    f"{metrics.get('reason', '?')}",
+                )
+                return None
+
         # Log IV skew and OI levels for research
         self._log_iv_skew(self.params.underlying, self._expiry)
         self._log_oi_levels(self.params.underlying, self._expiry)
