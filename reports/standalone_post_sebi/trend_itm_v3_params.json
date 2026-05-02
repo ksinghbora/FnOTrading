@@ -1,0 +1,8 @@
+{
+  "_doc": "v3 — opposite direction of v2 (which destroyed v1's PF 1.14). Tighter stop (1.5× ATR), no min-hold, relaxed breakout filter (0.5× ATR), chop window disabled. Tests the hypothesis that NIFTY 1-min noise rewards FAST loss cuts.",
+  "atr_stop_mult": 1.5,
+  "min_hold_minutes": 0,
+  "breakout_atr_mult": 0.5,
+  "skip_chop_window_start": "00:00",
+  "skip_chop_window_end": "00:00"
+}
