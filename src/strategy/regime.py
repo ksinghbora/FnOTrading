@@ -1235,3 +1235,51 @@ class RegimeDetector:
             f"vrp={vrp:+.2f}({'OK_LV' if vrp_ok else 'FAIL_LV'})"
         )
         return favourable, metrics
+
+    def is_long_vol_favorable_v2b(
+        self, underlying: str,
+    ) -> tuple[bool, dict[str, float | bool | None]]:
+        """v2b gate for long-vol structures: pure VRP < 0 (no range condition).
+
+        Single-condition gate, designed after the May 6 2026 173-day
+        smoke of LC v2 (CI≥61.8 AND VRP<0) fired only 17 entries with
+        net -₹1,707 train+val PnL. The CI condition was the binding
+        constraint — Indian post-SEBI 5-min markets rarely register
+        CI≥61.8 because intraday microstructure noise pushes the
+        Choppiness Index below the Fibonacci threshold even on
+        consolidating days.
+
+        Theoretical justification for dropping CI: a long calendar
+        with the v3 default ``min_back_days=21`` is dominated by the
+        back-leg vega exposure, not the front-leg theta. Vega rises
+        with IV, so when IV is cheap (VRP<0) and reverts up, the
+        back leg gains more than the front loses, regardless of
+        whether spot stays near the strike.
+
+        The "spot must stay near strike" requirement that motivated
+        the CI condition in v2 is now defended by the strategy's
+        ``max_underlying_move_pct`` stop loss (default 1.5%) — a
+        structural per-trade safety, not a regime gate.
+
+        Insufficient data → NOT favourable (conservative, same as v2).
+        """
+        vrp = self.compute_vrp(underlying)
+        rv = self.compute_realized_vol(underlying)
+        vix = self._get_vix()
+
+        metrics: dict[str, float | bool | None] = {
+            "vrp": vrp,
+            "vrp_threshold": VRP_FAVORABLE_THRESHOLD,
+            "realized_vol_pct": rv,
+            "vix": vix,
+        }
+
+        if vrp is None:
+            metrics["reason"] = "insufficient_data"
+            return False, metrics
+
+        favourable = vrp < VRP_FAVORABLE_THRESHOLD
+        metrics["reason"] = (
+            f"vrp={vrp:+.2f}({'OK_LV2B' if favourable else 'FAIL_LV2B'})"
+        )
+        return favourable, metrics

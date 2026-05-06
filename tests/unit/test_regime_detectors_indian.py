@@ -748,3 +748,80 @@ def test_lc_param_v2_can_be_enabled_via_override():
     })
     assert p.require_long_vol_regime_v2 is True
 
+
+# ── is_long_vol_favorable_v2b (May 6 2026) ─────────────────────────
+
+
+def test_lv2b_gate_returns_false_on_insufficient_data():
+    """Conservative default — when VRP is None, v2b gate is OFF."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=None)
+    ok, m = d.is_long_vol_favorable_v2b("NIFTY")
+    assert ok is False
+    assert m["reason"] == "insufficient_data"
+
+
+def test_lv2b_gate_passes_on_negative_vrp_regardless_of_ci():
+    """v2b drops the CI condition — fires on VRP<0 alone, even when
+    CI is low (trending). This is the whole point of v2b vs v2.
+    """
+    d = _detector()
+    # Trending market (CI=20) with cheap IV (VRP=-1.5) → v2b should fire,
+    # whereas v2 would block on CI failure.
+    _stub_regime_with_metrics(d, ci_value=20.0, vrp_value=-1.5)
+    ok, m = d.is_long_vol_favorable_v2b("NIFTY")
+    assert ok is True
+    assert "OK_LV2B" in m["reason"]
+
+
+def test_lv2b_gate_blocks_on_positive_vrp():
+    """IV rich → v2b doesn't fire. Same principle as v2."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=+1.5)
+    ok, m = d.is_long_vol_favorable_v2b("NIFTY")
+    assert ok is False
+    assert "FAIL_LV2B" in m["reason"]
+
+
+def test_lv2b_gate_blocks_at_vrp_zero():
+    """Strict VRP < 0; VRP == 0 means no edge, don't pay round-trip."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=0.0)
+    ok, m = d.is_long_vol_favorable_v2b("NIFTY")
+    assert ok is False
+
+
+def test_lv2_subset_of_lv2b():
+    """Critical containment: every regime where LC v2 fires must ALSO
+    fire LC v2b (since v2b is the relaxation of v2 — drops one of the
+    two AND-conditions). The reverse need not hold.
+    """
+    quadrants = [
+        # (ci, vrp)
+        (70.0, -1.5),  # LC v2 fires
+        (20.0, -1.5),  # only LC v2b fires (v2 blocks on CI)
+        (70.0, +1.5),  # neither
+        (20.0, +1.5),  # neither
+    ]
+    for ci, vrp in quadrants:
+        d = _detector()
+        _stub_regime_with_metrics(d, ci_value=ci, vrp_value=vrp)
+        v2_ok, _ = d.is_long_vol_favorable_v2("NIFTY")
+        v2b_ok, _ = d.is_long_vol_favorable_v2b("NIFTY")
+        if v2_ok:
+            assert v2b_ok, f"LC v2 fired but LC v2b did not at ci={ci} vrp={vrp}"
+
+
+def test_lc_param_v2b_default_false():
+    from src.strategy.params import LongCalendarParams
+    p = LongCalendarParams()
+    assert p.require_long_vol_regime_v2b is False
+
+
+def test_lc_param_v2b_can_be_enabled_via_override():
+    from src.strategy.params import LongCalendarParams
+    p = LongCalendarParams.model_validate({
+        "require_long_vol_regime_v2b": True,
+    })
+    assert p.require_long_vol_regime_v2b is True
+

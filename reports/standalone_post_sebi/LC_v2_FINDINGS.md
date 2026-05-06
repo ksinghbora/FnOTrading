@@ -92,8 +92,74 @@ Replace the calendar structure with a long straddle (buy ATM CE + buy ATM PE). P
 
 This bug led to the earlier draft of this doc claiming the gate was empirically dead. It's a one-line fix in any future v3 / v2-variant analysis: count `[ENTRY]` lines as the truth.
 
+## LC v2b update (May 6 23:36 IST) — relaxation made it WORSE
+
+LC v2b (drop the CI condition, gate on VRP < 0 alone) was implemented and
+smoke-tested on the same 173-day window. Result:
+
+| Variant | Round trips | Win Rate | Net P&L | Worst | Sharpe |
+|---|---|---|---|---|---|
+| LC v2  (CI≥61.8 AND VRP<0) | 17 | 47.1% | -₹1,707  | -₹1,481 | -0.95 |
+| **LC v2b (VRP<0 only)**     | **31** | **19.4%** | **-₹120,734** | **-₹26,640** | **-3.02** |
+
+The relaxation caught 14 additional trades — every one of them disastrous:
+
+- Win rate collapsed from 47% (LC v2) to 19% (LC v2b)
+- Per-trade mean PnL: -₹100 (v2) → -₹4,117 (v2b) — **41× worse**
+- Single worst trade: -₹26,640 (a calendar where spread collapsed 81.5%
+  triggered the stop loss)
+- 6 of 31 v2b trades hit stop loss (vs 0 of 17 in v2)
+
+**The CI condition was doing essential filtering work.** It was excluding
+trending days where spot leaves the calendar's narrow profit zone (±1%
+from strike). Dropping it caught exactly those days, with predictable
+catastrophic outcomes.
+
+This is the **structural mismatch verdict for the long-calendar
+structure on Indian post-SEBI**: the strategy needs the spot to stay
+near a fixed strike for ~21 days (front-to-back differential), but
+Indian post-SEBI markets exhibit large enough intraday and inter-day
+moves to violate that requirement on a majority of days.
+
+## Cumulative long-vol verdict on Indian post-SEBI options
+
+After three iterations of theory-grounded long-vol gate design:
+
+| Iteration | Gate                       | Trades | Net P&L  | Verdict |
+|---|---|---|---|---|
+| LC default (Apr 30) | hand-coded VIX/PCR/MP filters       | (varied)  | -3.23 Sharpe (per cross-strategy doc) | FAIL |
+| LC v2 (May 6)       | CI≥61.8 AND VRP<0 (orthogonal AND) | 17        | -₹1,707           | FAIL — sample-thin |
+| LC v2b (May 6)      | VRP<0 only (single-condition)        | 31        | -₹120,734         | FAIL — catastrophic |
+
+**Long calendar with any gate framework on Indian post-SEBI options is
+not tradeable.** The structural mismatch (calendar needs spot near
+strike vs Indian intraday vol producing frequent strike-leavings) is
+unfixable at the gate level.
+
 ## Final word
 
-LC v2 **gate is alive** but the strategy as configured is **not profitable** on the 173-day train+val window. This is a much more nuanced verdict than the "empirically dead" claim in the parent commit. Whether LC v2 (or LC v2b/v2c) can be made tradeable requires deeper analysis: trade-level audit of the 17 entries, cost-sensitivity, and possibly structural redesign (long straddle, futures trend).
+The IC v2 + LC v2 portfolio thesis is **empirically falsified**.
+- IC v2 stands as a marginal +PnL strategy (~+₹4/day on holdout)
+- LC v2 (any variant) has no edge to combine with it
 
-The IC v2 + LC v2 portfolio thesis is partially validated — they DO fire on different days (mutually exclusive on the vol axis as designed) — but the LC v2 leg currently subtracts from the combined book rather than diversifying it positively.
+Three pivot directions remain, in increasing scope:
+
+1. **Long Straddle on VRP<0** — different long-vol structure that
+   profits from ANY directional movement (not just spot-near-strike).
+   Same gate, different vehicle. Tests whether the gate or the
+   structure is the binding constraint. ~1-2 days to implement and
+   smoke.
+
+2. **Pivot to NIFTY Futures Trend** — Original PIVOT_DESIGN_trend_futures.md
+   path. Different cost structure (no SEBI options-sell hike). Different
+   alpha source (directional). 3-4 weeks including data ingestion.
+
+3. **Drop Indian options entirely** — Pivot to equity stat-arb on
+   constituents OR vol-targeting on individual stocks. Requires new
+   instrument-class infrastructure. Largest pivot but cleanest break
+   from the cost-wall regime.
+
+The methodology continues to work — every iteration produced honest
+data and clear verdicts. What fails consistently is the empirical edge
+of long-vol options strategies on Indian post-SEBI, regardless of how
+the gate is parameterised.

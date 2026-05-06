@@ -321,6 +321,31 @@ class LongCalendarParams(BaseStrategyParams):
     # reproducible. Mutually exclusive with the legacy VIX/PCR/MP filters.
     require_long_vol_regime_v2: bool = False
 
+    # May 6 2026 — LC v2b: drop the CI condition, pure VRP < 0 gate.
+    #
+    # The May 6 2026 173-day smoke of LC v2 (CI≥61.8 AND VRP<0) fired
+    # only 17 entries with -₹1,707 train+val PnL. The CI requirement is
+    # the binding constraint — Indian post-SEBI markets rarely register
+    # CI≥61.8 (it's the Fibonacci threshold for "range-bound", and
+    # 5-min NIFTY 5-min spot is too microstructure-noisy to hit it
+    # often). Theory says LC's PnL is dominated by the back-leg vega
+    # (long calendar with ~21-day differential is mostly a "long-vega
+    # trade" not a "theta-decay trade"), so dropping the CI condition
+    # gives a larger sample and may surface a different edge.
+    #
+    # Risk: trending markets drag spot away from strike → max
+    # underlying-move stop trips before vega expansion materialises.
+    # The strategy's existing max_underlying_move_pct (default 1.5%)
+    # remains as the structural defence.
+    #
+    # Single-condition gate:  VRP < 0 (IV cheap, room to expand)
+    #
+    # Mutually exclusive with require_long_vol_regime_v2; do not enable
+    # both. See ``RegimeDetector.is_long_vol_favorable_v2b`` and
+    # ``reports/standalone_post_sebi/LC_v2_FINDINGS.md`` for the
+    # rationale.
+    require_long_vol_regime_v2b: bool = False
+
 
 class DeltaNeutralParams(BaseStrategyParams):
     """Parameters for Delta Neutral strategy."""

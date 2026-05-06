@@ -1,0 +1,18 @@
+{
+  "_doc": "Long Calendar v2b — single-condition VRP<0 gate, drops the CI requirement. May 6 2026. The May 6 173-day smoke of LC v2 (CI≥61.8 AND VRP<0) fired only 17 entries with -₹1,707 train+val PnL — CI was the binding constraint. v2b relaxes by removing the CI condition; long calendar's back-leg vega exposure on a ~21-day differential dominates over front-leg theta, so 'spot near strike' is enforced by max_underlying_move_pct (1.5%) rather than a regime gate. All other params identical to v2.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "leg_type": "CE",
+  "strike_offset_pct": 0.0,
+  "min_back_days": 21,
+  "profit_target_pct": 30.0,
+  "stop_loss_pct": 50.0,
+  "max_underlying_move_pct": 1.5,
+  "front_close_buffer_minutes": 90,
+  "max_spread_pct": 5.0,
+  "require_long_vol_regime_v2b": true
+}

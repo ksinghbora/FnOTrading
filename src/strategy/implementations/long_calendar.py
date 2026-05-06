@@ -125,19 +125,21 @@ class LongCalendarStrategy(BaseStrategy):
             clock=self.ctx.clock,
         )
 
-        # May 6 2026: warm up daily-close history when the v2 long-vol
-        # gate is enabled, mirroring iron_condor.py. VRP needs 21+ daily
-        # closes to compute; without warmup the gate returns
+        # May 6 2026: warm up daily-close history when EITHER v2 or v2b
+        # long-vol gate is enabled, mirroring iron_condor.py. VRP needs
+        # 21+ daily closes to compute; without warmup the gate returns
         # "insufficient_data" perpetually because the launchd daily
         # restart resets the in-memory deque every morning. Failure
         # is non-fatal — strategy still starts and falls back to
         # gradual in-memory accumulation.
-        if getattr(self.params, "require_long_vol_regime_v2", False):
+        v2_active = getattr(self.params, "require_long_vol_regime_v2", False)
+        v2b_active = getattr(self.params, "require_long_vol_regime_v2b", False)
+        if v2_active or v2b_active:
             spot_token = self.ctx.get_spot_token(self.params.underlying)
             if spot_token is None:
                 logger.warning(
                     f"[{self.strategy_id}] No spot token for {self.params.underlying} — "
-                    f"v2 long-vol regime warmup skipped"
+                    f"long-vol regime warmup skipped"
                 )
             else:
                 seeded = await self._regime.warmup_daily_closes(
@@ -145,8 +147,9 @@ class LongCalendarStrategy(BaseStrategy):
                     self.params.underlying,
                     spot_token,
                 )
+                mode = "v2" if v2_active else "v2b"
                 logger.info(
-                    f"[{self.strategy_id}] v2 long-vol warmup: "
+                    f"[{self.strategy_id}] {mode} long-vol warmup: "
                     f"seeded {seeded} daily closes for {self.params.underlying}"
                 )
 
@@ -251,6 +254,7 @@ class LongCalendarStrategy(BaseStrategy):
         # "insufficient_data" forever in backtests with no broker warmup.
         # IC gets this for free because _compute_score() calls assess()
         # before the v2 gate check; we replicate the side effect here.
+        # Required for both v2 and v2b modes.
         if self._regime:
             self._regime.assess(self.params.underlying)
 
@@ -278,6 +282,31 @@ class LongCalendarStrategy(BaseStrategy):
                 )
                 return None
             # v2 mode: skip every legacy filter and proceed directly to chain selection.
+        elif getattr(self.params, "require_long_vol_regime_v2b", False):
+            # ─── May 6 2026: v2b — drop CI requirement, pure VRP < 0 ─
+            # The v2 gate (CI≥61.8 AND VRP<0) fired only 17 entries on
+            # 173-day train+val. CI was the binding constraint — Indian
+            # post-SEBI 5-min markets rarely register CI≥61.8. v2b
+            # relaxes by removing the CI condition; long-calendar's
+            # back-leg vega dominates over front-leg theta on the
+            # ~21-day-differential default, so the "spot near strike"
+            # need is defended by max_underlying_move_pct rather than
+            # by a regime gate.
+            if not self._regime:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_V2B_NO_DETECTOR",
+                    f"[{self.strategy_id}] Entry skipped: regime detector unavailable",
+                )
+                return None
+            ok, metrics = self._regime.is_long_vol_favorable_v2b(self.params.underlying)
+            if not ok:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_LV2B_GATE",
+                    f"[{self.strategy_id}] Entry skipped: long-vol v2b gate "
+                    f"{metrics.get('reason', '?')}",
+                )
+                return None
+            # v2b mode: skip every legacy filter and proceed directly to chain selection.
         else:
             # ─── Legacy heuristic-filter pipeline (default behaviour) ─
 
