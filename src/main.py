@@ -362,10 +362,48 @@ async def create_app(settings: Settings):
 
     from src.strategy.state_store import StrategyStateStore
     state_store = StrategyStateStore(session_factory)
+
+    # May 6 2026: wire broker.get_historical_data into the strategy runner
+    # so RegimeDetector can warm up its daily-close deque at startup. The
+    # paper broker returns [] for historical_data (it has no real data
+    # source), so in PAPER_TRADING mode we wire a raw KiteConnect-backed
+    # fetcher when the Kite token is configured. Without warmup the v2
+    # IC gate stays in "insufficient_data" forever (the launchd 08:50 IST
+    # daily restart resets the in-memory deque every morning).
+    historical_data_fn = None
+    if settings.paper_trading and settings.kite_api_key and settings.kite_access_token:
+        try:
+            from kiteconnect import KiteConnect as _KCHist
+            _hist_kite = _KCHist(api_key=settings.kite_api_key)
+            _hist_kite.set_access_token(settings.kite_access_token)
+
+            async def _historical_data_fn(
+                instrument_token: int, from_date, to_date, interval: str
+            ) -> list[dict]:
+                # KiteConnect.historical_data is sync — wrap in to_thread
+                # so we don't block the event loop.
+                return await asyncio.to_thread(
+                    _hist_kite.historical_data,
+                    instrument_token=instrument_token,
+                    from_date=from_date,
+                    to_date=to_date,
+                    interval=interval,
+                )
+
+            historical_data_fn = _historical_data_fn
+            logger.info("Strategy runner: historical_data fetcher wired (Kite, paper mode)")
+        except Exception as e:
+            logger.warning(f"Strategy runner: could not wire historical_data fetcher: {e}")
+    elif not settings.paper_trading:
+        # Live mode: real broker has get_historical_data
+        historical_data_fn = broker.get_historical_data
+        logger.info("Strategy runner: historical_data fetcher wired (broker, live mode)")
+
     strategy_runner = StrategyRunner(
         event_bus, feed, chain_builder, aggregator, clock,
         order_callback, portfolio_getter,
         state_store=state_store,
+        historical_data_callback=historical_data_fn,
     )
     kill_switch.set_strategy_runner(strategy_runner)
 

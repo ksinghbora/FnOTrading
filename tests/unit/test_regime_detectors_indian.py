@@ -532,3 +532,115 @@ from src.strategy.regime import (
     CHOPPINESS_RANGE_THRESHOLD as CHOPPINESS_RANGE_THRESHOLD_VAL,
     CHOPPINESS_TREND_THRESHOLD as CHOPPINESS_TREND_THRESHOLD_VAL,
 )
+
+
+# ── warmup_daily_closes (May 6 2026) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_warmup_seeds_deque_from_historical_bars():
+    """Happy path: 25 daily bars → deque populated, last_close_date set."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    d = _detector()
+
+    async def fake_fn(token, fr, to, interval):
+        base = _dt(2026, 4, 1, tzinfo=_tz.utc)
+        return [
+            {"date": base + _td(days=i), "open": 24000, "high": 24100,
+             "low": 23900, "close": 24050.0 + i * 10}
+            for i in range(25)
+        ]
+
+    n = await d.warmup_daily_closes(fake_fn, "NIFTY", spot_token=256265)
+
+    assert n == 25
+    assert len(d._daily_closes["NIFTY"]) == 25
+    assert d._last_close_date["NIFTY"] == date(2026, 4, 25)
+    # Verify compute_realized_vol now succeeds (was returning None pre-warmup)
+    rv = d.compute_realized_vol("NIFTY")
+    assert rv is not None and rv >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_warmup_swallows_exception_returns_zero():
+    """Network failure must not crash strategy startup — log + return 0."""
+    d = _detector()
+
+    async def boom(token, fr, to, interval):
+        raise RuntimeError("kite api down")
+
+    n = await d.warmup_daily_closes(boom, "NIFTY", spot_token=256265)
+    assert n == 0
+    assert "NIFTY" not in d._daily_closes
+
+
+@pytest.mark.asyncio
+async def test_warmup_handles_empty_response():
+    """Broker returned []. Caller logs warning and returns 0 cleanly."""
+    d = _detector()
+
+    async def empty(token, fr, to, interval):
+        return []
+
+    n = await d.warmup_daily_closes(empty, "NIFTY", spot_token=256265)
+    assert n == 0
+
+
+@pytest.mark.asyncio
+async def test_warmup_skips_bars_with_invalid_close():
+    """Defensive: bars with missing/zero/None close are skipped, not crashed."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    d = _detector()
+    base = _dt(2026, 4, 1, tzinfo=_tz.utc)
+
+    async def mixed(token, fr, to, interval):
+        return [
+            {"date": base + _td(days=0), "close": 24000.0},
+            {"date": base + _td(days=1), "close": 0.0},        # skip (zero)
+            {"date": base + _td(days=2), "close": None},        # skip (None)
+            {"date": base + _td(days=3), "close": "garbage"},   # skip (bad type)
+            {"date": base + _td(days=4), "close": 24050.0},
+        ]
+
+    n = await d.warmup_daily_closes(mixed, "NIFTY", spot_token=256265)
+    assert n == 2  # only the two valid bars seeded
+    closes = list(d._daily_closes["NIFTY"])
+    assert closes == [24000.0, 24050.0]
+
+
+@pytest.mark.asyncio
+async def test_warmup_v2_gate_fires_after_seeding():
+    """End-to-end: after warmup, v2 gate can compute VRP+CI and not block on insufficient_data."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    d = _detector()
+
+    # Seed with 22 daily closes that have realistic intraday variation
+    async def realistic(token, fr, to, interval):
+        base = _dt(2026, 4, 1, tzinfo=_tz.utc)
+        # Range-bound series: closes oscillate ±0.5% around 24000
+        bars = []
+        for i in range(22):
+            close = 24000.0 + (50.0 if i % 2 == 0 else -50.0)
+            bars.append({
+                "date": base + _td(days=i),
+                "open": close, "high": close + 30,
+                "low": close - 30, "close": close,
+            })
+        return bars
+
+    n = await d.warmup_daily_closes(realistic, "NIFTY", spot_token=256265)
+    assert n == 22
+
+    # RV should compute now
+    rv = d.compute_realized_vol("NIFTY")
+    assert rv is not None and rv > 0.0
+
+    # VRP requires VIX too — set it via the existing private hook
+    d._get_vix = lambda: 16.0  # India VIX 16% > realised vol → VRP > 0
+    vrp = d.compute_vrp("NIFTY")
+    assert vrp is not None
+    # VRP could be positive or negative depending on the series; just verify no None
+

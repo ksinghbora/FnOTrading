@@ -821,6 +821,119 @@ class RegimeDetector:
         else:
             self._daily_close_running[underlying] = spot
 
+    async def warmup_daily_closes(
+        self,
+        historical_fn,
+        underlying: str,
+        spot_token: int,
+        days: int = 35,
+    ) -> int:
+        """Seed ``_daily_closes`` from a historical-data callback at startup.
+
+        WHY THIS EXISTS
+        ---------------
+        ``_capture_daily_close()`` builds the daily-close history purely
+        from in-memory live ticks: each new trading day adds 1 close. The
+        v2 gate needs ``RV_PERIOD_DAYS+1`` (=21) closes to compute VRP.
+        Combined with the launchd 08:50 IST daily restart, the deque
+        resets to empty every morning and the gate returns
+        ``insufficient_data`` perpetually — v2 never fires.
+
+        This loader is called once from the strategy's ``on_start()`` to
+        backfill the deque from broker historical data. After warmup the
+        gate fires from the first trading day post-deployment.
+
+        Parameters
+        ----------
+        historical_fn :
+            Async callable matching ``Broker.get_historical_data`` —
+            ``async (token, from_date, to_date, interval) -> list[dict]``
+            where each dict has ``date`` and ``close`` keys.
+        underlying : str
+            "NIFTY" or "BANKNIFTY". Keys ``_daily_closes``.
+        spot_token : int
+            Instrument token for the spot index (e.g. 256265 for NIFTY).
+        days : int
+            Calendar lookback. Default 35 to ensure 25+ trading days
+            even with weekends + holidays.
+
+        Returns
+        -------
+        int : Number of closes seeded into the deque (0 on failure).
+
+        Failure mode: any exception (network, auth, empty response) is
+        logged and swallowed. Strategy startup must not block on warmup.
+        Returns 0 → gate stays in ``insufficient_data`` until live ticks
+        eventually accumulate (same as before warmup existed).
+        """
+        from datetime import timedelta
+        try:
+            now = self._clock.now() if self._clock is not None else now_ist()
+            from_date = now - timedelta(days=days)
+            bars = await historical_fn(spot_token, from_date, now, "day")
+        except Exception as e:
+            logger.warning(
+                f"[RegimeDetector] warmup_daily_closes({underlying}) failed: {e}"
+            )
+            return 0
+
+        if not bars:
+            logger.warning(
+                f"[RegimeDetector] warmup_daily_closes({underlying}): "
+                f"historical_fn returned 0 bars"
+            )
+            return 0
+
+        # Sort ascending by date (Kite returns ascending already, but be defensive)
+        try:
+            bars_sorted = sorted(bars, key=lambda b: b["date"])
+        except (KeyError, TypeError) as e:
+            logger.warning(
+                f"[RegimeDetector] warmup_daily_closes({underlying}): "
+                f"unexpected bar shape: {e}"
+            )
+            return 0
+
+        if underlying not in self._daily_closes:
+            self._daily_closes[underlying] = deque(maxlen=RV_PERIOD_DAYS + 5)
+
+        # Keep only the most recent (RV_PERIOD_DAYS + 5) closes — the
+        # deque maxlen would clamp anyway but we want last_close_date
+        # to point at the actual most-recent bar we seeded.
+        kept = bars_sorted[-(RV_PERIOD_DAYS + 5):]
+        seeded = 0
+        for b in kept:
+            try:
+                close = float(b["close"])
+                if close > 0:
+                    self._daily_closes[underlying].append(close)
+                    seeded += 1
+            except (KeyError, ValueError, TypeError):
+                continue
+
+        if seeded > 0:
+            # Set _last_close_date to the date of the LAST seeded bar so
+            # _maybe_capture_daily_close() correctly detects "today" as
+            # a new day and promotes today's running close on rollover.
+            last_bar = kept[-1]
+            try:
+                last_date = last_bar["date"]
+                if hasattr(last_date, "date"):  # datetime → date
+                    last_date = last_date.date()
+                self._last_close_date[underlying] = last_date
+                # Initialise running close to the last seeded close so
+                # the deque is consistent until the next live tick.
+                self._daily_close_running[underlying] = float(last_bar["close"])
+            except Exception:
+                pass
+
+        logger.info(
+            f"[RegimeDetector] warmup_daily_closes({underlying}): "
+            f"seeded {seeded} closes (last_date={self._last_close_date.get(underlying)}, "
+            f"deque_size={len(self._daily_closes[underlying])})"
+        )
+        return seeded
+
     def compute_realized_vol(
         self, underlying: str, period_days: int = RV_PERIOD_DAYS,
     ) -> float | None:

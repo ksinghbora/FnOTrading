@@ -37,6 +37,7 @@ class StrategyRunner:
         order_callback,    # async callable: Signal -> list[Order]
         portfolio_getter,  # callable: (what, strategy_id) -> data
         state_store: StrategyStateStore | None = None,
+        historical_data_callback=None,  # May 6 2026: optional, for regime warmup
     ):
         self._event_bus = event_bus
         self._feed = feed
@@ -45,6 +46,7 @@ class StrategyRunner:
         self._clock = clock
         self._order_callback = order_callback
         self._portfolio_getter = portfolio_getter
+        self._historical_data_callback = historical_data_callback
         # state_store may be None in tests/backtests; runner falls back to no-op
         self._state_store = state_store or StrategyStateStore(None)
 
@@ -70,6 +72,7 @@ class StrategyRunner:
             clock=self._clock,
             order_callback=self._order_callback,
             portfolio_getter=self._portfolio_getter,
+            historical_data_callback=self._historical_data_callback,
         )
         strategy.set_context(context)
 

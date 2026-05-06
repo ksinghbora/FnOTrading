@@ -33,6 +33,7 @@ class StrategyContext:
         clock: MarketClock,
         order_callback,  # Callable that routes signal through OMS
         portfolio_getter,  # Callable that returns positions/PnL
+        historical_data_callback=None,  # async (token, from, to, interval) -> list[dict]
     ):
         self.strategy_id = strategy_id
         self._feed = feed
@@ -41,6 +42,13 @@ class StrategyContext:
         self._clock = clock
         self._order_callback = order_callback
         self._portfolio_getter = portfolio_getter
+        # May 6 2026: optional historical-data fetcher used by strategies
+        # that need to warm up state-dependent detectors (e.g. RegimeDetector
+        # daily-close deque for VRP/RV) at startup. Strategies should treat
+        # None as "warmup unavailable" and fall back to gradual in-memory
+        # accumulation. Live mode wires this from broker.get_historical_data;
+        # backtests/tests can leave it None.
+        self._historical_data_callback = historical_data_callback
 
     # ─── Market Data ─────────────────────────────────────────────
 
@@ -69,6 +77,33 @@ class StrategyContext:
         from src.core.constants import INDIA_VIX_TOKEN
         ltp = self._feed.get_ltp(INDIA_VIX_TOKEN)
         return float(ltp) if ltp else 0.0
+
+    async def get_historical_data(
+        self,
+        instrument_token: int,
+        from_date,
+        to_date,
+        interval: str,
+    ) -> list[dict]:
+        """Fetch historical bars via the wired broker callback.
+
+        Returns ``[]`` if no callback is wired (paper backtests, unit
+        tests). Strategies that depend on this for warmup should treat
+        an empty result as "no warmup available, fall back to live
+        accumulation" rather than as a hard failure.
+        """
+        if self._historical_data_callback is None:
+            return []
+        return await self._historical_data_callback(
+            instrument_token, from_date, to_date, interval
+        )
+
+    def get_spot_token(self, underlying: str) -> int | None:
+        """Reverse-lookup the spot token for an underlying. None if not registered."""
+        for token, name in self._chain_builder._spot_tokens.items():
+            if name == underlying:
+                return token
+        return None
 
     # ─── Clock ───────────────────────────────────────────────────
 

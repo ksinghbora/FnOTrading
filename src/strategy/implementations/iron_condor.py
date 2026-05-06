@@ -94,6 +94,32 @@ class IronCondorStrategy(BaseStrategy):
             self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder,
             clock=self.ctx.clock,
         )
+
+        # May 6 2026: warm up the daily-close deque from broker historical
+        # data so the v2 gate (require_premium_selling_regime_v2) can
+        # compute VRP/RV from the first trading day. Without this, the
+        # gate returns "insufficient_data" perpetually because the daemon
+        # restarts every morning at 08:50 IST (launchd) and the in-memory
+        # deque resets to empty. Failure is non-fatal — strategy still
+        # starts and falls back to gradual in-memory accumulation.
+        if getattr(self.params, "require_premium_selling_regime_v2", False):
+            spot_token = self.ctx.get_spot_token(self.params.underlying)
+            if spot_token is None:
+                logger.warning(
+                    f"[{self.strategy_id}] No spot token for {self.params.underlying} — "
+                    f"v2 regime warmup skipped"
+                )
+            else:
+                seeded = await self._regime.warmup_daily_closes(
+                    self.ctx.get_historical_data,
+                    self.params.underlying,
+                    spot_token,
+                )
+                logger.info(
+                    f"[{self.strategy_id}] v2 regime warmup: "
+                    f"seeded {seeded} daily closes for {self.params.underlying}"
+                )
+
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} short_call_delta={self.params.short_call_delta} "
