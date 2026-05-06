@@ -1,0 +1,56 @@
+{
+  "charges": {
+    "brokerage": {
+      "per_order_cap": "20",
+      "percentage": "0.03"
+    },
+    "gst_pct": "18",
+    "sebi_charges_pct": "0.0001",
+    "stamp_duty": {
+      "futures_buy_pct": "0.002",
+      "options_buy_pct": "0.003"
+    },
+    "stt": {
+      "futures_sell_pct": "0.02",
+      "futures_sell_pct_apr2026": "0.05",
+      "options_exercise_pct": "0.125",
+      "options_exercise_pct_apr2026": "0.15",
+      "options_sell_pct": "0.1",
+      "options_sell_pct_apr2026": "0.15"
+    },
+    "transaction_charges": {
+      "futures_pct": "0.00173",
+      "options_pct": "0.0353"
+    }
+  },
+  "expiry_schedule": {
+    "BANKNIFTY": {
+      "has_weekly": false,
+      "weekly_day": null
+    },
+    "FINNIFTY": {
+      "has_weekly": false,
+      "weekly_day": null
+    },
+    "NIFTY": {
+      "has_weekly": true,
+      "weekly_day": 1
+    }
+  },
+  "freeze_quantities": {
+    "BANKNIFTY": 900,
+    "FINNIFTY": 1800,
+    "NIFTY": 1800
+  },
+  "india_vix_token": 264969,
+  "lot_sizes": {
+    "BANKNIFTY": 30,
+    "FINNIFTY": 40,
+    "NIFTY": 75
+  },
+  "market_close": "15:30:00",
+  "market_open": "09:15:00",
+  "mis_square_off_time": "15:15:00",
+  "pre_open_end": "09:08:00",
+  "pre_open_start": "09:00:00"
+}
