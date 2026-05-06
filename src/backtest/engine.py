@@ -354,8 +354,13 @@ class BacktestEngine:
                 inst = "CE" if "CE" in leg.tradingsymbol else (
                     "PE" if "PE" in leg.tradingsymbol else "FUT"
                 )
+                # May 7 2026: pass simulated trade date so STT picks the
+                # correct rate (0.10% pre-Apr-2026 vs 0.15% after).
+                # ``clock.now()`` returns the simulated time during backtest
+                # via the BacktestClock plumbed in earlier.
                 charges = calculate_charges(
-                    Decimal(str(round(fill_price, 2))), leg.quantity, leg.order_side, inst
+                    Decimal(str(round(fill_price, 2))), leg.quantity, leg.order_side, inst,
+                    trade_date=clock.now().date(),
                 )
                 portfolio._pnl.add_charges(signal_obj.strategy_id, charges.total)
                 orders.append(order_id)

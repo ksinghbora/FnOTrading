@@ -78,10 +78,20 @@ class PortfolioManager:
         is_exercise, exercise_intrinsic = self._detect_expiry_exercise(
             order, inst_type, position
         )
+        # May 7 2026: pass live trade date so STT picks the correct rate
+        # (0.10% pre-Apr-2026 vs 0.15% after). For live mode, use the
+        # broker's filled_at timestamp when available; fall back to the
+        # current IST date.
+        from src.core.clock import now_ist
+        trade_date = (
+            order.filled_at.date()
+            if getattr(order, "filled_at", None) is not None
+            else now_ist().date()
+        )
         if is_exercise:
             charges = calculate_charges(
                 exercise_intrinsic, order.fill_quantity, order.order_side,
-                inst_type, is_expiry_exercise=True,
+                inst_type, is_expiry_exercise=True, trade_date=trade_date,
             )
             logger.info(
                 f"[EXPIRY_EXERCISE] symbol={order.tradingsymbol} "
@@ -92,7 +102,8 @@ class PortfolioManager:
             )
         else:
             charges = calculate_charges(
-                order.fill_price, order.fill_quantity, order.order_side, inst_type
+                order.fill_price, order.fill_quantity, order.order_side, inst_type,
+                trade_date=trade_date,
             )
 
         self._pnl.add_charges(order.strategy_id, charges.total)

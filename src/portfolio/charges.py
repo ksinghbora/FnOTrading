@@ -4,13 +4,44 @@ Calculates: STT, brokerage, transaction charges, SEBI, GST, stamp duty.
 
 Includes expiry-day exercise STT (0.125% on intrinsic value) for ITM options
 held to expiry rather than squared off — see `is_expiry_exercise` flag.
+
+May 7 2026 — STT date-awareness:
+The options-sell STT rate changed from 0.10% (Oct 1 2024 - Mar 31 2026)
+to 0.15% (Apr 1 2026 onwards). When ``trade_date`` is supplied, the
+calculator picks the right rate for that date. When omitted (legacy
+callers), the calculator falls back to the pre-April-2026 rate (0.10%)
+to preserve historical reproducibility — backtests on data before
+Apr 1 2026 should not pass ``trade_date`` to keep results stable
+across this code change.
 """
 
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from src.core.constants import CHARGES
 from src.core.models import TradeCharges
 from src.core.types import OrderSide
+
+
+# May 7 2026: STT-on-options-sell rate flip. Constants.py exposes both
+# rates (``options_sell_pct`` = 0.10% pre-Apr-2026, ``options_sell_pct_apr2026``
+# = 0.15% from Apr 1 2026 onwards). The cutover is the trade date,
+# not the strategy decision date — these are the same for intraday but
+# diverge for any multi-day position spanning Mar 31 / Apr 1 2026.
+STT_RATE_CUTOVER_DATE = date(2026, 4, 1)
+
+
+def _options_sell_stt_pct(trade_date: date | None) -> Decimal:
+    """Return the correct STT rate for an options-sell on ``trade_date``.
+
+    ``None`` → fall back to the pre-Apr-2026 rate (0.10%). This
+    preserves reproducibility for backtests run before this code
+    change; new callers should pass the simulated trade date to get
+    accurate post-Apr-2026 charges.
+    """
+    if trade_date is None or trade_date < STT_RATE_CUTOVER_DATE:
+        return CHARGES["stt"]["options_sell_pct"]
+    return CHARGES["stt"]["options_sell_pct_apr2026"]
 
 
 def calculate_charges(
@@ -19,6 +50,7 @@ def calculate_charges(
     side: OrderSide,
     instrument_type: str,  # 'FUT', 'CE', 'PE'
     is_expiry_exercise: bool = False,
+    trade_date: date | None = None,
 ) -> TradeCharges:
     """Calculate all applicable charges for a trade.
 
@@ -59,8 +91,9 @@ def calculate_charges(
             if not is_buy:
                 stt = turnover * CHARGES["stt"]["options_exercise_pct"] / 100
         elif not is_buy:
-            # Regular STT on sell side premium (square-off path)
-            stt = turnover * CHARGES["stt"]["options_sell_pct"] / 100
+            # Regular STT on sell side premium (square-off path).
+            # Date-aware rate: 0.10% (pre Apr 1 2026) vs 0.15% (after).
+            stt = turnover * _options_sell_stt_pct(trade_date) / 100
     else:
         if not is_buy:  # STT on sell side for futures
             stt = turnover * CHARGES["stt"]["futures_sell_pct"] / 100

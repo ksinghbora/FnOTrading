@@ -210,3 +210,70 @@ class TestExpiryExerciseSttHelper:
             intrinsic_per_unit=Decimal("0"), quantity=75, side=OrderSide.SELL,
         )
         assert stt == Decimal("0")
+
+class TestSTTDateAwareRate:
+    """May 7 2026: STT-on-options-sell rate flipped 0.10% → 0.15% on Apr 1 2026."""
+
+    def test_pre_apr2026_uses_010pct(self):
+        """Trade date before Apr 1 2026 → 0.10% rate."""
+        from datetime import date
+        charges = calculate_charges(
+            price=Decimal("150"), quantity=75, side=OrderSide.SELL,
+            instrument_type="CE", trade_date=date(2026, 3, 31),
+        )
+        # turnover = 150 × 75 = 11,250 → STT @ 0.10% = 11.25
+        assert charges.stt == Decimal("11.25")
+
+    def test_apr2026_cutover_uses_015pct(self):
+        """Trade date on Apr 1 2026 → 0.15% rate."""
+        from datetime import date
+        charges = calculate_charges(
+            price=Decimal("150"), quantity=75, side=OrderSide.SELL,
+            instrument_type="CE", trade_date=date(2026, 4, 1),
+        )
+        # turnover = 11,250 → STT @ 0.15% = 16.875
+        # 0.15% × 11,250 = 16.875, rounded to 16.88
+        assert charges.stt == Decimal("16.88")
+
+    def test_post_apr2026_uses_015pct(self):
+        """Trade date well after Apr 1 2026 → 0.15% rate."""
+        from datetime import date
+        charges = calculate_charges(
+            price=Decimal("150"), quantity=75, side=OrderSide.SELL,
+            instrument_type="CE", trade_date=date(2026, 5, 7),
+        )
+        # 0.15% × 11,250 = 16.875, rounded to 16.88
+        assert charges.stt == Decimal("16.88")
+
+    def test_no_trade_date_falls_back_to_pre_apr_rate(self):
+        """Legacy callers (no trade_date) get the pre-Apr-2026 rate (0.10%).
+        Preserves reproducibility for backtests run before this code change."""
+        charges = calculate_charges(
+            price=Decimal("150"), quantity=75, side=OrderSide.SELL,
+            instrument_type="CE",
+        )
+        assert charges.stt == Decimal("11.25")  # 0.10% rate
+
+    def test_stt_rate_doesnt_apply_on_buy(self):
+        """Buy-side options have no STT regardless of date."""
+        from datetime import date
+        charges = calculate_charges(
+            price=Decimal("150"), quantity=75, side=OrderSide.BUY,
+            instrument_type="CE", trade_date=date(2026, 5, 7),
+        )
+        assert charges.stt == Decimal("0")
+
+    def test_futures_stt_unchanged(self):
+        """STT date-awareness only applies to options-sell. Futures STT
+        rate is unchanged across the cutover."""
+        from datetime import date
+        pre = calculate_charges(
+            price=Decimal("22000"), quantity=75, side=OrderSide.SELL,
+            instrument_type="FUT", trade_date=date(2026, 3, 31),
+        )
+        post = calculate_charges(
+            price=Decimal("22000"), quantity=75, side=OrderSide.SELL,
+            instrument_type="FUT", trade_date=date(2026, 4, 1),
+        )
+        assert pre.stt == post.stt
+
