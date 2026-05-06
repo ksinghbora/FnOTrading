@@ -1,0 +1,14 @@
+{
+  "_doc": "Long Straddle v2b — single-condition VRP<0 gate. May 6 2026. Built post LC v2/v2b verdict (commit e09eb9b) where long calendar with any regime gate failed because the structure requires spot to stay near strike — Indian post-SEBI's intraday vol violates that on a majority of days. Long straddle inverts the structural assumption: directional movement is the source of profit, not catastrophe. Same VRP<0 gate as LC v2b, different vehicle. If LS v2b succeeds where LC v2b failed, the binding constraint was the calendar STRUCTURE; if LS v2b also fails, long-vol on Indian post-SEBI options is structurally untradable and the next move is a pivot to NIFTY futures.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "strike_offset_pct": 0.0,
+  "profit_target_pct": 50.0,
+  "stop_loss_pct": 50.0,
+  "max_spread_pct": 5.0,
+  "require_long_vol_regime_v2b": true
+}

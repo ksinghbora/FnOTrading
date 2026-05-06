@@ -151,6 +151,70 @@ class ShortStraddleParams(BaseStrategyParams):
     hedge_offset_strikes: int = 6            # How far OTM for hedge legs (closer from 10 for real protection)
 
 
+class LongStraddleParams(BaseStrategyParams):
+    """Parameters for Long Straddle strategy — long-vol via long ATM CE+PE.
+
+    May 6 2026 (post-LC v2 / LC v2b verdict): the long calendar
+    structure failed because spot moved away from strike on most
+    Indian post-SEBI days. A long straddle's structural advantage:
+    one of the two legs ALWAYS goes ITM on a directional move, so
+    "spot leaves strike" is the source of profit, not catastrophe.
+
+    Structure:
+      BUY ATM CE  +  BUY ATM PE  (same expiry, same strike)
+
+    Net debit position. Profits when:
+      1. Spot moves away from strike before expiry (gamma)
+      2. Implied vol expands (positive vega on both legs)
+
+    Loses when:
+      1. Spot stays near strike (theta decay on both legs)
+      2. IV collapses (negative vega on both legs)
+
+    Long straddle is the "anti-LC" for the same gate: where LC needs
+    spot to stay near strike, LS needs spot to leave it. Identical
+    VRP<0 gate (IV cheap, room to expand) tests whether the gate or
+    the structure was the binding constraint in LC's failure.
+    """
+
+    # VIX entry band — straddle wants moderate-to-high vol with room to expand
+    # Below 13 = no expansion expected; above 25 = already expanded, late
+    vix_entry_min: float = 13.0
+    vix_entry_max: float = 25.0
+    vix_reduce_above: float = 22.0
+
+    # Strike selection
+    strike_offset_pct: float = 0.0           # 0 = ATM, ±X = slightly OTM
+    delta_target: float = 0.5                # ATM = ~0.5 delta; informational
+
+    # Expiry — long straddle on weekly works for 1-3 day intraday holds
+    use_weekly_expiry: bool = True
+
+    # Risk management — long-debit position, max loss = net debit paid
+    profit_target_pct: float = 50.0          # Exit when straddle gains X% (high — needs big move)
+    stop_loss_pct: float = 50.0              # Exit when straddle drops X% (limit theta bleed)
+
+    # Timing
+    entry_time: str = "09:30:00"
+    exit_time: str = "15:00:00"
+    skip_entry_on_expiry_day: bool = True
+    expiry_day_force_exit_at: str = "14:30:00"
+
+    # Defaults — long-vol structure, default OFF for legacy filters
+    pcr_filter_enabled: bool = False         # PCR less informative for long-vega
+    max_pain_filter_enabled: bool = False    # Same — straddle profit zone differs from short premium
+
+    # May 6 2026 — v2b regime gate (single-condition VRP < 0).
+    # Long straddle uses ONLY the v2b form (no CI requirement), since:
+    #  1. Long straddle profits from MOVEMENT, opposite of LC's "spot
+    #     stays near strike" preference. CI≥61.8 (range-bound) would
+    #     gate against the very regime where LS wins.
+    #  2. The pure VRP<0 gate captures the "IV is cheap, room to
+    #     expand" alpha — LS's primary edge source.
+    # Mutually exclusive with the legacy VIX/PCR/MP filters.
+    require_long_vol_regime_v2b: bool = False
+
+
 class ShortStrangleParams(BaseStrategyParams):
     """Parameters for Short Strangle strategy."""
 
