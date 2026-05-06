@@ -1,99 +1,99 @@
 # Long Calendar v2 — Smoke Findings (May 6 2026)
 
-**Status:** Empirically dead on Indian post-SEBI data — same negative-correlation trap as the v1 principled gate, just on a different axis.
+**Status:** Gate fires (17 trades / 173 days), but strategy is unprofitable on train+val. NOT empirically dead — fundamentally different verdict from the "0 fires" provisional finding earlier in this commit's history (see CORRECTION below).
 
-**Hypothesis tested:** Long Calendar with the orthogonal-traditions gate `CI ≥ 61.8 AND VRP < 0` would fire as the natural complement to IC v2 (which uses `CI ≥ 61.8 AND VRP > 0`). Combined book = regime-diversified F&O strategy.
+**Hypothesis tested:** Long Calendar with the orthogonal-traditions gate `CI ≥ 61.8 AND VRP < 0` would fire as the natural complement to IC v2 (`CI ≥ 61.8 AND VRP > 0`) and produce a regime-diversified F&O book.
 
-**Verdict:** ❌ Hypothesis falsified by 173-day post-SEBI corpus smoke.
+**Verdict:** ⚠️ Gate is alive but strategy underperforms in train+val. Sparse fire rate (~0.1 trades/day vs IC v2's 2.3/day) and negative train+val PnL.
 
-## TL;DR
+## CORRECTION (May 6, 22:58 IST)
 
-| Metric | Value (provisional, day 81/173 of corpus) |
+An earlier draft of this doc and the parent commit `1b97901` claimed "0 LC v2 fires" based on counting `(OK, OK_LV)` skip-log entries. **That was a methodology error**: when the gate PASSES, the strategy proceeds to entry — there is no "skip" log, by design. Counting `(OK, OK_LV)` in the skip logs is mechanically guaranteed to be 0, regardless of whether the gate is alive.
+
+The real measurement is the count of `[ENTRY]` events in the backtest log, which is **17** across the 173-day post-SEBI corpus.
+
+## TL;DR (final 173-day numbers)
+
+| Metric | Value |
 |---|---|
 | Days backtested | 173 (post-SEBI: 2024-11-21 → 2025-07-31) |
-| Gate decisions sampled | 13,279 |
-| Range + IV-cheap (LC v2 fires)   | **0** |
-| Range + IV-rich  (IC v2 fires)   | 310 (~2.4%) |
-| Trend + IV-cheap (neither)        | 1,696 (~13%) |
-| Trend + IV-rich  (neither)        | 10,556 (~82%) |
-| Among CI≥61.8 (range), VRP stats | mean **+2.09**, min **+0.12**, max **+14.22**, cases <0: **0/310** |
+| Total entries (round-trips) | **17** |
+| Per-trade exits booked | 17 (every entry exited cleanly) |
+| Win rate | **47.1%** (8W / 9L) |
+| Best winner | +₹652 |
+| Worst loser | -₹1,481 |
+| Sum of exit P&L (gross) | **-₹2,565** |
+| Net P&L after charges | **-₹1,707** |
+| Sharpe (per-trade) | **-0.95** |
+| Max DD | -₹2,122 |
+| Trade size (qty) | 75 (1 lot NIFTY) |
+| Average net debit per trade | ₹200-320 (varies by strikes) |
 
-## What we proved
+## What this means
 
-**On Indian post-SEBI data, range-bound markets ALWAYS have rich IV.**
+LC v2 fires sparsely (0.1 entries/day vs IC v2's 2.3/day). The bottleneck is the joint condition CI ≥ 61.8 AND VRP < 0 — this is the relatively rare "range-bound + IV-cheap" state. It exists but is uncommon on Indian post-SEBI data.
 
-Among 95 sampled cases where CI ≥ 61.8 (the literature-canonical Fibonacci threshold for range-bound), VRP was strictly positive in every single one — minimum VRP of +0.12, mean +1.53. No range-bound day in the post-SEBI corpus has had IV under-priced relative to realized vol.
+Win rate 47.1% with asymmetric loss profile (worst -₹1,481 vs best +₹652) means the structural bias of LC under this gate is to **lose more on losers than win on winners**. Over 17 trades, this aggregates to net loss.
 
-This is the same _negative-correlation between gate conditions_ that killed the v1 principled IC gate (ADX<22 + BB-squeeze + RV/IV<0.80 fired on 0/2590 valid samples). Different conditions, same empirical structure.
+## Why the gate fires but doesn't profit
 
-## Why it makes sense (theory)
+Three plausible mechanisms (none of these have been verified individually yet — flagged for follow-up):
 
-In a range-bound market:
-1. Daily moves are small → realized vol stays low
-2. Market makers price IV slightly above RV (structural premium for selling vol)
-3. So range-bound regime → low RV → low IV → small positive VRP
+1. **Cost basis is high relative to vega edge.** Each entry crosses 4 spreads (front+back × buy+sell) on options that are already at the cost wall. ~₹200-320 net debit on 75-lot = ₹15K-24K of capital. Even modest unfavorable IV moves wipe out the small theta gain.
 
-The "range-bound + IV-cheap" state is essentially a contradiction in efficient option markets:
-- Cheap IV means market makers expect future vol to be higher than recent past
-- That expectation typically arises during transitions OR after a vol shock that left RV elevated relative to where IV got pulled
-- Both transition and post-shock states are characterized by movement (trending/choppy CI), not range
+2. **The "range" condition isn't holding for the calendar's lifetime.** Even when CI ≥ 61.8 at entry, spot can drift away from the strike in the days following — calendar's max profit zone is narrow (typically ±1% from strike on the front-leg expiry). Trending after entry → losses.
 
-So the gate's two conditions describe a market state that **doesn't exist as an equilibrium** on Indian post-SEBI options.
+3. **VRP < 0 doesn't always mean "vol expansion incoming".** The interpretation "IV is cheap, expansion likely" assumes mean-reversion of VRP. On Indian post-SEBI data, VRP can stay negative for extended periods without a reversion event. So buying vega at VRP < 0 doesn't guarantee a vol-expansion payoff.
 
-## What this means for the IC v2 / LC v2 portfolio thesis
+## Quadrant counts (provisional from skip-log analysis, ~13K decisions)
 
-The earlier hypothesis — "deploy LC v2 alongside IC v2 for regime-diversified coverage" — is **empirically wrong**. The two regimes (range+rich-IV vs range+cheap-IV) don't both exist in this market.
+The skip-log analysis is still useful as a **regime time-share** measurement (how often each gate condition fails):
 
-Specifically, IC v2's territory IS the entire range-bound subspace. There's no leftover "range + IV-cheap" subspace for LC v2 to capture.
+| Quadrant | % of skip-log decisions | Meaning |
+|---|---|---|
+| range + IV-rich  (IC v2 territory)   | ~2.4% | IC v2 fires here |
+| trend + IV-cheap (LC v2 partial)     | ~13%  | LC would fire if no CI requirement |
+| trend + IV-rich  (neither)            | ~82%  | dominant regime |
+| range + IV-cheap (LC v2 territory)   | sparse | implicit (entries happen, no skip log) |
 
-## What the implementation taught us (still useful)
-
-The LC v2 implementation itself was correct and worth keeping:
-
-1. **`is_long_vol_favorable_v2` detector method** — correct, tested, mutual-exclusivity invariant verified by unit tests
-2. **`assess()` side-effect requirement for daily-close accumulation** — discovered during the smoke; LC's v2 path needs to call `assess()` to populate `_daily_closes`, otherwise VRP returns None forever in backtest. IC v2 gets this for free via its scoring step. This pattern will need to be replicated in any future v2-style strategy.
-3. **Backtest warmup behaviour** — confirmed the `_capture_daily_close` rollover works correctly during backtest with the simulated clock. The warmup_daily_closes loader (May 6 commit `4cff9b3`) is for live mode only; backtest accumulates from simulated ticks.
+Skip-log analysis confirmed: among 310 skipped-but-CI-OK cases (range-bound moments where the entry was blocked by VRP), VRP was ALWAYS positive — confirming range moments tend to also have rich IV, **but the entries that did fire show this isn't an absolute rule.**
 
 ## Path forward
 
-Three options, ordered by directness:
+### Option A — Formal validation of LC v2 as committed
 
-### LC v2b — pure VRP < 0 gate (drop CI requirement)
+Run the full WF + cost-sensitivity + holdout pipeline despite negative train+val. The 17-trade sample is thin; PF and Sharpe estimates have wide error bars. Worth 30-60 minutes of compute to know:
+- Does WF coverage hold above 0.55?
+- What does cost-sensitivity look like? PF at +0.5 cost shift?
+- Is there a cleaner subset of the 17 trades that filters profitably?
 
-Buy long calendar when IV is cheap, regardless of regime. The intuition: long calendar's PnL is dominated by the back-leg's vega exposure, not the front-leg theta differential. So CI/range matters less than VRP.
+### Option B — LC v2b: pure VRP < 0 gate
 
-- **Hypothesis**: ~20% of the corpus had VRP < 0; LC v2b would fire on those days
-- **Risk**: trending markets would drag spot away from strike → max_underlying_move_pct stops out before vega expansion materialises
-- **Implementation**: trivial — drop the CI condition from the gate
-- **Smallest pivot**
+Drop the CI requirement. Fires on the ~13% of corpus moments with VRP < 0, regardless of regime. Larger sample (probably 50-100 trades on 173 days). The risk: trending markets drag spot off-strike, hits the calendar's max_underlying_move_pct stop.
 
-### LC v2c — vol-expansion-imminent gate (RV recently spiked relative to IV)
+### Option C — Pivot to NIFTY Futures Trend
 
-Use a forward-looking vol indicator: enter when RV has been rising sharply over the past 3-5 days (RV momentum > 0) AND VIX hasn't yet reacted. This captures the early phase of a vol expansion, when buying vega has the most asymmetric upside.
+The original PIVOT_DESIGN_trend_futures.md path. Different cost structure (no SEBI options-sell hike), simpler signal mechanic, probably 3-4 weeks of work including data ingestion.
 
-- **Implementation**: medium effort — needs a new RV-momentum detector
-- **Risk**: small sample of vol-expansion days on a 173-day corpus
+### Option D — Long Straddle on VRP < 0
 
-### Pivot to Candidate B — Trend on NIFTY Futures
-
-The original PIVOT_DESIGN_trend_futures.md design. Different instrument class (futures, not options). Different cost wall (no SEBI options-sell hike).
-
-- **Implementation**: 3-4 weeks (requires futures data ingestion)
-- **Architectural cleanest**: no theta, no 4-leg sync, no STT-on-sell hike
-- **Highest information gain**: tests whether the "all post-SEBI options strategies fail" pattern is options-specific or market-wide
+Replace the calendar structure with a long straddle (buy ATM CE + buy ATM PE). Profits from EITHER vol expansion OR absolute spot movement — so trending markets don't kill the trade. Same gate (VRP < 0). Different structure, same cost wall concern.
 
 ## Files
 
-- `lc_v2_research_params.json` — params override used for smoke
-- `scripts/smoke_lc_v2.py` — smoke harness (30-day default; was bumped to 173 for this report)
-- (this file) — findings synthesis
+- `reports/standalone_post_sebi/lc_v2_research_params.json` — params override
+- `scripts/smoke_lc_v2.py` — smoke harness (final form: 173 days)
+- `scripts/diagnose_lc_v2_gate.py` — quadrant histogram from skip logs
+- (this file) — corrected findings synthesis
+
+## Methodology lesson
+
+**Counting skip-log quadrants is NOT a measurement of gate fire rate.** The skip log is mechanically silent on the (OK, OK_LV) quadrant because that's where entries happen. To measure gate fire rate, count `[ENTRY]` events in the backtest output, not skip-log lines.
+
+This bug led to the earlier draft of this doc claiming the gate was empirically dead. It's a one-line fix in any future v3 / v2-variant analysis: count `[ENTRY]` lines as the truth.
 
 ## Final word
 
-Three iterations of theory-grounded gate design (v1 principled, v2 IC, v2 LC) on Indian post-SEBI options have shown a consistent pattern: **the orthogonal-traditions principle works only when the two traditions actually have an empirical orthogonal subspace**.
+LC v2 **gate is alive** but the strategy as configured is **not profitable** on the 173-day train+val window. This is a much more nuanced verdict than the "empirically dead" claim in the parent commit. Whether LC v2 (or LC v2b/v2c) can be made tradeable requires deeper analysis: trade-level audit of the 17 entries, cost-sensitivity, and possibly structural redesign (long straddle, futures trend).
 
-- v1 (ADX + BB + RV/IV): three conditions, all negatively correlated, **0 fires**
-- IC v2 (CI ≥ 61.8 + VRP > 0): two orthogonal traditions, **324 holdout trades** ✓
-- LC v2 (CI ≥ 61.8 + VRP < 0): same two traditions but with the vol axis flipped — empirically **0 fires** because Indian post-SEBI markets don't have the (range, cheap-IV) state.
-
-The methodology is sound. The next strategy needs either a different gate framework OR a fundamentally different alpha source (futures, equity, vol-targeting).
+The IC v2 + LC v2 portfolio thesis is partially validated — they DO fire on different days (mutually exclusive on the vol axis as designed) — but the LC v2 leg currently subtracts from the combined book rather than diversifying it positively.
