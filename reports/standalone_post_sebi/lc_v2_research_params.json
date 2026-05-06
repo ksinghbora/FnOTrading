@@ -1,0 +1,18 @@
+{
+  "_doc": "Long Calendar v2 (CI>=61.8 AND VRP<0) — May 6 2026. The first long-vega gate test in the codebase. Mirrors iron_condor v2's CI+VRP gate but flips the VRP threshold (cheap IV instead of rich IV). Same range condition as IC v2 because long-calendar profits from spot staying near strike (theta differential), and trending markets kill that. Mutually exclusive with IC v2 on the vol axis: when IC fires (VRP>0), LC blocks; when LC fires (VRP<0), IC blocks. Default LC params (entry_time, exit_time, profit_target, stop_loss, etc.) preserved — only the regime gate flag is set.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "leg_type": "CE",
+  "strike_offset_pct": 0.0,
+  "min_back_days": 21,
+  "profit_target_pct": 30.0,
+  "stop_loss_pct": 50.0,
+  "max_underlying_move_pct": 1.5,
+  "front_close_buffer_minutes": 90,
+  "max_spread_pct": 5.0,
+  "require_long_vol_regime_v2": true
+}

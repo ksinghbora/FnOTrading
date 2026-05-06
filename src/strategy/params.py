@@ -293,6 +293,34 @@ class LongCalendarParams(BaseStrategyParams):
     pcr_filter_enabled: bool = False         # PCR less informative for long-vega — disable by default
     max_pain_filter_enabled: bool = False    # Same — calendar profit zone differs from short-premium
 
+    # May 6 2026 — long-vol regime gate (orthogonal to IC v2 gate).
+    #
+    # When True the strategy bypasses every legacy heuristic filter (VIX,
+    # intraday-spike, PCR, max-pain) and gates entries SOLELY on the
+    # theory-grounded long-vol detector:
+    #
+    #   CI ≥ 61.8  (range-bound by Choppiness Index — same as IC v2)
+    #   VRP < 0    (IV is CHEAP relative to realized — opposite of IC v2)
+    #
+    # Why range AND vol-cheap (not trending AND vol-cheap as a naive
+    # "inversion" would suggest): LongCalendar profits from spot staying
+    # near the ATM strike (theta differential) AND IV expanding (positive
+    # vega on the back leg). The first condition demands range; the
+    # second demands cheap-current-IV-with-room-to-expand. So the
+    # orthogonality with IC v2 is on the vol axis only:
+    #
+    #   IC v2:  range  AND  VRP > 0  (IV rich)
+    #   LC v2:  range  AND  VRP < 0  (IV cheap)
+    #
+    # The two gates are mutually exclusive (vol condition flips) — never
+    # both fire on the same day. In trending markets NEITHER fires, which
+    # is correct: trending kills LC (spot leaves the strike) and IC alike.
+    #
+    # See ``RegimeDetector.is_long_vol_favorable_v2`` for the canonical
+    # gate implementation. Default False so existing reports remain
+    # reproducible. Mutually exclusive with the legacy VIX/PCR/MP filters.
+    require_long_vol_regime_v2: bool = False
+
 
 class DeltaNeutralParams(BaseStrategyParams):
     """Parameters for Delta Neutral strategy."""

@@ -1165,3 +1165,73 @@ class RegimeDetector:
             f"vrp={vrp:+.2f}({'OK' if vrp_ok else 'FAIL'})"
         )
         return favourable, metrics
+
+    def is_long_vol_favorable_v2(
+        self, underlying: str,
+    ) -> tuple[bool, dict[str, float | bool | None]]:
+        """v2 gate for LONG-vol structures (calendar, long straddle, etc).
+
+        Orthogonal to ``is_premium_selling_favorable_v2`` on the
+        volatility axis only. Both gates require range-bound markets
+        (Choppiness Index ≥ 61.8); they differ on whether IV is rich or
+        cheap relative to realized:
+
+          IC v2 (premium-selling):  CI ≥ 61.8  AND  VRP > 0  (IV rich)
+          LC v2 (long-vol):         CI ≥ 61.8  AND  VRP < 0  (IV cheap)
+
+        Why the gates share the range condition: long-calendar profits
+        from spot staying near the ATM strike (theta differential
+        between near and far expiries). A trending market drags spot
+        away from the strike and kills the calendar's edge — so trending
+        is bad for both IC and LC.
+
+        Why they invert the vol condition:
+          - Premium-selling needs IV to be over-priced relative to
+            future delivered vol (VRP > 0). Selling expensive premium
+            and letting it decay is the alpha.
+          - Long-vol calendar needs IV to be UNDER-priced with room to
+            expand. Buying cheap vega and waiting for IV to mean-revert
+            up (or for a vol shock) is the alpha. Positive vol expansion
+            on the back leg dwarfs the front leg's vega exposure.
+
+        The two gates are MUTUALLY EXCLUSIVE: VRP cannot be both > 0 and
+        < 0 simultaneously, so IC v2 and LC v2 never fire on the same
+        underlying on the same day. Combined with the shared range
+        condition, this gives a clean regime-routing pattern:
+
+          range + IV-rich  → IC v2 fires
+          range + IV-cheap → LC v2 fires
+          trending         → NEITHER fires (correct — both need range)
+
+        Insufficient data → NOT favourable (conservative — same as IC v2).
+        """
+        ci = self.compute_choppiness_index(underlying)
+        vrp = self.compute_vrp(underlying)
+        rv = self.compute_realized_vol(underlying)
+        vix = self._get_vix()
+
+        metrics: dict[str, float | bool | None] = {
+            "choppiness_index": ci,
+            "ci_threshold": CHOPPINESS_RANGE_THRESHOLD,
+            "vrp": vrp,
+            "vrp_threshold": VRP_FAVORABLE_THRESHOLD,
+            "realized_vol_pct": rv,
+            "vix": vix,
+        }
+
+        if ci is None or vrp is None:
+            metrics["reason"] = "insufficient_data"
+            return False, metrics
+
+        ci_ok = ci >= CHOPPINESS_RANGE_THRESHOLD
+        # Note the strict inequality: VRP < 0 (IV strictly under-priced)
+        # is the textbook long-vol entry. VRP == 0 means IV ≈ RV — no
+        # vol-pricing edge in either direction, don't pay the round-trip
+        # cost.
+        vrp_ok = vrp < VRP_FAVORABLE_THRESHOLD
+        favourable = ci_ok and vrp_ok
+        metrics["reason"] = (
+            f"ci={ci:.1f}({'OK' if ci_ok else 'FAIL'}) "
+            f"vrp={vrp:+.2f}({'OK_LV' if vrp_ok else 'FAIL_LV'})"
+        )
+        return favourable, metrics

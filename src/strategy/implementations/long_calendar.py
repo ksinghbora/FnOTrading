@@ -121,8 +121,35 @@ class LongCalendarStrategy(BaseStrategy):
         self._front_expiry = self.ctx.next_expiry(self.params.underlying)
         self._back_expiry = self._find_back_expiry()
         self._regime = RegimeDetector(
-            self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder
+            self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder,
+            clock=self.ctx.clock,
         )
+
+        # May 6 2026: warm up daily-close history when the v2 long-vol
+        # gate is enabled, mirroring iron_condor.py. VRP needs 21+ daily
+        # closes to compute; without warmup the gate returns
+        # "insufficient_data" perpetually because the launchd daily
+        # restart resets the in-memory deque every morning. Failure
+        # is non-fatal — strategy still starts and falls back to
+        # gradual in-memory accumulation.
+        if getattr(self.params, "require_long_vol_regime_v2", False):
+            spot_token = self.ctx.get_spot_token(self.params.underlying)
+            if spot_token is None:
+                logger.warning(
+                    f"[{self.strategy_id}] No spot token for {self.params.underlying} — "
+                    f"v2 long-vol regime warmup skipped"
+                )
+            else:
+                seeded = await self._regime.warmup_daily_closes(
+                    self.ctx.get_historical_data,
+                    self.params.underlying,
+                    spot_token,
+                )
+                logger.info(
+                    f"[{self.strategy_id}] v2 long-vol warmup: "
+                    f"seeded {seeded} daily closes for {self.params.underlying}"
+                )
+
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"front_expiry={self._front_expiry} back_expiry={self._back_expiry} "
@@ -206,7 +233,8 @@ class LongCalendarStrategy(BaseStrategy):
             return None
 
         # Expiry-day block — never open a fresh calendar with front already
-        # at/past expiry; that's just a long single-leg
+        # at/past expiry; that's just a long single-leg. STRUCTURAL safety,
+        # retained in both legacy and v2 modes.
         expiry_block = self._check_expiry_day_block(self.params.underlying)
         if expiry_block:
             self._log_skip_throttled(
@@ -215,42 +243,80 @@ class LongCalendarStrategy(BaseStrategy):
             )
             return None
 
-        # VIX band — calendar wants moderate vol with room to expand
-        vix_block = self._check_vix_filter()
-        if vix_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_VIX",
-                f"[{self.strategy_id}] Entry skipped: {vix_block}",
-            )
-            return None
+        # May 6 2026: drive RegimeDetector.assess() so its
+        # _maybe_capture_daily_close() side effect accumulates the daily-
+        # close deque used by VRP. Without this call, LC's v2 path never
+        # touches assess() (LC has no _compute_score scoring step), so
+        # _daily_closes stays empty and the VRP gate returns
+        # "insufficient_data" forever in backtests with no broker warmup.
+        # IC gets this for free because _compute_score() calls assess()
+        # before the v2 gate check; we replicate the side effect here.
+        if self._regime:
+            self._regime.assess(self.params.underlying)
 
-        # Phase 3b Gate B (intraday VIX spike) — opt-in via params
-        spike_block = self._check_intraday_vix_spike_filter()
-        if spike_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_VIX_SPIKE",
-                f"[{self.strategy_id}] Entry skipped: {spike_block}",
-            )
-            return None
-
-        # PCR / max-pain default OFF for calendar (long-vega) but caller
-        # may override via params. The base methods return None if disabled.
-        if self.params.pcr_filter_enabled:
-            pcr_block = self._check_pcr_filter(self.params.underlying, self._front_expiry)
-            if pcr_block:
+        # ─── May 6 2026: v2 long-vol regime-gate-only mode ───────────
+        # Mirrors iron_condor.py's require_premium_selling_regime_v2.
+        # When enabled, ALL legacy heuristic filters are bypassed and
+        # entry is gated solely on:
+        #   CI ≥ 61.8 (range-bound, same as IC v2)
+        #   VRP < 0   (IV cheap, opposite of IC v2)
+        # The expiry-day block above is the only structural safety
+        # retained.
+        if getattr(self.params, "require_long_vol_regime_v2", False):
+            if not self._regime:
                 self._log_skip_throttled(
-                    "ENTRY_SKIP_PCR",
-                    f"[{self.strategy_id}] Entry skipped: {pcr_block}",
+                    "ENTRY_SKIP_REGIME_V2_NO_DETECTOR",
+                    f"[{self.strategy_id}] Entry skipped: regime detector unavailable",
                 )
                 return None
-        if self.params.max_pain_filter_enabled:
-            mp_block = self._check_max_pain_filter(self.params.underlying, self._front_expiry)
-            if mp_block:
+            ok, metrics = self._regime.is_long_vol_favorable_v2(self.params.underlying)
+            if not ok:
                 self._log_skip_throttled(
-                    "ENTRY_SKIP_MP",
-                    f"[{self.strategy_id}] Entry skipped: {mp_block}",
+                    "ENTRY_SKIP_REGIME_LV_GATE",
+                    f"[{self.strategy_id}] Entry skipped: long-vol regime gate "
+                    f"{metrics.get('reason', '?')}",
                 )
                 return None
+            # v2 mode: skip every legacy filter and proceed directly to chain selection.
+        else:
+            # ─── Legacy heuristic-filter pipeline (default behaviour) ─
+
+            # VIX band — calendar wants moderate vol with room to expand
+            vix_block = self._check_vix_filter()
+            if vix_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX",
+                    f"[{self.strategy_id}] Entry skipped: {vix_block}",
+                )
+                return None
+
+            # Phase 3b Gate B (intraday VIX spike) — opt-in via params
+            spike_block = self._check_intraday_vix_spike_filter()
+            if spike_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX_SPIKE",
+                    f"[{self.strategy_id}] Entry skipped: {spike_block}",
+                )
+                return None
+
+            # PCR / max-pain default OFF for calendar (long-vega) but caller
+            # may override via params. The base methods return None if disabled.
+            if self.params.pcr_filter_enabled:
+                pcr_block = self._check_pcr_filter(self.params.underlying, self._front_expiry)
+                if pcr_block:
+                    self._log_skip_throttled(
+                        "ENTRY_SKIP_PCR",
+                        f"[{self.strategy_id}] Entry skipped: {pcr_block}",
+                    )
+                    return None
+            if self.params.max_pain_filter_enabled:
+                mp_block = self._check_max_pain_filter(self.params.underlying, self._front_expiry)
+                if mp_block:
+                    self._log_skip_throttled(
+                        "ENTRY_SKIP_MP",
+                        f"[{self.strategy_id}] Entry skipped: {mp_block}",
+                    )
+                    return None
 
         # Pull spot + both chains
         spot = float(self.ctx.get_spot_price(self.params.underlying))

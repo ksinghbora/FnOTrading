@@ -644,3 +644,107 @@ async def test_warmup_v2_gate_fires_after_seeding():
     assert vrp is not None
     # VRP could be positive or negative depending on the series; just verify no None
 
+
+# ── is_long_vol_favorable_v2 (May 6 2026) ──────────────────────────
+
+
+def _stub_regime_with_metrics(d, ci_value: float | None, vrp_value: float | None):
+    """Inject stub CI/VRP returns so the gate functions can be tested
+    deterministically without touching the underlying compute pipelines."""
+    d.compute_choppiness_index = lambda underlying: ci_value
+    d.compute_vrp = lambda underlying: vrp_value
+    d.compute_realized_vol = lambda underlying: 12.0  # any non-None value
+    d._get_vix = lambda: 16.0
+
+
+def test_lv_gate_returns_false_on_insufficient_data():
+    """Conservative default — when CI or VRP is None, gate is OFF."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=None, vrp_value=-1.0)
+    ok, m = d.is_long_vol_favorable_v2("NIFTY")
+    assert ok is False
+    assert m["reason"] == "insufficient_data"
+
+
+def test_lv_gate_passes_when_range_and_vrp_negative():
+    """Range-bound + IV cheap → fire LC v2 gate (the textbook LC entry)."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=-1.5)
+    ok, m = d.is_long_vol_favorable_v2("NIFTY")
+    assert ok is True
+    assert "OK" in m["reason"] and "OK_LV" in m["reason"]
+
+
+def test_lv_gate_blocks_when_trending():
+    """Trending kills both IC AND LC — spot leaves strike, calendar dies."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=30.0, vrp_value=-1.5)  # CI low = trending
+    ok, m = d.is_long_vol_favorable_v2("NIFTY")
+    assert ok is False
+    assert "FAIL" in m["reason"]
+
+
+def test_lv_gate_blocks_when_vrp_positive():
+    """IV rich (VRP > 0) is IC v2 territory, not LC. Gate must NOT fire."""
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=+1.5)  # VRP > 0 = IV rich
+    ok, m = d.is_long_vol_favorable_v2("NIFTY")
+    assert ok is False
+    assert "FAIL_LV" in m["reason"]
+
+
+def test_lv_gate_blocks_at_vrp_zero():
+    """VRP == 0 means IV ≈ RV — no vol-pricing edge in either direction.
+    Strict inequality means LC v2 doesn't fire (don't pay round-trip cost
+    for zero edge).
+    """
+    d = _detector()
+    _stub_regime_with_metrics(d, ci_value=70.0, vrp_value=0.0)
+    ok, m = d.is_long_vol_favorable_v2("NIFTY")
+    assert ok is False
+
+
+def test_ic_v2_and_lv_v2_are_mutually_exclusive():
+    """Critical orthogonality invariant: IC v2 and LC v2 must NEVER both
+    fire on the same regime. The vol condition (VRP > 0 vs VRP < 0) is
+    strictly mutually exclusive, so the AND-gates can't both pass.
+
+    We exhaustively check 4 quadrants of (CI, VRP) space:
+        - range + IV-rich    → IC v2 fires, LC v2 blocks
+        - range + IV-cheap   → IC v2 blocks, LC v2 fires
+        - trending + IV-rich → both block
+        - trending + IV-cheap → both block
+    """
+    quadrants = [
+        # (ci, vrp, ic_should_fire, lc_should_fire)
+        (70.0, +1.5, True, False),    # range + IV-rich
+        (70.0, -1.5, False, True),    # range + IV-cheap
+        (30.0, +1.5, False, False),   # trending + IV-rich
+        (30.0, -1.5, False, False),   # trending + IV-cheap
+    ]
+    for ci, vrp, ic_expect, lc_expect in quadrants:
+        d = _detector()
+        _stub_regime_with_metrics(d, ci_value=ci, vrp_value=vrp)
+        ic_ok, _ = d.is_premium_selling_favorable_v2("NIFTY")
+        lc_ok, _ = d.is_long_vol_favorable_v2("NIFTY")
+        # Mutual exclusivity: never both True
+        assert not (ic_ok and lc_ok), f"Both gates fired at ci={ci} vrp={vrp}"
+        # Per-quadrant expectations
+        assert ic_ok is ic_expect, f"IC v2 at ci={ci} vrp={vrp}: got {ic_ok}, want {ic_expect}"
+        assert lc_ok is lc_expect, f"LC v2 at ci={ci} vrp={vrp}: got {lc_ok}, want {lc_expect}"
+
+
+def test_lc_param_v2_default_false():
+    """Default OFF so existing LC backtests remain reproducible."""
+    from src.strategy.params import LongCalendarParams
+    p = LongCalendarParams()
+    assert p.require_long_vol_regime_v2 is False
+
+
+def test_lc_param_v2_can_be_enabled_via_override():
+    from src.strategy.params import LongCalendarParams
+    p = LongCalendarParams.model_validate({
+        "require_long_vol_regime_v2": True,
+    })
+    assert p.require_long_vol_regime_v2 is True
+
