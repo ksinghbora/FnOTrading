@@ -194,11 +194,14 @@ class LongStraddleParams(BaseStrategyParams):
     profit_target_pct: float = 50.0          # Exit when straddle gains X% (high — needs big move)
     stop_loss_pct: float = 50.0              # Exit when straddle drops X% (limit theta bleed)
 
-    # Timing
-    entry_time: str = "09:30:00"
-    exit_time: str = "15:00:00"
+    # Timing — must be `time` types (pydantic does NOT auto-convert
+    # str→time in subclass overrides; an earlier `str = "09:30:00"`
+    # default silently broke `now.time() >= self.params.entry_time`
+    # comparison and produced 0 entries on the v2b smoke).
+    entry_time: time = time(9, 30)
+    exit_time: time = time(15, 0)
     skip_entry_on_expiry_day: bool = True
-    expiry_day_force_exit_at: str = "14:30:00"
+    expiry_day_force_exit_at: time = time(14, 30)
 
     # Defaults — long-vol structure, default OFF for legacy filters
     pcr_filter_enabled: bool = False         # PCR less informative for long-vega
