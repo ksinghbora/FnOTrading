@@ -355,3 +355,180 @@ def test_ic_regime_only_mode_bypasses_legacy_filters():
             f"line {else_idx}), but found it at line {idx} (before the "
             f"regime-only short-circuit)"
         )
+
+
+# ── v2 detectors: Choppiness Index + VRP ─────────────────────────────
+
+
+def test_choppiness_index_returns_none_with_too_few_bars():
+    """CI(14) needs at least 15 bars (period+1 closes for period TR)."""
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    d._aggregator.get_completed_candles.return_value = [
+        _bar(22500, 22510, 22490, 22500) for _ in range(5)
+    ]
+    assert d.compute_choppiness_index("NIFTY") is None
+
+
+def test_choppiness_index_high_on_choppy_sideways_market():
+    """When sum_TR is large but max−min range is small (zig-zag), CI is high.
+    Literature: CI >= 61.8 is the Fibonacci range-bound threshold (Dreiss)."""
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    # Build a chop: each bar has 20-pt swing but the overall window range
+    # is also ~20 pts (because we keep returning to the middle). Sum_TR
+    # will be large (20 × period) but range will be small (~20), giving
+    # ratio ~ period and CI close to 100.
+    bars = []
+    for i in range(20):
+        # Alternate up/down 20-pt bars all centred on 22500
+        if i % 2 == 0:
+            bars.append(_bar(22500, 22510, 22490, 22500))
+        else:
+            bars.append(_bar(22500, 22510, 22490, 22500))
+    d._aggregator.get_completed_candles.return_value = bars
+    ci = d.compute_choppiness_index("NIFTY")
+    assert ci is not None
+    assert ci >= CHOPPINESS_RANGE_THRESHOLD_VAL, f"Expected CI>=61.8 on chop, got {ci:.2f}"
+
+
+def test_choppiness_index_low_on_strongly_trending_market():
+    """Steady directional move: sum_TR ~= total range → CI close to 0.
+    Literature: CI <= 38.2 is the Fibonacci trend threshold (Dreiss)."""
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    bars = []
+    # +5 pts/bar trend over 20 bars → sum_TR ~ 5 × 14 = 70, range = 5×20 = 100
+    # ratio = 0.7, log10(0.7)/log10(14) is negative → clamped to 0
+    for i in range(20):
+        base = 22500.0 + i * 5.0
+        bars.append(_bar(base, base + 5, base, base + 5))
+    d._aggregator.get_completed_candles.return_value = bars
+    ci = d.compute_choppiness_index("NIFTY")
+    assert ci is not None
+    assert ci <= CHOPPINESS_TREND_THRESHOLD_VAL, f"Expected CI<=38.2 on trend, got {ci:.2f}"
+
+
+def test_choppiness_index_handles_degenerate_zero_range():
+    """If max_high == min_low across the window (truly flat), CI is None."""
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    # All bars identical: zero range → formula undefined
+    bars = [_bar(22500, 22500, 22500, 22500) for _ in range(20)]
+    d._aggregator.get_completed_candles.return_value = bars
+    ci = d.compute_choppiness_index("NIFTY")
+    assert ci is None
+
+
+def test_vrp_positive_when_vix_exceeds_realized_vol():
+    """VRP = VIX − RV. With RV ≈ 12 and VIX = 18, VRP ≈ +6 (favourable)."""
+    from src.strategy.regime import RV_PERIOD_DAYS
+    d = _detector()
+    closes = _compounding_closes(22500.0, RV_PERIOD_DAYS, 0.00756)  # ~12% annualised
+    d._daily_closes["NIFTY"] = __import__("collections").deque(closes, maxlen=30)
+    d._get_vix = MagicMock(return_value=18.0)
+    vrp = d.compute_vrp("NIFTY")
+    assert vrp is not None
+    # 18 − 12 = +6 with 1pt slack on either side
+    assert 4.0 < vrp < 8.0, f"Expected VRP ~+6, got {vrp:.2f}"
+
+
+def test_vrp_negative_when_realized_exceeds_implied():
+    """VIX = 12, RV ≈ 30 → VRP ≈ −18 → unfavourable."""
+    from src.strategy.regime import RV_PERIOD_DAYS
+    d = _detector()
+    closes = _compounding_closes(22500.0, RV_PERIOD_DAYS, 0.0189)  # ~30% annualised
+    d._daily_closes["NIFTY"] = __import__("collections").deque(closes, maxlen=30)
+    d._get_vix = MagicMock(return_value=12.0)
+    vrp = d.compute_vrp("NIFTY")
+    assert vrp is not None
+    assert vrp < 0.0, f"Expected VRP < 0 when RV > VIX, got {vrp:.2f}"
+
+
+def test_vrp_returns_none_on_insufficient_history():
+    d = _detector()
+    d._get_vix = MagicMock(return_value=18.0)
+    assert d.compute_vrp("NIFTY") is None
+
+
+def test_v2_gate_returns_false_on_insufficient_data():
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    d._aggregator.get_completed_candles.return_value = []
+    d._get_vix = MagicMock(return_value=18.0)
+    ok, metrics = d.is_premium_selling_favorable_v2("NIFTY")
+    assert ok is False
+    assert metrics["reason"] == "insufficient_data"
+
+
+def test_v2_gate_passes_when_chop_and_positive_vrp():
+    """CI high (sideways) AND VRP > 0 (IV > RV) → gate True."""
+    from src.strategy.regime import RV_PERIOD_DAYS
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    # Choppy bars: tight range, high TR — see compute_choppiness_index test
+    bars = [_bar(22500, 22510, 22490, 22500) for _ in range(20)]
+    d._aggregator.get_completed_candles.return_value = bars
+    # RV ~12% via compounding; VIX 18 → VRP +6
+    closes = _compounding_closes(22500.0, RV_PERIOD_DAYS, 0.00756)
+    d._daily_closes["NIFTY"] = __import__("collections").deque(closes, maxlen=30)
+    d._get_vix = MagicMock(return_value=18.0)
+
+    ok, metrics = d.is_premium_selling_favorable_v2("NIFTY")
+    assert ok is True, f"Expected v2 gate True, got metrics={metrics}"
+
+
+def test_v2_gate_blocks_when_trending():
+    """Strong trend (low CI) blocks even if VRP is positive."""
+    from src.strategy.regime import RV_PERIOD_DAYS
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    bars = []
+    for i in range(20):
+        base = 22500.0 + i * 5.0
+        bars.append(_bar(base, base + 5, base, base + 5))
+    d._aggregator.get_completed_candles.return_value = bars
+    closes = _compounding_closes(22500.0, RV_PERIOD_DAYS, 0.00756)
+    d._daily_closes["NIFTY"] = __import__("collections").deque(closes, maxlen=30)
+    d._get_vix = MagicMock(return_value=18.0)
+    ok, _ = d.is_premium_selling_favorable_v2("NIFTY")
+    assert ok is False
+
+
+def test_v2_gate_blocks_when_vrp_negative():
+    """High realized vol vs IV blocks even if market is choppy."""
+    from src.strategy.regime import RV_PERIOD_DAYS
+    d = _detector()
+    d._find_spot_token = MagicMock(return_value=1)
+    bars = [_bar(22500, 22510, 22490, 22500) for _ in range(20)]
+    d._aggregator.get_completed_candles.return_value = bars
+    # RV ~30%, VIX 12 → VRP −18
+    closes = _compounding_closes(22500.0, RV_PERIOD_DAYS, 0.0189)
+    d._daily_closes["NIFTY"] = __import__("collections").deque(closes, maxlen=30)
+    d._get_vix = MagicMock(return_value=12.0)
+    ok, metrics = d.is_premium_selling_favorable_v2("NIFTY")
+    assert ok is False
+    assert metrics["vrp"] is not None and metrics["vrp"] < 0.0
+
+
+def test_ic_param_v2_default_false():
+    """Default OFF so existing reports remain reproducible."""
+    from src.strategy.params import IronCondorParams
+    p = IronCondorParams()
+    assert p.require_premium_selling_regime_v2 is False
+
+
+def test_ic_param_v2_can_be_enabled_via_override():
+    from src.strategy.params import IronCondorParams
+    p = IronCondorParams.model_validate({
+        "require_premium_selling_regime_v2": True,
+    })
+    assert p.require_premium_selling_regime_v2 is True
+
+
+# Module-level threshold constants for tests (re-imported to keep
+# assertions readable; canonical source is src/strategy/regime.py).
+from src.strategy.regime import (
+    CHOPPINESS_RANGE_THRESHOLD as CHOPPINESS_RANGE_THRESHOLD_VAL,
+    CHOPPINESS_TREND_THRESHOLD as CHOPPINESS_TREND_THRESHOLD_VAL,
+)

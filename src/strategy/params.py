@@ -193,6 +193,16 @@ class IronCondorParams(BaseStrategyParams):
     # Strong-signal configs opt in via params override.
     require_premium_selling_regime: bool = False
 
+    # Apr 30 2026 v2: orthogonal Choppiness Index + VRP gate. The v1
+    # (ADX + BB-squeeze + RV/IV) AND-gate fires 0/2590 valid samples
+    # because its three conditions are negatively correlated on Indian
+    # post-SEBI data. The v2 gate uses two orthogonal literature-
+    # canonical signals: CI ≥ 61.8 (Fibonacci range threshold; Bill
+    # Dreiss formula) AND VRP > 0 (Bollerslev-Tauchen-Zhou 2009 RFS
+    # break-even). See ``RegimeDetector.is_premium_selling_favorable_v2``
+    # for the derivation. Mutually exclusive with v1; do not enable both.
+    require_premium_selling_regime_v2: bool = False
+
 
 class IronButterflyParams(IronCondorParams):
     """Parameters for Iron Butterfly strategy — Iron Condor with ATM body."""

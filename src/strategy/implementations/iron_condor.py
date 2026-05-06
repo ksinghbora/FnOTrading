@@ -88,7 +88,12 @@ class IronCondorStrategy(BaseStrategy):
 
     async def on_start(self) -> None:
         self._expiry = self.ctx.next_expiry(self.params.underlying)
-        self._regime = RegimeDetector(self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder)
+        # May 5 2026 fix: pass simulated clock so backtest daily-close
+        # rollover detection works. See RegimeDetector.__init__ docstring.
+        self._regime = RegimeDetector(
+            self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder,
+            clock=self.ctx.clock,
+        )
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} short_call_delta={self.params.short_call_delta} "
@@ -252,6 +257,29 @@ class IronCondorStrategy(BaseStrategy):
                 return None
             # Pure regime-gate mode: skip all legacy filters and proceed
             # directly to chain selection.
+        elif getattr(self.params, "require_premium_selling_regime_v2", False):
+            # Apr 30 2026 v2: orthogonal Choppiness Index + VRP gate.
+            # The v1 AND-of-three gate (above) fires 0/2590 valid
+            # samples because its conditions are negatively correlated
+            # on Indian post-SEBI data. The v2 gate uses two ORTHOGONAL
+            # literature-canonical signals: CI ≥ 61.8 (Fibonacci-based
+            # Bill Dreiss threshold) AND VRP > 0 (Bollerslev-Tauchen-
+            # Zhou textbook break-even). Same expiry-day structural
+            # safety retained; all legacy heuristic filters bypassed.
+            if not self._regime:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_V2_NO_DETECTOR",
+                    f"[{self.strategy_id}] Entry skipped: regime detector unavailable",
+                )
+                return None
+            ok, metrics = self._regime.is_premium_selling_favorable_v2(self.params.underlying)
+            if not ok:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_V2_GATE",
+                    f"[{self.strategy_id}] Entry skipped: regime gate v2 "
+                    f"{metrics.get('reason', '?')}",
+                )
+                return None
         else:
             # ─── Legacy heuristic-filter pipeline (default behaviour) ─
             # Apr 29 Phase 2: threshold sourced from params (was

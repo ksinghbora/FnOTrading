@@ -1,0 +1,17 @@
+{
+  "_doc": "IC v3 = v2 (CI+VRP gate) + DISABLE adjustments. May 6 2026. Trade-level analysis of v2 holdout revealed the adjustment logic is the strategy's biggest loss-maker: 27 of 29 mid-trade adjustments lost money on holdout, total -₹5,719. EXIT economics alone (no adjusts) had PF 1.066 / 62%% WR. Disabling adjustments is THEORY-GROUNDED (May 1 trade audit found adjusts fire 1-2 min after entry, bias to CE side, lock losses on positions that recover) and SURE-SHOT (multiple independent evidence streams converge). adjustment_threshold_pct=9999 effectively disables the adjustment trigger. All other params identical to v2.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "adjustment_threshold_pct": 9999.0,
+  "stop_loss_pct": 40.0,
+  "profit_target_pct": 25.0,
+  "wing_width_strikes": 8,
+  "short_call_delta": 0.15,
+  "short_put_delta": -0.15,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true
+}

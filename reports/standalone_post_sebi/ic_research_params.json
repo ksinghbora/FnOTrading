@@ -1,0 +1,17 @@
+{
+  "_doc": "IC v2 detector config — Apr 30 2026. Replaces the v1 AND-gate (ADX<22 + BB-squeeze + RV/IV<0.80) which fired 0/2590 valid samples on Indian post-SEBI data because its three conditions are negatively correlated. The v2 gate uses two ORTHOGONAL literature-canonical signals: Choppiness Index >= 61.8 (Bill Dreiss, Fibonacci threshold from technical-analysis canon) AND VRP > 0 (Bollerslev-Tauchen-Zhou 2009 textbook break-even from academic finance). Both thresholds are STANDARD LITERATURE, not tuned. All other IC params at defaults — only the new gate flips on. Per user direction: don't curve-fit; use proven indicators with standard thresholds.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "adjustment_threshold_pct": 60.0,
+  "stop_loss_pct": 40.0,
+  "profit_target_pct": 25.0,
+  "wing_width_strikes": 8,
+  "short_call_delta": 0.15,
+  "short_put_delta": -0.15,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true
+}

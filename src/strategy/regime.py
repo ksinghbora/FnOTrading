@@ -25,7 +25,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
 
-from src.core.clock import now_ist
+from src.core.clock import MarketClock, now_ist
 from src.core.constants import INDIA_VIX_TOKEN, VIX_EXTREME, VIX_HIGH, VIX_LOW, VIX_NORMAL
 from src.core.types import Timeframe
 from src.market_data.aggregator import OHLCAggregator
@@ -65,6 +65,48 @@ BB_SQUEEZE_PERCENTILE = 25.0  # bottom-quartile width = consolidation
 RV_IV_FAVORABLE_THRESHOLD = 0.80
 RV_PERIOD_DAYS = 20
 RV_ANNUALIZATION_DAYS = 252  # NSE trading days per year
+
+
+# ─── v2 detectors (Apr 30 2026): Choppiness Index + VRP ──────────
+# After May 5 burn-the-holdout revealed strong-signal IC was curve-fit,
+# and the principled AND-gate (ADX<22 AND BB<25%ile AND RV/IV<0.80)
+# fired on 0/2590 valid samples (the three conditions are negatively
+# correlated on Indian post-SEBI data — well-priced IV markets), we
+# replace with two ORTHOGONAL literature-grounded indicators:
+#
+# 1. Choppiness Index (Bill Dreiss, ASX) — single-indicator range/trend
+#    classifier from technical-analysis canon. Uses Fibonacci thresholds
+#    61.8 (range) and 38.2 (trend). PURE price-action measure, no IV
+#    component, so independent of the second indicator.
+#
+# 2. VRP (Variance Risk Premium) — Bollerslev-Tauchen-Zhou (2009 RFS),
+#    classic academic premium-selling alpha source. VRP = IV − RV.
+#    Positive VRP means IV ≥ RV (premium overpriced relative to recent
+#    delivered vol). Threshold 0 is the textbook break-even; selling
+#    premium is profitable in expectation when VRP > 0.
+#
+# Conjunction: CI ≥ 61.8 AND VRP > 0 means:
+#   - Market is in a measured chop/sideways state (price-action proof)
+#   - Implied vol is genuinely overpriced vs realized (alpha proof)
+# These signals come from independent traditions — technical analysis
+# (CI) and academic finance (VRP) — so the AND-gate is theoretically
+# expected to fire (no negative-correlation trap as with the prior
+# AND-of-three gate).
+#
+# Both thresholds are LITERATURE-CANONICAL, NOT TUNED:
+#   - CI 61.8: Fibonacci-based, in every Choppiness Index reference
+#     (TradingView, ASX, Dreiss original; see Angel One/IncredibleCharts)
+#   - VRP > 0: textbook break-even point in Bollerslev et al. and
+#     every premium-selling paper since
+#
+# Period choices also literature-standard:
+#   - CI period 14 (matches ADX/RSI convention; same as Dreiss original)
+#   - VRP uses 20-day RV (matches existing RV_PERIOD_DAYS for parity
+#     with industry IV-rank convention) and current-tick India VIX
+CHOPPINESS_PERIOD = 14
+CHOPPINESS_RANGE_THRESHOLD = 61.8   # >= this = range-bound (Fibonacci)
+CHOPPINESS_TREND_THRESHOLD = 38.2   # <= this = trending (Fibonacci)
+VRP_FAVORABLE_THRESHOLD = 0.0       # VRP > 0 → IV > RV → favourable (textbook break-even)
 
 
 # ─── Enums ──────────────────────────────────────────────────────
@@ -227,10 +269,21 @@ class RegimeDetector:
         feed: TickFeedManager,
         aggregator: OHLCAggregator,
         chain_builder: OptionChainBuilder,
+        clock: "MarketClock | None" = None,
     ):
         self._feed = feed
         self._aggregator = aggregator
         self._chain_builder = chain_builder
+        # May 5 2026 fix: ``clock`` is the simulated MarketClock during
+        # backtest, None in live mode (falls back to ``now_ist()`` wall
+        # clock). Without this, ``assess()``'s call to ``now_ist()``
+        # always returned the REAL wall-clock date, so the day-rollover
+        # check in ``_maybe_capture_daily_close`` never fired during
+        # backtests — the daily-close deque stayed empty and
+        # ``compute_realized_vol`` always returned None. This single
+        # bug was responsible for every "0 trades" smoke that used
+        # ``require_premium_selling_regime=True``.
+        self._clock = clock
         self._session_opens: dict[str, float] = {}
         self._last_regime: dict[str, RegimeSnapshot] = {}
         self._last_session_date: date | None = None
@@ -246,7 +299,10 @@ class RegimeDetector:
 
         Returns RegimeSnapshot with both legacy regime and new 2D decomposition.
         """
-        now = now_ist()
+        # May 5 2026 fix: prefer the simulated clock (set at __init__) so
+        # backtest day-rollover detection actually works. Falls through
+        # to ``now_ist()`` only when no clock was provided (live mode).
+        now = self._clock.now() if self._clock is not None else now_ist()
         today = now.date()
         if self._last_session_date and self._last_session_date != today:
             logger.info("[RegimeDetector] New trading day — resetting session data")
@@ -855,5 +911,144 @@ class RegimeDetector:
             f"adx={adx:.1f}({'OK' if adx_ok else 'FAIL'}) "
             f"bb_sqz={bb_ok} "
             f"rv/iv={rv_iv:.2f}({'OK' if rv_iv_ok else 'FAIL'})"
+        )
+        return favourable, metrics
+
+    # ─── v2 detectors (Apr 30 2026): Choppiness Index + VRP ──────
+    # Replaces the AND-of-three gate that fired on 0/2590 valid samples.
+    # Two ORTHOGONAL literature-grounded indicators with canonical
+    # thresholds — see module-level docstring for derivation.
+
+    def compute_choppiness_index(
+        self, underlying: str, period: int = CHOPPINESS_PERIOD,
+        timeframe: Timeframe = Timeframe.M5,
+    ) -> float | None:
+        """Compute Choppiness Index over the latest spot bars.
+
+        Bill Dreiss (ASX) original formula:
+            CI = 100 * log10(sum_TR / (max_high − min_low)) / log10(period)
+
+        where sum_TR is the sum of TRUE RANGE over ``period`` bars and
+        max_high / min_low span the same window. CI is bounded [0, 100]
+        when the formula is well-defined.
+
+        Interpretation (literature-standard Fibonacci thresholds):
+          - CI ≥ 61.8 → range-bound / chopping market
+          - CI ≤ 38.2 → strong trend
+          - 38.2-61.8 → transitional
+
+        Returns None when fewer than ``period+1`` bars are available
+        (need period TR values, which need period+1 closes).
+        """
+        spot_token = self._find_spot_token(underlying)
+        if not spot_token:
+            return None
+        candles = self._aggregator.get_completed_candles(
+            spot_token, timeframe, limit=period + 5
+        )
+        if len(candles) < period + 1:
+            return None
+
+        # Use the most-recent ``period+1`` bars for ``period`` TR values
+        bars = candles[-(period + 1):]
+        highs = [float(c.high) for c in bars]
+        lows = [float(c.low) for c in bars]
+        closes = [float(c.close) for c in bars]
+
+        tr_values: list[float] = []
+        for i in range(1, len(bars)):
+            tr = max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+            tr_values.append(tr)
+
+        if len(tr_values) < period:
+            return None
+        sum_tr = sum(tr_values[-period:])
+        # Range over the same period (excludes the seed bar at index 0,
+        # matches Dreiss's "period" interpretation: the window of bars
+        # whose TRs we summed).
+        window_highs = highs[1:]
+        window_lows = lows[1:]
+        max_h = max(window_highs[-period:])
+        min_l = min(window_lows[-period:])
+        rng = max_h - min_l
+        if rng <= 0 or sum_tr <= 0 or period <= 1:
+            return None
+        ratio = sum_tr / rng
+        if ratio <= 0:
+            return None
+        ci = 100.0 * math.log10(ratio) / math.log10(period)
+        # Clamp to formula's natural [0, 100] band; numerical noise can
+        # produce values just outside on degenerate inputs.
+        return max(0.0, min(100.0, ci))
+
+    def compute_vrp(self, underlying: str) -> float | None:
+        """Variance Risk Premium (VRP) = India VIX − 20-day realized vol.
+
+        Both expressed in same units (annualised vol percent points), so
+        VRP > 0 means implied vol is over-priced relative to delivered
+        vol over the prior month. Bollerslev-Tauchen-Zhou (2009 RFS) is
+        the canonical reference; positive VRP is the textbook
+        premium-selling alpha source.
+
+        Returns None when realized-vol history is insufficient (need
+        ``RV_PERIOD_DAYS+1`` daily closes) or VIX is unavailable.
+        """
+        rv = self.compute_realized_vol(underlying)
+        if rv is None:
+            return None
+        vix = self._get_vix()
+        if vix <= 0:
+            return None
+        return vix - rv
+
+    def is_premium_selling_favorable_v2(
+        self, underlying: str,
+    ) -> tuple[bool, dict[str, float | bool | None]]:
+        """v2 gate: Choppiness Index ≥ 61.8 AND VRP > 0.
+
+        Two ORTHOGONAL literature-grounded gates with canonical
+        thresholds (no parameter tuning):
+
+          - Choppiness Index ≥ 61.8 → market is in a measured chop /
+            sideways regime. PURE price-action, no IV component.
+          - VRP > 0 → implied vol exceeds realized vol → premium is
+            genuinely overpriced. PURE volatility-pricing alpha.
+
+        Independence of the two signals (technical vs academic) means
+        the AND-gate does NOT suffer the negative-correlation failure
+        mode that left the v1 (ADX + BB-squeeze + RV/IV) gate firing
+        0 / 2590 times on Indian post-SEBI data.
+
+        Insufficient data → NOT favourable (err on the side of don't
+        trade — same conservative rule as v1).
+        """
+        ci = self.compute_choppiness_index(underlying)
+        vrp = self.compute_vrp(underlying)
+        rv = self.compute_realized_vol(underlying)
+        vix = self._get_vix()
+
+        metrics: dict[str, float | bool | None] = {
+            "choppiness_index": ci,
+            "ci_threshold": CHOPPINESS_RANGE_THRESHOLD,
+            "vrp": vrp,
+            "vrp_threshold": VRP_FAVORABLE_THRESHOLD,
+            "realized_vol_pct": rv,
+            "vix": vix,
+        }
+
+        if ci is None or vrp is None:
+            metrics["reason"] = "insufficient_data"
+            return False, metrics
+
+        ci_ok = ci >= CHOPPINESS_RANGE_THRESHOLD
+        vrp_ok = vrp > VRP_FAVORABLE_THRESHOLD
+        favourable = ci_ok and vrp_ok
+        metrics["reason"] = (
+            f"ci={ci:.1f}({'OK' if ci_ok else 'FAIL'}) "
+            f"vrp={vrp:+.2f}({'OK' if vrp_ok else 'FAIL'})"
         )
         return favourable, metrics
