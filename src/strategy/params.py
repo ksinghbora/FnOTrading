@@ -218,6 +218,70 @@ class LongStraddleParams(BaseStrategyParams):
     require_long_vol_regime_v2b: bool = False
 
 
+class TrendDailyParams(BaseStrategyParams):
+    """Parameters for Trend Daily strategy — multi-day Donchian on NIFTY.
+
+    May 7 2026 — first trend variant in the post-SEBI research arc to
+    show positive net PnL on a 360-day train+val smoke (commit b34aefe).
+    The intraday variants (1-min through 30-min Donchian) all sat below
+    the cost wall; the daily timeframe escapes intraday microstructure
+    noise and amortizes round-trip cost across multi-day holds.
+
+    Signal:
+      Entry long:  daily close > 20-day high of last 21 daily closes
+      Entry short: symmetric
+      Filters:     VIX (daily mean) in [12, 22], ATR(14)/spot above floor
+      Exit:        ATR(14) trailing stop at 2× ATR
+                   OR reverse on opposite breakout
+                   OR max-hold N days
+
+    Position is held OVERNIGHT — a multi-day strategy, unlike the
+    intraday-only IC v2 / LC / LS in the same arc. The reset_day_state
+    method preserves _entered across days; only entry/exit decisions
+    fire it up or down.
+
+    Decision check timing: each trading day at ``decision_time`` (default
+    15:25 IST — five minutes before close, leaving time to place
+    market-on-close orders). One entry/exit decision per day, not
+    per tick.
+
+    Cost basis: targets the futures cost structure (1 bp round-trip
+    slippage). Even though the smoke uses NIFTY spot as the underlying
+    proxy, the strategy is intended to trade NIFTY current-month
+    futures to match the 1bp cost basis. Trading via spot index is
+    not directly possible (cash-settled).
+    """
+
+    # Donchian
+    donchian_lookback: int = 20
+
+    # ATR
+    atr_period: int = 14
+    atr_floor_pct: float = 0.5            # daily ATR/spot floor (typical NIFTY daily ~1-2%)
+    atr_stop_mult: float = 2.0            # trailing stop = peak ± mult × ATR
+
+    # Risk gates
+    vix_entry_min: float = 12.0
+    vix_entry_max: float = 22.0
+    vix_reduce_above: float = 22.0        # not used yet — placeholder for v2 sizing
+
+    # Multi-day hold
+    max_hold_days: int = 30                # hard time stop in days
+
+    # Decision timing
+    # Use 15:25 IST so the strategy has 5 minutes to place
+    # market-on-close orders before the 15:30 IST cash-market close.
+    decision_time: time = time(15, 25)
+
+    # Order sizing
+    # Defaults inherit underlying=NIFTY, quantity_lots=1 from BaseStrategyParams.
+
+    # The legacy heuristic filters (PCR / max-pain / score) don't apply
+    # to a directional trend strategy — they're explicitly disabled.
+    pcr_filter_enabled: bool = False
+    max_pain_filter_enabled: bool = False
+
+
 class ShortStrangleParams(BaseStrategyParams):
     """Parameters for Short Strangle strategy."""
 
