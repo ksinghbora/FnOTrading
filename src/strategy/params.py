@@ -334,15 +334,69 @@ class IronCondorParams(BaseStrategyParams):
     # for the derivation. Mutually exclusive with v1; do not enable both.
     require_premium_selling_regime_v2: bool = False
 
+    # May 7 2026 — calendar-aware filter stack (Indian-quant-canonical
+    # adaptations from Anurag Goel's Sharpe-1.96 short-strangle research
+    # + ResearchGate India-VIX day-of-week paper + RBI/CPI/Budget event
+    # calendar). Designed for Iron Butterfly v2 deployment but inherited
+    # by Iron Condor since they share the same parent class.
+    #
+    # When ``require_calendar_filter=True``:
+    #   * Block entries on weekdays NOT in ``allowed_days_of_week``.
+    #     Default {1,2,3} = Tue/Wed/Thu (matches Indian-quant practice
+    #     of avoiding Monday IV-rise + Friday weekend-gap risk).
+    #   * Block entries on the ``block_pre_event_days`` trading days
+    #     immediately preceding any HARD_BLOCK event in
+    #     ``data/event_days.csv`` (RBI MPC, FOMC, Budget, CPI). Default 1.
+    #   * If ``block_friday=True``, force-skip Friday entries even if
+    #     Friday is in allowed_days_of_week (extra weekend-gap insurance).
+    #
+    # The expiry-day block already handled by ``_check_expiry_day_block``
+    # is independent of this filter — both apply.
+    require_calendar_filter: bool = False
+    # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri.
+    # Tue/Wed/Thu = Indian-quant canonical for premium-selling.
+    allowed_days_of_week: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    block_pre_event_days: int = 1
+    block_friday: bool = False
+
 
 class IronButterflyParams(IronCondorParams):
-    """Parameters for Iron Butterfly strategy — Iron Condor with ATM body."""
+    """Parameters for Iron Butterfly strategy — Iron Condor with ATM body.
 
-    # ATM short body (delta ~0.5) instead of OTM. Larger credit, tighter
-    # break-even zone, higher gamma/vega than IC. All other defaults
-    # inherited from IronCondorParams; tune via STRATEGIES env var if needed.
+    May 7 2026 — Iron Butterfly is the post-SEBI capital-efficient
+    cousin of IC. Same defined-risk 4-leg structure (sell short body,
+    buy wings) but the short legs are sold AT-THE-MONEY (delta ~0.5)
+    instead of OTM. Larger credit, tighter break-even zone, higher
+    gamma/vega exposure.
+
+    Why IB beats IC on capital efficiency post-SEBI:
+      - Same SPAN-margin defined-risk treatment
+      - ATM body = ~3× the credit of 0.15-Δ wings on same wing-width
+      - Tighter wings (default 2 strikes vs IC's 8) → margin drops ~60%
+        per OptionX/Bajaj Broking analysis (~₹2.5L → ₹1L per lot)
+      - Avoids the 2% ELM hit on naked-short-straddle expiry day
+        (defined-risk structure)
+
+    Same regime gate (require_premium_selling_regime_v2) and same
+    calendar-aware filter (require_calendar_filter) inherited from
+    IronCondorParams. All entry, adjustment, and exit logic inherited
+    unchanged from IronCondorStrategy.
+    """
+
+    # ATM short body (delta ~0.5). Larger credit, tighter break-even,
+    # higher gamma/vega than IC.
     short_call_delta: float = 0.5
     short_put_delta: float = -0.5
+
+    # Tighter default wings — 2 strikes (~₹100 protection on NIFTY)
+    # vs IC's 8 strikes. This is the IB hallmark — capital-efficient
+    # protection. Override via params if a different risk profile
+    # is needed.
+    wing_width_strikes: int = 2
+
+    # Tighter SL than IC's 40% — ATM gamma exposure is much higher
+    # so losses accelerate faster. 30% per OptionX backtest guidance.
+    stop_loss_pct: float = 30.0
 
 
 class OrchestratorParams(BaseStrategyParams):

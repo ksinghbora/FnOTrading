@@ -1,0 +1,21 @@
+{
+  "_doc": "Iron Butterfly v2 + calendar-aware filter — May 7 2026. The post-SEBI capital-efficient cousin of IC v2. Same theory-grounded regime gate (CI≥61.8 AND VRP>0) but with ATM short body (delta 0.5) instead of 0.15-Δ wings, and tighter wings (2 strikes vs IC's 8). Margin drops ~60% post-SEBI (₹2.5L → ₹1L per lot per OptionX/Bajaj Broking) → 2.5× capital efficiency vs IC v2. Calendar-aware filter adds three Indian-quant-canonical rules: (1) day-of-week filter Tue/Wed/Thu only (Anurag Goel's Sharpe-1.96 short-strangle research; Monday IV-rise + Friday weekend-gap excluded); (2) pre-event window block 1 trading day before scheduled HARD_BLOCK events (RBI MPC, FOMC, Budget, CPI from data/event_days.csv); (3) Friday block opt-out (default off — Tue/Wed/Thu filter already covers it). Stop-loss tightened to 30% (vs IC v2's 40%) due to ATM gamma. All other params inherited from IronCondorParams.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "short_call_delta": 0.5,
+  "short_put_delta": -0.5,
+  "wing_width_strikes": 2,
+  "adjustment_threshold_pct": 60.0,
+  "stop_loss_pct": 30.0,
+  "profit_target_pct": 25.0,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true,
+  "require_calendar_filter": true,
+  "allowed_days_of_week": [1, 2, 3],
+  "block_pre_event_days": 1,
+  "block_friday": false
+}

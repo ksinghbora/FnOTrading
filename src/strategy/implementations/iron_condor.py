@@ -15,6 +15,7 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, OrderType
 from src.strategy.base import BaseStrategy
+from src.strategy.event_calendar import EventCalendar
 from src.strategy.implementations.portfolio_pricing import find_available_wing_strike
 from src.strategy.params import IronCondorParams
 from src.strategy.regime import RegimeDetector
@@ -48,6 +49,10 @@ class IronCondorStrategy(BaseStrategy):
         self._entered = False
         self._stopped_for_day = False
         self._regime: RegimeDetector | None = None
+        # May 7 2026: calendar-aware filter for IB v2 / IC v2-calendar.
+        # Loaded only when ``params.require_calendar_filter`` is True;
+        # otherwise the strategy doesn't pay the file-IO cost.
+        self._event_calendar: EventCalendar | None = None
         self._paper_mode: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
         # Short legs
         self._short_ce_token: int = 0
@@ -119,6 +124,25 @@ class IronCondorStrategy(BaseStrategy):
                     f"[{self.strategy_id}] v2 regime warmup: "
                     f"seeded {seeded} daily closes for {self.params.underlying}"
                 )
+
+        # May 7 2026: load EventCalendar for IB v2 / IC v2-calendar mode.
+        # Cheap CSV-load (~143 rows). Calendar-aware filter only fires
+        # when ``require_calendar_filter=True``.
+        if getattr(self.params, "require_calendar_filter", False):
+            try:
+                self._event_calendar = EventCalendar()
+                logger.info(
+                    f"[{self.strategy_id}] calendar filter active: "
+                    f"allowed_dow={self.params.allowed_days_of_week} "
+                    f"block_pre_event_days={self.params.block_pre_event_days} "
+                    f"block_friday={self.params.block_friday}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[{self.strategy_id}] EventCalendar load failed: {e} — "
+                    f"calendar filter disabled for this run"
+                )
+                self._event_calendar = None
 
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
@@ -212,6 +236,26 @@ class IronCondorStrategy(BaseStrategy):
         _, long_pe_ask = self._bid_ask_for(self._long_pe_token)
         return (short_ce_bid + short_pe_bid) - (long_ce_ask + long_pe_ask)
 
+    def _count_trading_days(self, from_date, to_date) -> int:
+        """Count trading days strictly between from_date (exclusive) and
+        to_date (inclusive). Used by the pre-event calendar filter.
+
+        Approximation: weekdays only (no holiday calendar lookup). For
+        the pre-event filter at 1-2 day granularity this is precise enough;
+        the only edge case is when an Indian trading holiday falls between
+        today and the event, which slightly under-counts. False negatives
+        (firing entries near events) are worse than false positives, so
+        we accept the simpler weekday count.
+        """
+        from datetime import timedelta
+        d = from_date + timedelta(days=1)
+        count = 0
+        while d <= to_date:
+            if d.weekday() < 5:
+                count += 1
+            d += timedelta(days=1)
+        return count
+
     def _exit_fill_debit(self) -> float:
         """Net debit the broker would actually book at exit.
 
@@ -250,6 +294,63 @@ class IronCondorStrategy(BaseStrategy):
                 f"[{self.strategy_id}] Entry skipped: {expiry_block}",
             )
             return None
+
+        # ─── May 7 2026: calendar-aware filter (IB v2 / IC v2-calendar) ─
+        # Three sub-checks, all opt-in via ``require_calendar_filter``:
+        #   1. Day-of-week filter — block entries on weekdays not in
+        #      ``allowed_days_of_week``. Default {1,2,3} = Tue/Wed/Thu
+        #      from Anurag Goel's Indian-quant short-strangle research
+        #      (Sharpe 1.96 with this filter; without it Sharpe < 0).
+        #   2. Pre-event block — block entries on the
+        #      ``block_pre_event_days`` trading days immediately before
+        #      any HARD_BLOCK event in data/event_days.csv (RBI MPC,
+        #      FOMC, Budget, CPI). Default 1 day. Event-day move kills
+        #      short-premium entries placed the day before.
+        #   3. Friday block — Indian post-SEBI weekend gap risk; opt-in
+        #      via ``block_friday=True`` for extra-conservative books.
+        # Mutually compatible with the v2 regime gate below.
+        if getattr(self.params, "require_calendar_filter", False) and self._event_calendar is not None:
+            now = self.ctx.clock.now()
+            today = now.date()
+            dow = today.weekday()  # 0=Mon, 4=Fri
+
+            # 1. Day-of-week
+            allowed = self.params.allowed_days_of_week
+            if allowed and dow not in allowed:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_DOW",
+                    f"[{self.strategy_id}] Entry skipped: day-of-week {dow} not in {allowed}",
+                )
+                return None
+
+            # 2. Pre-event window
+            pre_days = int(self.params.block_pre_event_days)
+            if pre_days > 0:
+                from datetime import timedelta
+                # Walk forward up to 5 calendar days; covers a 1-3 trading-day
+                # pre-event window even with a weekend in between.
+                for offset in range(1, pre_days * 2 + 3):
+                    check_date = today + timedelta(days=offset)
+                    is_blocked, ev_type = self._event_calendar.is_hard_blocked(check_date)
+                    if is_blocked:
+                        # Count trading days between today and the event
+                        td = self._count_trading_days(today, check_date)
+                        if td <= pre_days:
+                            self._log_skip_throttled(
+                                "ENTRY_SKIP_PRE_EVENT",
+                                f"[{self.strategy_id}] Entry skipped: "
+                                f"{ev_type} in {td} trading day(s)",
+                            )
+                            return None
+                        break  # nearest event found; no need to look further
+
+            # 3. Friday block (opt-in)
+            if self.params.block_friday and dow == 4:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_FRIDAY",
+                    f"[{self.strategy_id}] Entry skipped: Friday weekend-gap block",
+                )
+                return None
 
         # ─── May 2 2026: regime-gate-only mode ───────────────────
         # When ``require_premium_selling_regime=True`` the strategy

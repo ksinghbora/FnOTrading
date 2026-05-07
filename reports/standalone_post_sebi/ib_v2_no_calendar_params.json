@@ -1,0 +1,18 @@
+{
+  "_doc": "IB v2 WITHOUT calendar filter — ablation to isolate which change broke us. If this fires more trades and is profitable, the calendar filter was the problem. If still negative, IB's gamma exposure is the issue.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "short_call_delta": 0.5,
+  "short_put_delta": -0.5,
+  "wing_width_strikes": 2,
+  "adjustment_threshold_pct": 60.0,
+  "stop_loss_pct": 30.0,
+  "profit_target_pct": 25.0,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true,
+  "require_calendar_filter": false
+}

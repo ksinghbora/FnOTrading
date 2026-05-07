@@ -1,0 +1,21 @@
+{
+  "_doc": "IC v2 WITH calendar filter — ablation to isolate the calendar filter effect on IC v2 (which we know is +PF 1.20 in train+val without calendar). If this is positive, calendar adds value to IC. If negative, calendar hurts even on IC.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "adjustment_threshold_pct": 60.0,
+  "stop_loss_pct": 40.0,
+  "profit_target_pct": 25.0,
+  "wing_width_strikes": 8,
+  "short_call_delta": 0.15,
+  "short_put_delta": -0.15,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true,
+  "require_calendar_filter": true,
+  "allowed_days_of_week": [1, 2, 3],
+  "block_pre_event_days": 1,
+  "block_friday": false
+}
