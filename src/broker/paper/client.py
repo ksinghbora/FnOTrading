@@ -496,6 +496,7 @@ class PaperBrokerClient(BrokerClient):
         self._trades.append({
             "trade_id": str(uuid.uuid4())[:8],
             "order_id": order_id,
+            "strategy_id": tag,  # caller-supplied attribution (V5: orchestrator children)
             "tradingsymbol": tradingsymbol,
             "exchange": exchange,
             "transaction_type": side.value,

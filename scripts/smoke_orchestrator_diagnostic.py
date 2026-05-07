@@ -1,20 +1,14 @@
 #!/usr/bin/env python
 """Diagnostic re-run of the orchestrator backtest with per-child breakdown.
 
-Same config as smoke_orchestrator_live.py, but with full per-child
-stats from result['trades']:
-  - fills per child
-  - round-trips per child
-  - realized PnL per child
-  - days each child fired
-  - missing children (e.g. if trend_daily never fires, surfaces here)
+Same config as smoke_orchestrator_live.py but instruments the result for
+detailed attribution. Each trade carries strategy_id (added in commit
+following this script's first version), so we can group by:
+  - child name (which child fired)
+  - day (when each child fired)
+  - direction (buy_value vs sell_value → realised proxy)
 
-Compares each child's contribution to its standalone reference run on
-the same corpus to expose:
-  - "child fired but lost" → routing chose a winning regime then child
-    produced bad trades
-  - "child never fired but should have" → orchestrator missed the slot
-    (other child took it by tie-break)
+Compares each child's contribution to its standalone reference.
 """
 
 from __future__ import annotations
@@ -24,7 +18,7 @@ import json
 import logging
 import sys
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -60,91 +54,87 @@ async def main():
         print(f"ERROR: {result['error']}")
         return 1
 
-    # Save raw trades for archival diagnosis
     out_path = Path("/tmp/orch_diagnostic_trades.json")
     out_path.write_text(json.dumps(result.get("trades", []), default=str, indent=2))
     print(f"Trades dumped to {out_path}")
     print()
 
-    # ─── Per-child breakdown ─────────────────────────────────────
+    # ─── Per-child breakdown via strategy_id ─────────────────────
     trades = result.get("trades", [])
     by_child: dict[str, dict] = defaultdict(lambda: {
         "fills": 0,
         "buy_value": 0.0,
         "sell_value": 0.0,
-        "first_fill": None,
-        "last_fill": None,
-        "days": set(),
+        "fill_timestamps": [],
     })
 
     for t in trades:
-        sid = t.get("strategy_id", "?")
+        sid = t.get("strategy_id") or "?"
         # Strip parent prefix for readable display
         child = sid.split("/", 1)[1] if "/" in sid else sid
         rec = by_child[child]
         rec["fills"] += 1
-        avg = float(t.get("average_price", 0) or t.get("price", 0) or 0)
-        qty = int(t.get("quantity", 0) or t.get("filled_quantity", 0) or 0)
-        side = str(t.get("order_side", t.get("side", ""))).upper()
-        if "SELL" in side:
+        avg = float(t.get("average_price", 0))
+        qty = int(t.get("quantity", 0))
+        side = str(t.get("transaction_type", "")).upper()
+        if side == "SELL":
             rec["sell_value"] += avg * qty
         else:
             rec["buy_value"] += avg * qty
-        ts = t.get("timestamp") or t.get("fill_time") or t.get("order_time")
+        ts = t.get("fill_timestamp", "")
         if ts:
-            ts_str = str(ts)
-            day_str = ts_str[:10] if len(ts_str) >= 10 else ts_str
-            rec["days"].add(day_str)
-            if rec["first_fill"] is None or ts_str < rec["first_fill"]:
-                rec["first_fill"] = ts_str
-            if rec["last_fill"] is None or ts_str > rec["last_fill"]:
-                rec["last_fill"] = ts_str
+            rec["fill_timestamps"].append(ts)
 
+    # ─── Print per-child table ──────────────────────────────────
     print("=" * 100)
-    print("PER-CHILD BREAKDOWN")
+    print("PER-CHILD BREAKDOWN (via strategy_id)")
     print("=" * 100)
-    print(f"  {'child':<22s} {'fills':>6s} {'days':>5s} {'buy_value':>12s} {'sell_value':>12s} {'net (sell-buy)':>15s}")
-    print("  " + "-" * 86)
+    print(f"  {'child':<22s} {'fills':>6s} {'buy_value':>12s} {'sell_value':>12s} {'net (sell-buy)':>15s}")
+    print("  " + "-" * 80)
 
+    expected_children = ("iron_condor", "iron_butterfly", "short_strangle", "trend_daily")
     total_fills = 0
     total_net = 0.0
-    for child in ("iron_condor", "iron_butterfly", "short_strangle", "trend_daily"):
-        rec = by_child.get(child, {"fills": 0, "buy_value": 0.0, "sell_value": 0.0, "days": set()})
+    for child in expected_children:
+        rec = by_child.get(child, {"fills": 0, "buy_value": 0.0, "sell_value": 0.0})
         net = rec["sell_value"] - rec["buy_value"]
         total_fills += rec["fills"]
         total_net += net
-        print(f"  {child:<22s} {rec['fills']:>6d} {len(rec['days']):>5d} "
+        print(f"  {child:<22s} {rec['fills']:>6d} "
               f"{rec['buy_value']:>12,.0f} {rec['sell_value']:>12,.0f} {net:>+15,.0f}")
-
-    # Catch any unexpected child names in trades
+    # Catch any unexpected children
     for child in by_child:
-        if child not in ("iron_condor", "iron_butterfly", "short_strangle", "trend_daily"):
+        if child not in expected_children:
             rec = by_child[child]
             net = rec["sell_value"] - rec["buy_value"]
-            print(f"  {child:<22s} {rec['fills']:>6d} {len(rec['days']):>5d} "
-                  f"{rec['buy_value']:>12,.0f} {rec['sell_value']:>12,.0f} {net:>+15,.0f} [UNEXPECTED]")
-
-    print("  " + "-" * 86)
-    print(f"  {'TOTAL':<22s} {total_fills:>6d} {'':>5s} "
-          f"{'':>12s} {'':>12s} {total_net:>+15,.0f}")
+            print(f"  {child:<22s} {rec['fills']:>6d} "
+                  f"{rec['buy_value']:>12,.0f} {rec['sell_value']:>12,.0f} {net:>+15,.0f}  [UNEXPECTED]")
+    print("  " + "-" * 80)
+    print(f"  {'TOTAL':<22s} {total_fills:>6d} {'':>12s} {'':>12s} {total_net:>+15,.0f}")
     print()
-    print("(Note: net = sell_value - buy_value, BEFORE charges. Final PnL accounts for charges.)")
+    print("(net = sell_value - buy_value, before charges. Positive net ≈ realised PnL.)")
     print()
 
-    # ─── Daily fire rate ────────────────────────────────────────
-    print("=" * 100)
-    print("DAYS EACH CHILD FIRED (first 30 days × child)")
-    print("=" * 100)
-    all_days = sorted(set().union(*(rec["days"] for rec in by_child.values())))
-    if all_days:
-        first_30 = all_days[:30]
-        print(f"  {'date':<12s} {'IC':>4s} {'IB':>4s} {'SS':>4s} {'TD':>4s}")
-        for day in first_30:
-            ic = "✓" if day in by_child.get("iron_condor", {"days": set()})["days"] else "·"
-            ib = "✓" if day in by_child.get("iron_butterfly", {"days": set()})["days"] else "·"
-            ss = "✓" if day in by_child.get("short_strangle", {"days": set()})["days"] else "·"
-            td = "✓" if day in by_child.get("trend_daily", {"days": set()})["days"] else "·"
-            print(f"  {day:<12s} {ic:>4s} {ib:>4s} {ss:>4s} {td:>4s}")
+    # ─── Daily PnL trail ────────────────────────────────────────
+    daily = result.get("daily_results", [])
+    if daily:
+        print("=" * 100)
+        print("DAILY P&L (every day with non-zero pnl)")
+        print("=" * 100)
+        print(f"  {'date':<12s} {'pnl':>10s} {'realized':>10s} {'unrealized':>11s} {'charges':>8s} {'trades':>7s}")
+        non_zero = [d for d in daily if d.get("pnl") not in (0, 0.0, None) or d.get("trades", 0) > 0]
+        for d in non_zero[:50]:  # cap to keep output readable
+            print(f"  {d.get('date', '?'):<12s} "
+                  f"{float(d.get('pnl', 0)):>+10,.0f} "
+                  f"{float(d.get('realized_pnl', 0)):>+10,.0f} "
+                  f"{float(d.get('unrealized_mtm', 0)):>+11,.0f} "
+                  f"{float(d.get('charges', 0)):>8,.0f} "
+                  f"{d.get('trades', 0):>7d}")
+        if len(non_zero) > 50:
+            print(f"  ... ({len(non_zero) - 50} more days truncated)")
+        print()
+        active_days = sum(1 for d in daily if d.get("trades", 0) > 0)
+        print(f"  Days with at least one fill: {active_days} / {len(daily)} total trading days")
     print()
 
     # ─── Aggregate vs benchmarks ────────────────────────────────

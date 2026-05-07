@@ -325,6 +325,7 @@ class BacktestEngine:
                     quantity=leg.quantity,
                     order_type=leg.order_type,
                     price=price,
+                    tag=signal_obj.strategy_id,
                 )
 
                 # Read back the actual fill price the broker booked so
