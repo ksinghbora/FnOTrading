@@ -213,14 +213,44 @@ class StrategyRunner:
             except Exception as e:
                 logger.exception(f"Strategy {strategy.strategy_id} on_candle error: {e}")
 
+    def _resolve_strategy(self, strategy_id: str) -> "BaseStrategy | None":
+        """Resolve a strategy_id, falling back to the orchestrator parent.
+
+        Orchestrator children carry composite ids like ``orchestrator_1/iron_condor``
+        — the runner's ``_strategies`` dict only contains the parent
+        ``orchestrator_1``. Direct lookup misses the child, leaving order
+        fills stranded (child's on_order_update never fires) and signals
+        un-shadow-checked. This helper:
+
+          1. Tries direct lookup (covers standalone strategies)
+          2. If id has '/', falls back to the prefix lookup (covers
+             orchestrator children — the parent owns on_order_update
+             which forwards to the active child)
+
+        Returns None when neither resolves.
+        """
+        s = self._strategies.get(strategy_id)
+        if s is not None:
+            return s
+        if "/" in strategy_id:
+            parent_id = strategy_id.split("/", 1)[0]
+            return self._strategies.get(parent_id)
+        return None
+
     async def _on_order_update(self, event: Event) -> None:
-        """Dispatch order updates to the relevant strategy."""
+        """Dispatch order updates to the relevant strategy.
+
+        For orchestrated children, the order's strategy_id is the
+        composite (e.g. ``orchestrator_1/iron_condor``); we resolve to
+        the parent orchestrator and let its ``on_order_update``
+        forward to the matching child.
+        """
         order_data = event.payload.get("order")
         if not order_data:
             return
 
         order = Order(**order_data)
-        strategy = self._strategies.get(order.strategy_id)
+        strategy = self._resolve_strategy(order.strategy_id)
         if strategy:
             try:
                 await strategy.on_order_update(order)
@@ -242,7 +272,14 @@ class StrategyRunner:
         # subsequent on_tick exit logic fires; it just never moves capital.
         # The decision logger has already captured the entry/exit context, so
         # offline reconstruction can compare champion vs. shadow P&L.
-        strategy = self._strategies.get(signal.strategy_id)
+        #
+        # For orchestrated children, the signal's strategy_id is the
+        # composite (e.g. ``orchestrator_1/iron_condor``). We resolve to
+        # the parent orchestrator and use ITS shadow_only flag — meaning
+        # the orchestrator-level shadow flag controls all its children's
+        # OMS routing as one unit (intended behaviour: shadowing the
+        # orchestrator means shadowing the whole multi-strategy book).
+        strategy = self._resolve_strategy(signal.strategy_id)
         shadow = bool(getattr(strategy.params, "shadow_only", False)) if strategy else False
         if shadow:
             leg_summary = ", ".join(
@@ -262,7 +299,7 @@ class StrategyRunner:
             await self._order_callback(signal)
             # Persist state after a signal-driven entry/exit lands. Catches
             # the gap where a strategy flipped its flags but no fill arrives yet.
-            strategy = self._strategies.get(signal.strategy_id)
+            strategy = self._resolve_strategy(signal.strategy_id)
             if strategy:
                 await self._persist_state(strategy)
         except Exception as e:
