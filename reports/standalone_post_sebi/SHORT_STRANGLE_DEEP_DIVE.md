@@ -1,15 +1,60 @@
 # Short Strangle on Indian Post-SEBI — Deep Dive on Proven Parameters
 
-**Date:** May 7 2026
-**Status:** Comprehensive bottom-up analysis grounded in 5-year US backtests
-+ 10-year NIFTY backtests + Indian-quant practitioner research +
-post-SEBI rule interactions
+**Date:** May 7 2026 (revised same day after honest evidentiary review)
+**Status:** Comprehensive bottom-up analysis with **explicit
+Indian-validated vs US-extrapolated separation**.
 **Goal:** Identify what is EMPIRICALLY PROVEN to work for short strangle
 on Indian post-SEBI options, not what's theoretically attractive.
 
 This supersedes the earlier `SHORT_STRANGLE_ANALYSIS.md` (commit 9c0b8c7)
 which was structural-comparison-focused. This doc is parameter-by-parameter
 empirical evidence.
+
+## ⚠️ Honest evidentiary breakdown (added in revision)
+
+The original draft conflated US-validated and Indian-validated findings.
+On second pass, here's the cleaner breakdown:
+
+### Indian-market-validated (HIGH CONFIDENCE)
+- DoW filter Tue/Wed/Thu — Anurag Goel NIFTY backtest Sharpe 1.96
+- Pre-event T-1 block — Sahi/ResearchGate India VIX seasonality
+- Hedged variant mandatory — SEBI Nov 2024 ELM rule
+- v2 regime gate (CI+VRP) — our IC v2 holdout +₹584/324 trades
+- Calendar filter on premium-selling — our IC v2 + cal +₹13.1/trade
+- VIX 13-18 band — India VIX historical mean ~15
+- Adjustment direction (roll untested) — Indian-quant canonical
+
+### US-extrapolated (MEDIUM CONFIDENCE — needs Indian smoke validation)
+- **0.20Δ vs 0.15Δ** — only 5-year US data, no Indian A/B exists
+- **25% profit target** — TastyTrade canonical, not Indian-tested
+- **0.30Δ adjustment trigger** — mentioned in Indian guides but not
+  backtested at this exact threshold
+- VIX 18 ceiling vs 16 — theoretical (hedged tolerates more)
+
+### Indian data points that DON'T cleanly answer the delta question
+
+| Source | Delta | Result | Caveat |
+|---|---|---|---|
+| PL Capital | 0.15Δ | "24% per annum" | Pre-SEBI, monthly, no rigorous backtest |
+| 10-year NIFTY | 0.30Δ | 62% WR | Excludes COVID, not 0.20Δ |
+| Anurag Goel | 0.40Δ | Sharpe 1.96 | DoW filter only, very different delta |
+| Bank Nifty 2017-2020 | default | 68% WR | Pre-SEBI, doesn't translate |
+| Streak NIFTY weekly | OTM±2 | 64.5% WR | Not delta-specified |
+
+**No Indian-specific A/B between 0.15Δ and 0.20Δ exists in public
+data.** The recommendation below extrapolates from US 5-year data
++ Indian-quant practitioner range (0.20-0.30 per SAMCO).
+
+### What this means for deployment
+
+DON'T change default from 0.15Δ to 0.20Δ purely on US data.
+DO run an Indian-specific smoke A/B (Phase 2 below) before locking
+in the delta choice. The phased deployment plan reflects this:
+
+1. **Phase 1** (high-confidence Indian transfer): wire v2 + calendar
+   gates, keep 0.15Δ for now → smoke
+2. **Phase 2** (Indian-specific A/B): smoke 0.15 vs 0.20 vs 0.25 delta
+3. **Phase 3** (Indian-validated adjustments): wire roll-untested-side
 
 ## Executive summary
 
