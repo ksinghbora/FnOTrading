@@ -191,26 +191,20 @@ class ShortStrangleStrategy(BaseStrategy):
 
     async def _try_entry(self) -> Signal | None:
         """Select strikes by delta and enter."""
-        # --- Signal scoring ---
+        # --- Signal scoring (always logged; gating is mode-dependent) ---
         score, reasons = self._compute_score()
         reasons_str = ", ".join(reasons)
         logger.info(
             f"[SIGNAL_SCORE] strategy={self.strategy_id} score={score}/100 [{reasons_str}]"
         )
-        # All entry-skip lines below are routed through _log_skip_throttled
-        # so a sustained block (e.g. 0DTE expiry day) emits one line/min/
-        # reason instead of one line/tick. Apr 21 produced thousands of
-        # identical "Entry skipped" lines per strategy. The dedup key
-        # partitions reasons so a state flip (e.g. VIX moves out of band
-        # → score recovers) surfaces on the next tick.
-        # Apr 29 Phase 2: threshold sourced from params (was hardcoded 60).
-        score_thr = int(self.params.entry_score_threshold)
-        if score < score_thr:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_SCORE",
-                f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
-            )
-            return None
+        # May 7 2026 Phase 1 fix: the score gate moved INTO the legacy
+        # else-branch below (matches IC v2's structure). When
+        # require_premium_selling_regime_v2=True, the score gate is
+        # bypassed — only the v2 regime gate (CI+VRP) decides. This
+        # fix was necessary because the score gate was killing entries
+        # at score 22/100 even when the v2 gate would have allowed them
+        # (the SS Phase 1 first-smoke saw only 9 trips because the
+        # score gate filtered nearly everything before v2 ran).
 
         # Expiry-day 0DTE block — never enter naked premium when today == expiry
         expiry_block = self._check_expiry_day_block(self.params.underlying)
@@ -296,6 +290,18 @@ class ShortStrangleStrategy(BaseStrategy):
             # to chain selection.
         else:
             # ─── Legacy heuristic-filter pipeline (default behaviour) ─
+
+            # Apr 29 Phase 2: threshold sourced from params (was
+            # hardcoded 60). Moved here from the top of _try_entry so
+            # it only gates in legacy mode — when v2 regime gate is
+            # active, we let CI+VRP decide and skip the score check.
+            score_thr = int(self.params.entry_score_threshold)
+            if score < score_thr:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_SCORE",
+                    f"[{self.strategy_id}] Entry skipped: signal score {score}/100 < {score_thr}",
+                )
+                return None
 
             # VIX filter — skip entry in high-volatility environments
             vix_block = self._check_vix_filter()
