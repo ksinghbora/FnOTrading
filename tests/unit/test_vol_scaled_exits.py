@@ -23,7 +23,6 @@ import pytest
 from src.strategy.base import BaseStrategy
 from src.strategy.params import (
     BaseStrategyParams,
-    PortfolioParams,
     ShortStrangleParams,
 )
 
@@ -75,10 +74,10 @@ class TestOptInBehavior:
         assert strat._compute_vol_scaled_exit_pct("pt", 1, 12.0) == 12.0
         assert strat._compute_vol_scaled_exit_pct("trail", 1, 10.0) == 10.0
 
-    def test_default_portfolio_params_preserves_hardcoded_values(self):
+    def test_default_base_params_preserves_hardcoded_values(self):
         # The whole point of the opt-in flag: existing backtest results
         # must be reproducible without any code-side behavior change.
-        params = PortfolioParams()
+        params = BaseStrategyParams()
         assert params.vol_scaled_exits is False
         # And the new multiplier params have the calibrated defaults.
         assert params.sl_vol_k == 12.0

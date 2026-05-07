@@ -23,8 +23,12 @@ import pandas as pd
 import pytest
 
 from src.backtest.validation.regime import bucket_row
-from src.strategy.implementations.portfolio_strategy import PortfolioStrategy
-from src.strategy.params import PortfolioParams
+# After PortfolioStrategy was retired (May 7 2026), this parity test
+# uses IronCondorStrategy as the concrete BaseStrategy subclass —
+# ``_current_regime_labels`` and ``_check_blocked_regime`` are inherited
+# from BaseStrategy and behave identically across all strategy classes.
+from src.strategy.calibrations.iron_condor import IronCondorParams
+from src.strategy.implementations.iron_condor import IronCondorStrategy
 
 
 # ── Scenario grid ───────────────────────────────────────────────────
@@ -56,14 +60,14 @@ def _make_runtime_strategy(
     now: datetime,
     expiry: date | None,
     event_dates: dict[date, str],
-) -> PortfolioStrategy:
-    """Build a mocked PortfolioStrategy that feeds the runtime classifier.
+) -> IronCondorStrategy:
+    """Build a mocked IronCondorStrategy that feeds the runtime classifier.
 
     Stubs cover exactly the context surface ``_current_regime_labels`` +
     ``_move_from_open_pct`` read: get_vix, get_spot_price, clock.now,
     get_candles, and the chain_builder's _spot_tokens dict.
     """
-    s = PortfolioStrategy("test_parity", PortfolioParams())
+    s = IronCondorStrategy("test_parity", IronCondorParams())
 
     ctx = MagicMock()
     ctx.get_vix = MagicMock(return_value=vix)
@@ -208,8 +212,7 @@ def test_blocked_regime_respects_params_default() -> None:
         expiry=date(2026, 4, 30),
         event_dates={},
     )
-    # PortfolioParams inherits BaseStrategyParams.blocked_regimes=[] and
-    # does NOT override it (portfolio uses premium_blocked_regimes /
-    # trend_blocked_regimes instead). So a call without an explicit list
-    # falls through to []: no block.
+    # IronCondorParams inherits BaseStrategyParams.blocked_regimes=[]
+    # by default. A call without an explicit list falls through to []:
+    # no block.
     assert s._check_blocked_regime("NIFTY", s._expiry) is None

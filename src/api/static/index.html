@@ -105,77 +105,6 @@ body {
 .pnl-card .value.positive { color: var(--green); }
 .pnl-card .value.negative { color: var(--red); }
 
-/* Portfolio Legs */
-.legs-panel {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.leg-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-.leg-card .leg-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.leg-card .leg-title {
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.leg-card .leg-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-.leg-badge.active { background: rgba(0,196,140,0.15); color: var(--green); }
-.leg-badge.idle { background: rgba(139,144,160,0.15); color: var(--text2); }
-.leg-badge.stopped { background: rgba(255,71,87,0.15); color: var(--red); }
-.leg-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 3px 0;
-  color: var(--text2);
-}
-.leg-row .leg-val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-.leg-row .leg-val.positive { color: var(--green); }
-.leg-row .leg-val.negative { color: var(--red); }
-.leg-greeks {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-.greek-cell {
-  text-align: center;
-  font-size: 11px;
-}
-.greek-cell .greek-label { color: var(--text2); }
-.greek-cell .greek-val { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-.gamma-bar {
-  margin-top: 8px;
-  height: 4px;
-  background: var(--bg3);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.gamma-bar-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s;
-}
-
 /* Risk Bar */
 .risk-bar {
   display: flex;
@@ -661,78 +590,6 @@ tr:hover { background: rgba(74, 158, 255, 0.04); }
     <button class="kill-btn" id="killBtn" onclick="activateKillSwitch()">Kill Switch</button>
   </div>
 
-  <!-- Portfolio Legs (visible when portfolio strategy is running) -->
-  <div class="legs-panel" id="legsPanel" style="display:none">
-    <!-- Premium Leg -->
-    <div class="leg-card">
-      <div class="leg-header">
-        <span class="leg-title">Premium Leg</span>
-        <span class="leg-badge idle" id="premBadge">IDLE</span>
-      </div>
-      <div id="premBody">
-        <div class="leg-row"><span>Mode</span><span class="leg-val" id="premMode">—</span></div>
-        <div class="leg-row"><span>Score</span><span class="leg-val" id="premScore">—</span></div>
-        <div class="leg-row"><span>Entry Premium</span><span class="leg-val" id="premEntry">—</span></div>
-        <div class="leg-row"><span>Current</span><span class="leg-val" id="premCurrent">—</span></div>
-        <div class="leg-row"><span>Unrealized P&L</span><span class="leg-val" id="premPnl">—</span></div>
-        <div class="leg-row"><span>Held</span><span class="leg-val" id="premHeld">—</span></div>
-        <div class="leg-greeks">
-          <div class="greek-cell"><div class="greek-label">&Delta;</div><div class="greek-val" id="premDelta">—</div></div>
-          <div class="greek-cell"><div class="greek-label">&Gamma;</div><div class="greek-val" id="premGamma">—</div></div>
-          <div class="greek-cell"><div class="greek-label">&Theta;</div><div class="greek-val" id="premTheta">—</div></div>
-          <div class="greek-cell"><div class="greek-label">V</div><div class="greek-val" id="premVega">—</div></div>
-        </div>
-        <div class="leg-row" style="margin-top:6px"><span>Gamma Exp</span><span class="leg-val" id="premGammaExp">—</span></div>
-        <div class="gamma-bar"><div class="gamma-bar-fill" id="premGammaBar" style="width:0%;background:var(--green)"></div></div>
-        <div class="leg-row"><span>&Theta;/&Gamma; Efficiency</span><span class="leg-val" id="premThetaEff">—</span></div>
-      </div>
-    </div>
-
-    <!-- Trend Leg -->
-    <div class="leg-card">
-      <div class="leg-header">
-        <span class="leg-title">Trend Leg</span>
-        <span class="leg-badge idle" id="trendBadge">IDLE</span>
-      </div>
-      <div id="trendBody">
-        <div class="leg-row"><span>Direction</span><span class="leg-val" id="trendDir">—</span></div>
-        <div class="leg-row"><span>Score</span><span class="leg-val" id="trendScore">—</span></div>
-        <div class="leg-row"><span>Entry Debit</span><span class="leg-val" id="trendEntry">—</span></div>
-        <div class="leg-row"><span>Current Value</span><span class="leg-val" id="trendCurrent">—</span></div>
-        <div class="leg-row"><span>Max Spread</span><span class="leg-val" id="trendMax">—</span></div>
-        <div class="leg-row"><span>Unrealized P&L</span><span class="leg-val" id="trendPnl">—</span></div>
-        <div class="leg-row"><span>Held</span><span class="leg-val" id="trendHeld">—</span></div>
-        <div class="leg-greeks">
-          <div class="greek-cell"><div class="greek-label">&Delta;</div><div class="greek-val" id="trendDelta">—</div></div>
-          <div class="greek-cell"><div class="greek-label">&Gamma;</div><div class="greek-val" id="trendGamma">—</div></div>
-          <div class="greek-cell"><div class="greek-label">&Theta;</div><div class="greek-val" id="trendTheta">—</div></div>
-          <div class="greek-cell"><div class="greek-label">V</div><div class="greek-val" id="trendVega">—</div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Day Summary -->
-    <div class="leg-card">
-      <div class="leg-header">
-        <span class="leg-title">Day Summary</span>
-        <span class="leg-badge" id="dayBadge" style="background:rgba(74,158,255,0.15);color:var(--blue)">LIVE</span>
-      </div>
-      <div id="dayBody">
-        <div class="leg-row"><span>Premium Realized</span><span class="leg-val" id="dayPremReal">—</span></div>
-        <div class="leg-row"><span>Premium Unrealized</span><span class="leg-val" id="dayPremUnreal">—</span></div>
-        <div class="leg-row"><span>Trend Realized</span><span class="leg-val" id="dayTrendReal">—</span></div>
-        <div class="leg-row"><span>Trend Unrealized</span><span class="leg-val" id="dayTrendUnreal">—</span></div>
-        <div class="leg-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
-          <span style="font-weight:600">Total P&L</span>
-          <span class="leg-val" id="dayTotal" style="font-size:14px">—</span>
-        </div>
-        <div class="leg-row" style="margin-top:8px"><span>Premium Trades</span><span class="leg-val" id="dayPremTrades">0</span></div>
-        <div class="leg-row"><span>Trend Trades</span><span class="leg-val" id="dayTrendTrades">0</span></div>
-        <div class="leg-row" style="margin-top:6px"><span>Spot</span><span class="leg-val" id="diagSpot">—</span></div>
-        <div class="leg-row"><span>VIX</span><span class="leg-val" id="diagVix">—</span></div>
-      </div>
-    </div>
-  </div>
 
   <!-- Multi-Strategy Comparison Panel -->
   <div class="panel" id="strategyComparePanel" style="margin-bottom:16px">
@@ -1404,7 +1261,6 @@ function renderStrategyComparison() {
 
   // Strategy type labels (keyed by registered name from the API)
   const typeLabels = {
-    'portfolio': 'Portfolio (IC+Trend)',
     'orchestrator': 'Orchestrator (V5)',
     'iron_condor': 'Iron Condor',
     'iron_butterfly': 'Iron Butterfly',
@@ -1418,7 +1274,6 @@ function renderStrategyComparison() {
   };
 
   const typeColors = {
-    'portfolio': 'var(--blue)',
     'orchestrator': 'var(--blue)',
     'iron_condor': 'var(--purple)',
     'iron_butterfly': 'var(--purple)',
@@ -1480,135 +1335,6 @@ function renderStrategyComparison() {
   </tr>`;
 }
 
-// ── Portfolio Diagnostics ─────────────────────────────────────────
-// The legacy unified PortfolioStrategy publishes a per-tick diagnostics
-// dict (premium leg, trend leg, day summary). When no portfolio
-// strategy is in the deployment (V5 world: orchestrator + per-strategy
-// shadows replace the legacy unified strategy), this entire panel
-// hides cleanly. The Strategy Comparison panel above continues to
-// show all per-strategy P&L for the new mix.
-let portfolioStrategyId = null;
-
-async function fetchDiagnostics() {
-  // Auto-detect portfolio strategy from strategy list:
-  //   1. Primary: canonical name === 'portfolio' (set by API)
-  //   2. Fallback: state_data has 'premium_mode' key (older daemon
-  //      versions before name field was added)
-  if (!portfolioStrategyId && strategies.length) {
-    let ps = strategies.find(s => s.name === 'portfolio');
-    if (!ps) {
-      ps = strategies.find(s => s.state_data && 'premium_mode' in s.state_data);
-    }
-    if (ps) portfolioStrategyId = ps.strategy_id;
-  }
-  // Re-validate that the cached strategy is still in the deployment.
-  // Operators may retire portfolio_1 via .env STRATEGIES — once the
-  // daemon reboots without it, this check unsets the cache.
-  if (portfolioStrategyId && !strategies.some(s => s.strategy_id === portfolioStrategyId)) {
-    portfolioStrategyId = null;
-  }
-  if (!portfolioStrategyId) {
-    document.getElementById('legsPanel').style.display = 'none';
-    return;
-  }
-
-  const data = await api(`/api/strategies/${portfolioStrategyId}/diagnostics`);
-  if (!data) {
-    document.getElementById('legsPanel').style.display = 'none';
-    return;
-  }
-  document.getElementById('legsPanel').style.display = '';
-  renderDiagnostics(data);
-}
-
-function renderDiagnostics(d) {
-  const p = d.premium;
-  const t = d.trend;
-  const day = d.day;
-
-  // Premium badge
-  const premBadge = document.getElementById('premBadge');
-  if (p.active) { premBadge.textContent = p.mode.toUpperCase(); premBadge.className = 'leg-badge active'; }
-  else if (p.stopped) { premBadge.textContent = 'STOPPED'; premBadge.className = 'leg-badge stopped'; }
-  else { premBadge.textContent = 'IDLE'; premBadge.className = 'leg-badge idle'; }
-
-  document.getElementById('premMode').textContent = p.mode;
-  document.getElementById('premScore').textContent = p.score + '/100';
-  document.getElementById('premEntry').textContent = p.active ? p.entry_premium.toFixed(2) : '—';
-  document.getElementById('premCurrent').textContent = p.active ? p.current_premium.toFixed(2) : '—';
-  setPnlClass('premPnl', p.unrealized_pnl);
-  document.getElementById('premHeld').textContent = p.active ? p.held_minutes + 'min' : '—';
-
-  // Premium Greeks
-  if (p.active) {
-    document.getElementById('premDelta').textContent = p.greeks.delta.toFixed(1);
-    document.getElementById('premGamma').textContent = p.greeks.gamma.toFixed(4);
-    document.getElementById('premTheta').textContent = p.greeks.theta.toFixed(2);
-    document.getElementById('premVega').textContent = p.greeks.vega.toFixed(2);
-
-    // Gamma exposure bar
-    const gPct = Math.min(100, (p.gamma_exposure / p.gamma_threshold) * 100);
-    const gBar = document.getElementById('premGammaBar');
-    gBar.style.width = gPct + '%';
-    gBar.style.background = gPct > 80 ? 'var(--red)' : gPct > 50 ? 'var(--yellow)' : 'var(--green)';
-    document.getElementById('premGammaExp').textContent =
-      p.gamma_exposure.toFixed(0) + '/' + p.gamma_threshold.toFixed(0);
-
-    document.getElementById('premThetaEff').textContent =
-      p.theta_efficiency >= 999 ? '∞' : p.theta_efficiency.toFixed(1);
-  } else {
-    ['premDelta','premGamma','premTheta','premVega','premGammaExp','premThetaEff'].forEach(
-      id => document.getElementById(id).textContent = '—'
-    );
-    document.getElementById('premGammaBar').style.width = '0%';
-  }
-
-  // Trend badge
-  const trendBadge = document.getElementById('trendBadge');
-  if (t.active) { trendBadge.textContent = t.direction.toUpperCase(); trendBadge.className = 'leg-badge active'; }
-  else if (t.stopped) { trendBadge.textContent = 'STOPPED'; trendBadge.className = 'leg-badge stopped'; }
-  else { trendBadge.textContent = 'IDLE'; trendBadge.className = 'leg-badge idle'; }
-
-  document.getElementById('trendDir').textContent = t.direction || '—';
-  document.getElementById('trendScore').textContent = t.score + '/100';
-  document.getElementById('trendEntry').textContent = t.active ? t.entry_debit.toFixed(2) : '—';
-  document.getElementById('trendCurrent').textContent = t.active ? t.current_value.toFixed(2) : '—';
-  document.getElementById('trendMax').textContent = t.active ? t.max_spread.toFixed(2) : '—';
-  setPnlClass('trendPnl', t.unrealized_pnl);
-  document.getElementById('trendHeld').textContent = t.active ? t.held_minutes + 'min' : '—';
-
-  // Trend Greeks
-  if (t.active) {
-    document.getElementById('trendDelta').textContent = t.greeks.delta.toFixed(1);
-    document.getElementById('trendGamma').textContent = t.greeks.gamma.toFixed(4);
-    document.getElementById('trendTheta').textContent = t.greeks.theta.toFixed(2);
-    document.getElementById('trendVega').textContent = t.greeks.vega.toFixed(2);
-  } else {
-    ['trendDelta','trendGamma','trendTheta','trendVega'].forEach(
-      id => document.getElementById(id).textContent = '—'
-    );
-  }
-
-  // Day summary
-  setPnlClass('dayPremReal', day.premium_realized);
-  setPnlClass('dayPremUnreal', day.premium_unrealized);
-  setPnlClass('dayTrendReal', day.trend_realized);
-  setPnlClass('dayTrendUnreal', day.trend_unrealized);
-  setPnlClass('dayTotal', day.total_pnl);
-  document.getElementById('dayPremTrades').textContent = day.premium_trades;
-  document.getElementById('dayTrendTrades').textContent = day.trend_trades;
-  document.getElementById('diagSpot').textContent = d.spot.toLocaleString('en-IN', {maximumFractionDigits: 2});
-  document.getElementById('diagVix').textContent = d.vix.toFixed(2);
-}
-
-function setPnlClass(id, val) {
-  const el = document.getElementById(id);
-  const n = parseFloat(val);
-  el.textContent = formatCurrency(val);
-  el.classList.remove('positive', 'negative');
-  if (n > 0) el.classList.add('positive');
-  else if (n < 0) el.classList.add('negative');
-}
 
 // ── Init ────────────────────────────────────────────────────────
 async function fetchAll() {
@@ -1619,8 +1345,6 @@ async function fetchAll() {
     fetchStrategies(),
     fetchRisk()
   ]);
-  // Fetch diagnostics after strategies are loaded (needs strategy list)
-  fetchDiagnostics();
   renderStrategyComparison();
 }
 

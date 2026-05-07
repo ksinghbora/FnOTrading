@@ -30,8 +30,7 @@ src/strategy/calibrations/
 ├── trend_daily.py
 ├── trend_itm.py
 ├── trend_debit_spread.py
-├── orchestrator.py         ← OrchestratorParams (no scoring config)
-└── portfolio.py            ← PortfolioParams (legacy unified strategy)
+└── orchestrator.py         ← OrchestratorParams (no scoring config)
 ```
 
 ## What each module exports

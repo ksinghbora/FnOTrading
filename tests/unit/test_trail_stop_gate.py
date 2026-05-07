@@ -154,8 +154,3 @@ class TestWiredIntoStrategies:
         src = inspect.getsource(short_straddle)
         assert "_can_activate_trail_stop" in src
 
-    def test_portfolio_strategy_calls_gate(self):
-        from src.strategy.implementations import portfolio_strategy
-        import inspect
-        src = inspect.getsource(portfolio_strategy)
-        assert "_can_activate_trail_stop" in src

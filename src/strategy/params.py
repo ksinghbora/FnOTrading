@@ -1,14 +1,8 @@
 """Strategy parameter schemas.
 
-May 7 2026 — params class definitions for ACTIVE strategies have moved
-into per-strategy calibration modules under
-``src/strategy/calibrations/``. This file is now:
+This file is now:
 
   - The home of ``BaseStrategyParams`` (shared across all strategies)
-  - The home of DORMANT strategy params (delta_neutral, momentum,
-    mean_reversion, calendar_spread, expiry_scalper) that have not been
-    migrated to per-strategy calibration modules because they are not
-    actively recalibrated
   - A backward-compatibility shim: re-exports the migrated classes so
     legacy ``from src.strategy.params import IronCondorParams`` keeps
     working without touching every callsite
@@ -165,67 +159,6 @@ class BaseStrategyParams(BaseModel):
     expected_margin_per_lot_lakhs: float = 2.0
 
 
-# ─── Dormant strategy params (not actively recalibrated) ───────────
-# These remain co-located here because they aren't part of the
-# active V5 orchestrator roster and don't go through the per-strategy
-# calibration workflow. Migrate to per-strategy calibration modules
-# if any of these become candidates for recalibration sweeps.
-
-
-class DeltaNeutralParams(BaseStrategyParams):
-    """Parameters for Delta Neutral strategy."""
-
-    initial_strategy: str = "straddle"       # 'straddle' or 'strangle'
-    delta_threshold: float = 200.0           # Hedge when abs(delta) exceeds this
-    hedge_with: str = "futures"              # 'futures' or 'options'
-    rebalance_interval_minutes: int = 30     # Check delta every N minutes
-    strangle_delta: float = 0.25             # If using strangle as base
-    stop_loss_pct: float = 60.0              # Exit when option premium up X% (0=disabled)
-    max_hedge_lots: int = 3                  # Cap futures hedge to avoid runaway
-
-
-class MomentumParams(BaseStrategyParams):
-    """Parameters for Momentum strategy."""
-
-    lookback_candles: int = 20
-    entry_threshold_pct: float = 0.5         # Enter on X% move
-    timeframe: str = "5m"
-    use_futures: bool = True
-    protective_option_delta: float = 0.30
-    trailing_stop_pct: float = 1.0
-
-
-class MeanReversionParams(BaseStrategyParams):
-    """Parameters for Mean Reversion strategy."""
-
-    bollinger_period: int = 20
-    bollinger_std: float = 2.0
-    rsi_period: int = 14
-    rsi_oversold: float = 30.0
-    rsi_overbought: float = 70.0
-    timeframe: str = "15m"
-
-
-class CalendarSpreadParams(BaseStrategyParams):
-    """Parameters for Calendar Spread strategy."""
-
-    near_expiry_offset_weeks: int = 0        # 0 = current week
-    far_expiry_offset_weeks: int = 4         # 4 weeks out
-    strike_offset_from_atm: int = 0          # 0 = ATM
-    option_type: str = "PE"                  # CE or PE
-
-
-class ExpiryScalperParams(BaseStrategyParams):
-    """Parameters for Expiry Day Scalper strategy."""
-
-    entry_time: time = time(13, 0)           # Start late on expiry day
-    scalp_type: str = "straddle"             # 'straddle', 'strangle', or 'directional'
-    stop_loss_points: float = 20.0           # Tight SL in index points
-    target_points: float = 30.0
-    max_trades: int = 5
-    min_premium: float = 5.0                 # Don't sell below this premium
-
-
 # ─── Backward-compat re-exports (lazy via PEP 562 __getattr__) ─────
 # Active strategies' params classes live in their per-strategy
 # calibration modules. We expose them as attributes of this module
@@ -253,7 +186,6 @@ _PARAMS_REEXPORTS = {
     "TrendITMParams": ("src.strategy.calibrations.trend_itm", "TrendITMParams"),
     "TrendDebitSpreadParams": ("src.strategy.calibrations.trend_debit_spread", "TrendDebitSpreadParams"),
     "OrchestratorParams": ("src.strategy.calibrations.orchestrator", "OrchestratorParams"),
-    "PortfolioParams": ("src.strategy.calibrations.portfolio", "PortfolioParams"),
 }
 
 
@@ -268,7 +200,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "BaseStrategyParams",
-    # Active strategies (live in calibrations/, re-exported)
+    # Active strategies — params class lives in src/strategy/calibrations/<name>.py
     "IronCondorParams",
     "IronButterflyParams",
     "ShortStrangleParams",
@@ -279,11 +211,4 @@ __all__ = [
     "TrendITMParams",
     "TrendDebitSpreadParams",
     "OrchestratorParams",
-    "PortfolioParams",
-    # Dormant strategies (still defined here)
-    "DeltaNeutralParams",
-    "MomentumParams",
-    "MeanReversionParams",
-    "CalendarSpreadParams",
-    "ExpiryScalperParams",
 ]

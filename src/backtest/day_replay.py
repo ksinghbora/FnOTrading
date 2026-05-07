@@ -76,12 +76,16 @@ DEFAULT_RUNS_LOG = Path("data/replay_runs.jsonl")
 #: here when they ship; missing entries fall through to the live-defaults
 #: path with a ``params_source="live (no mapping)"`` breadcrumb in the result.
 _PARAMS_CLASS_BY_STRATEGY: dict[str, str] = {
-    "portfolio": "PortfolioParams",
     "iron_condor": "IronCondorParams",
+    "iron_butterfly": "IronButterflyParams",
     "short_strangle": "ShortStrangleParams",
     "short_straddle": "ShortStraddleParams",
+    "long_calendar": "LongCalendarParams",
+    "long_straddle": "LongStraddleParams",
+    "trend_daily": "TrendDailyParams",
+    "trend_itm": "TrendITMParams",
     "trend_debit_spread": "TrendDebitSpreadParams",
-    "delta_neutral": "DeltaNeutralParams",
+    "orchestrator": "OrchestratorParams",
 }
 
 

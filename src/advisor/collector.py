@@ -287,11 +287,23 @@ def _read_log_lines(log_path: Path) -> list[str]:
 
 
 def _load_current_params(settings: Settings) -> dict:
-    """Load current PortfolioParams from STRATEGIES env var."""
+    """Load current strategy params from STRATEGIES env var.
+
+    May 7 2026 — legacy PortfolioStrategy was retired in favour of the
+    V5 OrchestratorStrategy. Look up the orchestrator's params first;
+    fall back to scanning for the first non-orchestrator strategy
+    (covers single-strategy deployments that don't use the
+    orchestrator). Empty dict when nothing matches; the advisor's
+    downstream consumers handle that as "no params context".
+    """
     try:
         strats = json.loads(settings.strategies)
         for s in strats:
-            if s.get("name") == "portfolio":
+            if s.get("name") == "orchestrator":
+                return s.get("params", {})
+        # Fallback: first registered strategy's params (single-strategy deploys)
+        for s in strats:
+            if s.get("name"):
                 return s.get("params", {})
     except (json.JSONDecodeError, TypeError):
         pass

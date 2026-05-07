@@ -10,7 +10,6 @@ import pytest
 from src.core.constants import VIX_EXTREME, VIX_HIGH, VIX_LOW, VIX_NORMAL
 from src.strategy.params import (
     IronCondorParams,
-    PortfolioParams,
     ShortStraddleParams,
     ShortStrangleParams,
     TrendDebitSpreadParams,
@@ -69,28 +68,6 @@ class TestStrategyEntryBands:
         p = TrendDebitSpreadParams()
         assert p.vix_entry_min == 12.0
         assert p.vix_entry_max == 25.0
-
-
-class TestPortfolioRouterBand:
-    """PortfolioParams encodes the simple 3-band router:
-       <13 sit-out | [13,16) strangle | [16,22] IC | >22 sit-out.
-
-    The Apr 18 attempt to slice this further into a toxic-gap (20,23)
-    + stressed band [23,28] was reverted after the 23-day chain-replay
-    A/B showed it made P&L worse. Sample size (n≤4 in the contested
-    band) was below what the change required to be statistically
-    distinguishable from noise.
-    """
-
-    def test_portfolio_strangle_min_at_complacency_boundary(self):
-        assert PortfolioParams().strangle_vix_min == 13.0
-
-    def test_portfolio_strangle_max_at_strangle_ceiling(self):
-        assert PortfolioParams().strangle_vix_max == 16.0
-
-    def test_portfolio_ic_max_at_event_risk_boundary(self):
-        # Above this: no premium leg at all (event risk).
-        assert PortfolioParams().ic_vix_max == 22.0
 
 
 class TestRegimeRecommendations:

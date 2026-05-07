@@ -49,8 +49,8 @@ from src.backtest import day_replay as dr  # noqa: E402
 # returns on a successful one-day run. Numbers are picked so a hash change
 # is obvious if anything reorders.
 _ENGINE_OK = {
-    "strategy": "portfolio",
-    "strategy_id": "portfolio_replay",
+    "strategy": "iron_condor",
+    "strategy_id": "iron_condor_replay",
     "underlying": "NIFTY",
     "data_source": "replay",
     "snapshot_dir": "data/chain_snapshots",
@@ -116,14 +116,14 @@ def test_resolve_params_prefers_snapshot(tmp_path: Path):
     target = date(2026, 4, 15)
     _write_params_snapshot(
         tmp_path, target,
-        {"PortfolioParams": {"premium_score_threshold": 99, "underlying": "NIFTY"}},
+        {"IronCondorParams": {"profit_target_pct": 99, "underlying": "NIFTY"}},
     )
 
     params, source, snap_dir = dr._resolve_params(
-        target, "portfolio", tmp_path, overrides=None,
+        target, "iron_condor", tmp_path, overrides=None,
     )
 
-    assert params["premium_score_threshold"] == 99
+    assert params["profit_target_pct"] == 99
     assert source.startswith("snapshot:")
     assert snap_dir == str(tmp_path / "2026-04-15")
 
@@ -132,18 +132,18 @@ def test_resolve_params_overrides_win_over_snapshot(tmp_path: Path):
     target = date(2026, 4, 15)
     _write_params_snapshot(
         tmp_path, target,
-        {"PortfolioParams": {"premium_score_threshold": 99}},
+        {"IronCondorParams": {"profit_target_pct": 99}},
     )
     params, _, _ = dr._resolve_params(
-        target, "portfolio", tmp_path,
-        overrides={"premium_score_threshold": 50},
+        target, "iron_condor", tmp_path,
+        overrides={"profit_target_pct": 50},
     )
-    assert params["premium_score_threshold"] == 50
+    assert params["profit_target_pct"] == 50
 
 
 def test_resolve_params_falls_back_to_live_when_snapshot_missing(tmp_path: Path):
     params, source, snap_dir = dr._resolve_params(
-        date(2026, 4, 15), "portfolio", tmp_path, overrides=None,
+        date(2026, 4, 15), "iron_condor", tmp_path, overrides=None,
     )
     # Live defaults always include `underlying`
     assert "underlying" in params
@@ -157,7 +157,7 @@ def test_resolve_params_falls_back_when_snapshot_malformed(tmp_path: Path, caplo
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "params.json").write_text("{not valid json")
 
-    params, source, _ = dr._resolve_params(target, "portfolio", tmp_path, None)
+    params, source, _ = dr._resolve_params(target, "iron_condor", tmp_path, None)
     assert source == "live"
     assert "underlying" in params
 
@@ -166,9 +166,9 @@ def test_resolve_params_falls_back_when_class_key_missing(tmp_path: Path):
     target = date(2026, 4, 15)
     _write_params_snapshot(
         tmp_path, target,
-        {"SomeOtherParams": {"foo": 1}},  # no PortfolioParams entry
+        {"SomeOtherParams": {"foo": 1}},  # no IronCondorParams entry
     )
-    params, source, _ = dr._resolve_params(target, "portfolio", tmp_path, None)
+    params, source, _ = dr._resolve_params(target, "iron_condor", tmp_path, None)
     assert source == "live"
     assert "underlying" in params
 
@@ -180,9 +180,9 @@ def test_resolve_params_skips_class_with_snapshot_error(tmp_path: Path):
     target = date(2026, 4, 15)
     _write_params_snapshot(
         tmp_path, target,
-        {"PortfolioParams": {"_snapshot_error": "ValueError: missing field x"}},
+        {"IronCondorParams": {"_snapshot_error": "ValueError: missing field x"}},
     )
-    params, source, _ = dr._resolve_params(target, "portfolio", tmp_path, None)
+    params, source, _ = dr._resolve_params(target, "iron_condor", tmp_path, None)
     assert source == "live"
 
 
@@ -219,13 +219,13 @@ async def test_replay_hash_is_stable_across_runs(tmp_path: Path, monkeypatch):
     runs_log = tmp_path / "runs.jsonl"
 
     r1 = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=runs_log, seed=0,
     )
     r2 = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=runs_log, seed=0,
@@ -244,7 +244,7 @@ async def test_replay_hash_changes_when_params_change(tmp_path: Path, monkeypatc
     snap_root = tmp_path / "snapshots"
 
     r_default = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=snap_root, chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=None, seed=0,
@@ -252,11 +252,11 @@ async def test_replay_hash_changes_when_params_change(tmp_path: Path, monkeypatc
 
     # Same engine result, but different params via override.
     r_overridden = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=snap_root, chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=None, seed=0,
-        extra_params={"premium_score_threshold": 999},
+        extra_params={"profit_target_pct": 999},
     )
 
     assert r_default.params_sha != r_overridden.params_sha
@@ -271,7 +271,7 @@ async def test_replay_hash_changes_when_engine_pnl_changes(tmp_path: Path, monke
 
     _patch_engine(monkeypatch, _ENGINE_OK)
     r1 = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=snap_root, chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=None, seed=0,
@@ -281,7 +281,7 @@ async def test_replay_hash_changes_when_engine_pnl_changes(tmp_path: Path, monke
     perturbed["final_pnl"] = 9999.99  # different P&L
     _patch_engine(monkeypatch, perturbed)
     r2 = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=snap_root, chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=tmp_path / "vix.csv",
         runs_log=None, seed=0,
@@ -298,7 +298,7 @@ async def test_engine_error_returns_result_with_error_field(tmp_path: Path, monk
     _patch_engine(monkeypatch, {"error": "No spot data loaded"})
 
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=None,
@@ -318,7 +318,7 @@ async def test_engine_exception_is_swallowed_into_error(tmp_path: Path, monkeypa
     monkeypatch.setattr("src.backtest.day_replay.ReplayBacktestEngine.run", mock)
 
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=None,
@@ -338,7 +338,7 @@ async def test_runs_log_appends_one_line_per_call(tmp_path: Path, monkeypatch):
 
     for _ in range(3):
         await dr.replay_day(
-            target_date=date(2026, 4, 15), strategy_name="portfolio",
+            target_date=date(2026, 4, 15), strategy_name="iron_condor",
             snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
             spot_csv=tmp_path / "spot.csv", vix_csv=None,
             runs_log=runs_log,
@@ -349,7 +349,7 @@ async def test_runs_log_appends_one_line_per_call(tmp_path: Path, monkeypatch):
     for line in lines:
         rec = json.loads(line)
         assert rec["date"] == "2026-04-15"
-        assert rec["strategy"] == "portfolio"
+        assert rec["strategy"] == "iron_condor"
         assert rec["replay_hash"]
         assert rec["params_sha"]
         assert "run_at" in rec
@@ -364,7 +364,7 @@ async def test_runs_log_records_failed_runs_too(tmp_path: Path, monkeypatch):
     runs_log = tmp_path / "runs.jsonl"
 
     await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=runs_log,
@@ -379,7 +379,7 @@ async def test_runs_log_records_failed_runs_too(tmp_path: Path, monkeypatch):
 async def test_no_runs_log_when_disabled(tmp_path: Path, monkeypatch):
     _patch_engine(monkeypatch, _ENGINE_OK)
     await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=None,
@@ -396,7 +396,7 @@ async def test_no_runs_log_when_disabled(tmp_path: Path, monkeypatch):
 async def test_result_shape_on_success(tmp_path: Path, monkeypatch):
     _patch_engine(monkeypatch, _ENGINE_OK)
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         underlying="NIFTY",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
@@ -404,7 +404,7 @@ async def test_result_shape_on_success(tmp_path: Path, monkeypatch):
     )
 
     assert result.date == "2026-04-15"
-    assert result.strategy == "portfolio"
+    assert result.strategy == "iron_condor"
     assert result.underlying == "NIFTY"
     assert result.seed == 42
     assert result.total_pnl == pytest.approx(1234.5678, rel=1e-6)
@@ -441,7 +441,7 @@ async def test_snapshot_config_emits_params_json(tmp_path: Path, monkeypatch):
     assert params_json.exists(), "snapshot_config must emit params.json sidecar"
     blob = json.loads(params_json.read_text())
     # Must contain the key day_replay looks up by name
-    assert "PortfolioParams" in blob
+    assert "IronCondorParams" in blob
     # Manifest must include the file's SHA
     manifest = json.loads((out / "manifest.json").read_text())
     assert "params.json" in manifest["files"]
@@ -459,7 +459,7 @@ async def test_loader_consumes_real_snapshot_config_output(tmp_path: Path, monke
 
     _patch_engine(monkeypatch, _ENGINE_OK)
     result = await dr.replay_day(
-        target_date=target, strategy_name="portfolio",
+        target_date=target, strategy_name="iron_condor",
         snapshot_root=tmp_path, chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=None,
@@ -472,11 +472,12 @@ async def test_loader_consumes_real_snapshot_config_output(tmp_path: Path, monke
 # Mapping — production strategy is covered
 # ────────────────────────────────────────────────────────────────────
 
-def test_portfolio_strategy_is_in_mapping():
-    """Portfolio is the only profitable strategy on real data per MEMORY.md.
-    If someone removes it from the mapping, this test fires immediately."""
-    assert "portfolio" in dr._PARAMS_CLASS_BY_STRATEGY
-    assert dr._PARAMS_CLASS_BY_STRATEGY["portfolio"] == "PortfolioParams"
+def test_iron_condor_strategy_is_in_mapping():
+    """Iron Condor is the canonical premium-selling strategy in the V5
+    orchestrator roster. If someone removes it from the mapping, this
+    test fires immediately."""
+    assert "iron_condor" in dr._PARAMS_CLASS_BY_STRATEGY
+    assert dr._PARAMS_CLASS_BY_STRATEGY["iron_condor"] == "IronCondorParams"
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -580,7 +581,7 @@ async def test_db_writer_default_none_does_not_touch_db(
 
     runs_log = tmp_path / "runs.jsonl"
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=runs_log,
@@ -602,7 +603,7 @@ async def test_db_writer_inserts_one_row_on_success(
     factory = _FakeSessionFactory()
 
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         underlying="NIFTY",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
@@ -619,7 +620,7 @@ async def test_db_writer_inserts_one_row_on_success(
     row = sess.added[0]
     # Mirror of the in-memory result. Catches accidental field renames.
     assert row.target_date == date(2026, 4, 15)
-    assert row.strategy == "portfolio"
+    assert row.strategy == "iron_condor"
     assert row.underlying == "NIFTY"
     assert row.seed == 7
     assert row.replay_hash == result.replay_hash
@@ -645,7 +646,7 @@ async def test_db_writer_nullifies_engine_columns_on_error(
     factory = _FakeSessionFactory()
 
     await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=None,
@@ -687,7 +688,7 @@ async def test_db_writer_failure_is_caught_and_logged(
 
     with caplog.at_level("WARNING"):
         result = await dr.replay_day(
-            target_date=date(2026, 4, 15), strategy_name="portfolio",
+            target_date=date(2026, 4, 15), strategy_name="iron_condor",
             snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
             spot_csv=tmp_path / "spot.csv", vix_csv=None,
             runs_log=runs_log,
@@ -739,7 +740,7 @@ async def test_db_writer_failure_does_not_block_jsonl(
     runs_log = tmp_path / "runs.jsonl"
 
     result = await dr.replay_day(
-        target_date=date(2026, 4, 15), strategy_name="portfolio",
+        target_date=date(2026, 4, 15), strategy_name="iron_condor",
         snapshot_root=tmp_path / "snapshots", chain_dir=tmp_path,
         spot_csv=tmp_path / "spot.csv", vix_csv=None,
         runs_log=runs_log,
@@ -762,7 +763,7 @@ async def test_persist_to_db_round_trips_run_at_string(monkeypatch):
     factory = _FakeSessionFactory()
     result = dr.DayReplayResult(
         date="2026-04-15",
-        strategy="portfolio",
+        strategy="iron_condor",
         underlying="NIFTY",
         seed=0,
         code_sha="abc123",

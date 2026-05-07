@@ -53,11 +53,10 @@ ACTIVE_ROSTER: list[str] = [
     "trend_itm",
     "trend_debit_spread",
     "orchestrator",
-    "portfolio",
 ]
 
-# Strategies that publish a regime confidence hook (orchestrator and
-# portfolio do not — they don't belong to a regime family).
+# Strategies that publish a regime confidence hook (orchestrator does
+# not — it routes across families rather than belonging to one).
 HAS_REGIME_HOOK: set[str] = {
     "iron_condor", "iron_butterfly",
     "short_strangle", "short_straddle",
@@ -242,13 +241,12 @@ def test_calibration_modules_export_their_params_class():
     from src.strategy.calibrations.trend_itm import TrendITMParams
     from src.strategy.calibrations.trend_debit_spread import TrendDebitSpreadParams
     from src.strategy.calibrations.orchestrator import OrchestratorParams
-    from src.strategy.calibrations.portfolio import PortfolioParams
 
     # Smoke: each is constructible
     for cls in (IronCondorParams, IronButterflyParams, ShortStrangleParams,
                 ShortStraddleParams, LongCalendarParams, LongStraddleParams,
                 TrendDailyParams, TrendITMParams, TrendDebitSpreadParams,
-                OrchestratorParams, PortfolioParams):
+                OrchestratorParams):
         cls()  # default construction should not raise
 
 
@@ -258,7 +256,7 @@ def test_backwards_compat_imports_from_params_module():
         IronCondorParams, IronButterflyParams, ShortStrangleParams,
         ShortStraddleParams, LongCalendarParams, LongStraddleParams,
         TrendDailyParams, TrendITMParams, TrendDebitSpreadParams,
-        OrchestratorParams, PortfolioParams, BaseStrategyParams,
+        OrchestratorParams, BaseStrategyParams,
     )
     # Same identity as the calibration-module export
     from src.strategy.calibrations.iron_condor import IronCondorParams as IC2

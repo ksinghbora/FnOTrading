@@ -1,9 +1,9 @@
 """Tests for the Tuesday 0DTE expiry-day entry block.
 
-Validates the Apr 17 trader-analysis fix: premium-selling strategies (IC,
-strangle, straddle, portfolio premium leg) must never enter new positions
-when today is the weekly NIFTY expiry. The 14:30-15:15 gamma vertical can
-move ATM 100% in minutes, and ITM auto-exercise STT eats any "win".
+Validates the Apr 17 trader-analysis fix: premium-selling strategies
+(IC, IB, strangle, straddle) must never enter new positions when today
+is the weekly NIFTY expiry. The 14:30-15:15 gamma vertical can move
+ATM 100% in minutes, and ITM auto-exercise STT eats any "win".
 """
 
 from datetime import time
@@ -14,7 +14,6 @@ import pytest
 from src.strategy.params import (
     BaseStrategyParams,
     IronCondorParams,
-    PortfolioParams,
     ShortStraddleParams,
     ShortStrangleParams,
 )
@@ -49,9 +48,6 @@ class TestExpiryDayBlockDefaults:
 
     def test_block_default_enabled_on_straddle(self):
         assert ShortStraddleParams().skip_entry_on_expiry_day is True
-
-    def test_block_default_enabled_on_portfolio(self):
-        assert PortfolioParams().skip_entry_on_expiry_day is True
 
     def test_force_exit_default_at_14_30(self):
         # Before the 14:30-15:15 gamma vertical
@@ -103,8 +99,3 @@ class TestExpiryBlockWiredIntoStrategies:
         src = inspect.getsource(short_straddle)
         assert "_check_expiry_day_block" in src
 
-    def test_portfolio_premium_leg_calls_expiry_block(self):
-        from src.strategy.implementations import portfolio_strategy
-        import inspect
-        src = inspect.getsource(portfolio_strategy)
-        assert "_check_expiry_day_block" in src
