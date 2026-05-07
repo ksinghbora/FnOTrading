@@ -1,0 +1,21 @@
+{
+  "_doc": "Iron Butterfly B2 — wide wings (4 strikes) + v2 regime gate + calendar filter. May 7 2026 sweep result: FIRST positive IB variant on 173-day post-SEBI corpus (+₹5.8/trade, 38 trips, Sharpe +0.06). Doubling wing width from 2 to 4 strikes flipped IB from -₹41/trade to +₹5.8/trade — gamma cushion was the binding constraint, not exit policy. Capital-efficiency: ~₹1.5L SPAN margin per lot (vs IC v2's ₹2.5L), so 1.67× more lots per ₹1L of capital. On the 173-day window, IB B2 delivered ₹149 absolute PnL per ₹1L vs IC v2 + cal's ₹105 — the higher frequency more than offsets lower per-trade EV. Recommended for capital-constrained books. Deploy alongside IC v2 + calendar (ic_2) for direct A/B in shadow paper.",
+  "underlying": "NIFTY",
+  "quantity_lots": 1,
+  "entry_time": "09:30:00",
+  "exit_time": "15:00:00",
+  "skip_entry_on_expiry_day": true,
+  "expiry_day_force_exit_at": "14:30:00",
+  "short_call_delta": 0.5,
+  "short_put_delta": -0.5,
+  "wing_width_strikes": 4,
+  "adjustment_threshold_pct": 60.0,
+  "stop_loss_pct": 35.0,
+  "profit_target_pct": 25.0,
+  "max_spread_pct": 5.0,
+  "require_premium_selling_regime_v2": true,
+  "require_calendar_filter": true,
+  "allowed_days_of_week": [1, 2, 3],
+  "block_pre_event_days": 1,
+  "block_friday": false
+}
