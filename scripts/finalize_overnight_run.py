@@ -29,8 +29,9 @@ def update_env_strategies(new_strategies: list) -> None:
     if not ENV_PATH.exists():
         print(f"ERROR: {ENV_PATH} not found", file=sys.stderr)
         return
-    # Backup first
-    backup = ENV_PATH.with_suffix(".env.bak.overnight")
+    # Backup first. Path.with_suffix doesn't work cleanly on dotfiles
+    # like ".env" (suffix is ""), so build the path explicitly.
+    backup = ENV_PATH.parent / ".env.bak.overnight"
     shutil.copy(ENV_PATH, backup)
     print(f"  .env backed up to {backup}")
 
