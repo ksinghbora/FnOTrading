@@ -121,9 +121,17 @@ async def test_orchestrator_per_child_params_isolated():
     # IC got the override
     assert ic.params.wing_width_strikes == 12
     assert ic.params.vix_entry_min == 18.0
-    # IB inherits from IC params class but is a separate instance,
-    # so its wing_width should be the IC default (8), NOT 12
-    assert ib.params.wing_width_strikes == 8
+    # IB inherits from IC params class but is a separate instance.
+    # IB has its OWN class-level default for wing_width_strikes (2 —
+    # the capital-efficient IB hallmark, not 8 like IC). The
+    # orchestrator must not leak IC's override into IB; verify IB
+    # falls back to IB's class default, NOT IC's default and NOT
+    # the override value.
+    from src.strategy.calibrations.iron_butterfly import IronButterflyParams
+    assert ib.params.wing_width_strikes == IronButterflyParams.model_fields[
+        "wing_width_strikes"
+    ].default
+    assert ib.params.wing_width_strikes != 12  # not the IC override
 
 
 # ── Selection logic ────────────────────────────────────────────────

@@ -20,7 +20,23 @@ if TYPE_CHECKING:
 
 
 class ShortStrangleParams(BaseStrategyParams):
-    """Parameters for Short Strangle strategy."""
+    """Parameters for Short Strangle strategy.
+
+    Phase 1.5 risk-management ablation winner (May 7 2026):
+    asymmetric exits with NO trail stop. The 173-day post-SEBI smoke
+    of 5 PT/SL/trail variants found V1 (PT=25, SL=30, NO trail) wins
+    at +₹43.8/trade, 69.4% WR, Sharpe +0.57 — well above the +₹8/trade
+    deploy threshold. The binding constraint was the trail stop, NOT
+    the SL/PT ratio: V3 (PT=25, SL=20, no trail) lost at -₹42/trade
+    because SL=20 trips on routine 1-2σ noise that SL=30 absorbs.
+
+    Reference variants from the ablation:
+      Baseline (PT=15, SL=30, trail=15):    -₹52/trade, Sharpe -0.69
+      V1 (PT=25, SL=30, no trail):          +₹44/trade, Sharpe +0.57 ✓ DEPLOYED
+      V2 (PT=15, SL=20, trail=15):          -₹34/trade
+      V3 (PT=25, SL=20, no trail):          -₹42/trade  ← SL=20 too tight
+      V4 (PT=50, SL=30, no trail) tasty:    +₹42/trade, Sharpe +0.36
+    """
 
     # Strangle ideal band on Indian VIX: 13-16 only
     vix_entry_min: float = 13.0
@@ -28,9 +44,14 @@ class ShortStrangleParams(BaseStrategyParams):
     call_delta: float = 0.15
     put_delta: float = -0.15
     adjustment_delta_threshold: float = 0.25
-    stop_loss_pct: float = 30.0
-    trail_stop_pct: float = 15.0
-    profit_target_pct: float = 15.0
+
+    # ─── Phase 1.5 V1 winner (May 7 2026) ─────────────────────────
+    # PT=25, SL=30, NO trail. Asymmetric profit capture with wide
+    # noise absorption. SL=30 keeps the strategy in trades through
+    # routine intraday whips that a tighter SL=20 would clip.
+    profit_target_pct: float = 25.0          # was 15.0; capture more theta per trip
+    stop_loss_pct: float = 30.0              # unchanged; absorbs 1-2σ noise
+    trail_stop_pct: float = 0.0              # was 15.0; trail was the binding loser
     add_hedge: bool = True
     hedge_offset_strikes: int = 5
 
