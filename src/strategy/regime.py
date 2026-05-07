@@ -1236,6 +1236,219 @@ class RegimeDetector:
         )
         return favourable, metrics
 
+    # ─── V5 (May 7 2026): regime-aware confidence scoring ────────
+    # The boolean v2 gates above (is_premium_selling_favorable_v2,
+    # is_long_vol_favorable_v2, is_long_vol_favorable_v2b) collapse the
+    # underlying market structure into a binary pass/fail. The V5
+    # orchestrator wants a CONTINUOUS confidence in [0.0, 1.0] so it can:
+    #   - Compare strategies of DIFFERENT regime families on a common scale
+    #     (premium-selling vs long-vol vs directional-trend)
+    #   - Implement a cash-floor (refuse to allocate when max-confidence
+    #     across all families is below threshold)
+    #   - Smoothly down-size when conditions are marginal instead of binary
+    #     on/off whipsaw on a tick crossing the threshold
+    #
+    # Each method returns 0.0 (insufficient data or unfavourable) up to
+    # 1.0 (textbook-ideal regime). The math is deliberately simple — a
+    # GEOMETRIC mean of factor sub-scores — so a single failing factor
+    # drives the overall confidence to zero. Arithmetic mean would let a
+    # high-VIX day with VRP < 0 still produce middling confidence for
+    # premium-selling, which is exactly the failure mode we want to AVOID.
+    #
+    # Factor sub-scores are LINEARLY INTERPOLATED between empirically-
+    # derived "fail" and "ideal" anchors. Anchors are the same canonical
+    # thresholds used by the v2 boolean gates (CI 38.2/61.8, VRP 0,
+    # VIX 13/16/22 etc). Where a soft transition makes more sense than
+    # a hard cliff, the interpolation gives 0.0 below the lower anchor,
+    # 1.0 above the upper anchor, and a linear ramp in between.
+
+    def regime_confidence_for_premium_selling(self, underlying: str) -> float:
+        """Continuous confidence (0.0-1.0) that conditions favour premium-selling.
+
+        Combines four orthogonal factors via geometric mean:
+          - CI factor:  range-bound score from Choppiness Index
+                        (0 below CI=38.2 trend threshold; 1 above CI=61.8 range threshold)
+          - VRP factor: variance-risk-premium positivity score
+                        (0 at VRP=-2; 1 at VRP=+2; linear in between)
+          - VIX factor: India-VIX band fitness for short premium
+                        (0 outside 13-22; 1 in the 16-20 ideal IC band; 0.5 at edges)
+          - DoW factor: day-of-week edge from Anurag Goel Sharpe-1.96 NIFTY backtest
+                        (1.0 Tue/Wed/Thu, 0.5 Mon, 0.3 Fri)
+
+        Returns 0.0 when any factor is missing (insufficient data) or
+        any factor pegs to 0 (clearly unfavourable). The 4th-root
+        geometric mean keeps each factor on equal footing and prevents
+        a strong score on three factors masking a structural failure
+        on the fourth.
+        """
+        ci = self.compute_choppiness_index(underlying)
+        vrp = self.compute_vrp(underlying)
+        vix = self._get_vix()
+        if ci is None or vrp is None or vix <= 0:
+            return 0.0
+
+        # CI factor: fail at CI=38.2, ideal at CI=61.8
+        ci_factor = max(0.0, min(1.0,
+            (ci - CHOPPINESS_TREND_THRESHOLD) /
+            (CHOPPINESS_RANGE_THRESHOLD - CHOPPINESS_TREND_THRESHOLD)
+        ))
+
+        # VRP factor: linear ramp -2 → +2 vol-points (annualised)
+        vrp_factor = max(0.0, min(1.0, (vrp + 2.0) / 4.0))
+
+        # VIX factor: NORMAL/HIGH bands ideal; LOW/EXTREME unsuitable
+        if vix < 13.0 or vix > 22.0:
+            vix_factor = 0.0
+        elif 16.0 <= vix <= 20.0:
+            vix_factor = 1.0
+        elif 13.0 <= vix < 16.0:
+            # Strangle band — moderate fit
+            vix_factor = 0.6 + (vix - 13.0) * 0.4 / 3.0
+        else:
+            # 20 < vix <= 22, stressed but defined-risk OK
+            vix_factor = 1.0 - (vix - 20.0) * 0.5 / 2.0
+
+        # DoW factor (matches calendar-filter Anurag Goel canonical)
+        now = self._clock.now() if self._clock is not None else now_ist()
+        dow = now.weekday()
+        dow_factor = {0: 0.5, 1: 1.0, 2: 1.0, 3: 1.0, 4: 0.3}.get(dow, 0.5)
+
+        # 4th-root geometric mean — single-factor failure pulls the whole
+        # confidence to zero (avoids the "good on 3, bad on 1" trap).
+        product = ci_factor * vrp_factor * vix_factor * dow_factor
+        if product <= 0:
+            return 0.0
+        return product ** 0.25
+
+    def regime_confidence_for_long_vol(self, underlying: str) -> float:
+        """Continuous confidence (0.0-1.0) that conditions favour long-vol structures.
+
+        Long-vol = long calendar, long straddle. Profits when IV expands
+        from depressed levels and/or spot moves away from the strike
+        (long straddle) or stays near it (long calendar). The unifying
+        factor is "IV is cheap with room to expand" — VRP < 0.
+
+        Factor decomposition:
+          - VRP factor:  inverse of premium-selling — 1 when VRP ≪ 0,
+                         0 when VRP > 0 (IV is rich, no expansion alpha)
+          - VIX factor:  long-vol wants moderate VIX with expansion room.
+                         0 below 12 (no expansion expected),
+                         1 in 14-20 band (typical expansion zone),
+                         falling off above 22 (already-expanded, late entry)
+          - CI factor:   long calendar prefers range; long straddle prefers
+                         move. Use a NEUTRAL CI factor (1.0 — don't gate)
+                         and let strategy-level configuration decide.
+                         Actually: prefer CI in mid-range (38.2-61.8) where
+                         neither strong trend nor strong chop dominates —
+                         this is where vol mean-reverts cleanly.
+        """
+        vrp = self.compute_vrp(underlying)
+        ci = self.compute_choppiness_index(underlying)
+        vix = self._get_vix()
+        if vrp is None or vix <= 0:
+            return 0.0
+
+        # VRP factor: 1 at VRP=-3, 0 at VRP=+1
+        vrp_factor = max(0.0, min(1.0, (1.0 - vrp) / 4.0))
+
+        # VIX factor: long-vol expansion zone
+        if vix < 12.0 or vix > 25.0:
+            vix_factor = 0.0
+        elif 14.0 <= vix <= 20.0:
+            vix_factor = 1.0
+        elif 12.0 <= vix < 14.0:
+            vix_factor = (vix - 12.0) / 2.0
+        else:
+            # 20 < vix <= 25 — already-expanded, late entry
+            vix_factor = 1.0 - (vix - 20.0) / 5.0
+
+        # CI factor: prefer mid-range (vol mean-reverts cleanly)
+        # 0.5 at CI=0 or CI=100, 1.0 at CI=50, smooth quadratic dropoff
+        if ci is None:
+            ci_factor = 0.5  # Neutral when CI unavailable
+        else:
+            ci_factor = 1.0 - abs(ci - 50.0) / 50.0  # Triangle peak at 50
+            ci_factor = max(0.3, ci_factor)          # Floor — don't kill on extreme CI
+
+        product = vrp_factor * vix_factor * ci_factor
+        if product <= 0:
+            return 0.0
+        return product ** (1.0 / 3.0)
+
+    def regime_confidence_for_directional_trend(self, underlying: str) -> float:
+        """Continuous confidence (0.0-1.0) that conditions favour directional/trend trades.
+
+        Trend strategies (TrendDaily, TrendITM, TrendDebitSpread) profit
+        on sustained directional moves. Detector signals:
+
+          - ADX factor:   trend strength on 5-min spot
+                          (0 at ADX<22; 1 at ADX>28; linear ramp)
+          - VIX factor:   trend wants moderate vol — too low = no breakouts,
+                          too high = mean-reverting whipsaw
+                          (0 outside 12-22; 1 inside 14-20 band)
+          - CI factor:    INVERSE of premium-selling — trend prefers low CI
+                          (0 at CI=61.8 range threshold; 1 at CI=38.2 trend
+                          threshold)
+
+        Trend confidence is structurally the OPPOSITE of premium-selling
+        on the CI dimension. The two should rarely both score high
+        simultaneously — when they do (ADX high AND CI high), the market
+        is in a confusing state and BOTH families should down-size.
+        """
+        ci = self.compute_choppiness_index(underlying)
+        adx = self.compute_adx(underlying)
+        vix = self._get_vix()
+        if adx is None or vix <= 0:
+            return 0.0
+
+        # ADX factor: 0 at 22, 1 at 28+
+        adx_factor = max(0.0, min(1.0, (adx - ADX_RANGE_THRESHOLD) /
+                                       (ADX_TREND_THRESHOLD - ADX_RANGE_THRESHOLD)))
+
+        # VIX factor: trend's sweet spot is moderate vol
+        if vix < 12.0 or vix > 22.0:
+            vix_factor = 0.0
+        elif 14.0 <= vix <= 20.0:
+            vix_factor = 1.0
+        elif 12.0 <= vix < 14.0:
+            vix_factor = (vix - 12.0) / 2.0
+        else:
+            # 20 < vix <= 22
+            vix_factor = 1.0 - (vix - 20.0) / 2.0
+
+        # CI factor: inverse of premium-selling
+        if ci is None:
+            ci_factor = 0.5  # Neutral
+        else:
+            ci_factor = max(0.0, min(1.0,
+                (CHOPPINESS_RANGE_THRESHOLD - ci) /
+                (CHOPPINESS_RANGE_THRESHOLD - CHOPPINESS_TREND_THRESHOLD)
+            ))
+
+        product = adx_factor * vix_factor * ci_factor
+        if product <= 0:
+            return 0.0
+        return product ** (1.0 / 3.0)
+
+    def regime_confidence_snapshot(self, underlying: str) -> dict[str, float]:
+        """Compute confidence for all three regime families in one call.
+
+        Returns a dict {family_name: confidence_0_to_1} suitable for
+        logging and for the OrchestratorStrategy's selection logic. Used
+        by the V5 coordinator to decide:
+          - Which regime family is the strongest fit right now
+          - Whether ANY family clears the cash-floor confidence threshold
+          - How to allocate when multiple families are eligible
+
+        Family names match the ``regime_family`` class attribute that
+        each strategy declares (see BaseStrategy.regime_family).
+        """
+        return {
+            "premium_selling": self.regime_confidence_for_premium_selling(underlying),
+            "long_vol": self.regime_confidence_for_long_vol(underlying),
+            "directional_trend": self.regime_confidence_for_directional_trend(underlying),
+        }
+
     def is_long_vol_favorable_v2b(
         self, underlying: str,
     ) -> tuple[bool, dict[str, float | bool | None]]:

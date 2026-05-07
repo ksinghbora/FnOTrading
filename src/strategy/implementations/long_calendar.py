@@ -64,6 +64,8 @@ class LongCalendarStrategy(BaseStrategy):
     """
 
     params: LongCalendarParams
+    # V5: long-vega calendar spread — long-vol family.
+    regime_family: str = "long_vol"
 
     # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
     # Calendar is a DEBIT spread: SELL front + BUY back at entry, mirror

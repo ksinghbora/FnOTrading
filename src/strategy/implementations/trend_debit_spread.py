@@ -47,6 +47,8 @@ class TrendDebitSpreadStrategy(BaseStrategy):
     """
 
     params: TrendDebitSpreadParams
+    # V5: bull-call / bear-put debit spread on breakout — directional trend family.
+    regime_family: str = "directional_trend"
 
     def __init__(self, strategy_id: str, params: TrendDebitSpreadParams):
         super().__init__(strategy_id, params)

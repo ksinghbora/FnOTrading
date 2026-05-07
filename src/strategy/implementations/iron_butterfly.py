@@ -15,3 +15,5 @@ from src.strategy.registry import register_strategy
 @register_strategy("iron_butterfly", IronButterflyParams)
 class IronButterflyStrategy(IronCondorStrategy):
     params: IronButterflyParams
+    # V5: same family as IC — short ATM body with wings, premium selling.
+    regime_family: str = "premium_selling"

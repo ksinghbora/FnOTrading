@@ -63,6 +63,8 @@ class LongStraddleStrategy(BaseStrategy):
     """
 
     params: LongStraddleParams
+    # V5: long ATM CE + ATM PE — long-vol family (long vega + gamma).
+    regime_family: str = "long_vol"
 
     # ─── Realistic-fill helpers ───────────────────────────────────────
     # Long straddle is a DEBIT spread on entry (BUY both legs at ASK)

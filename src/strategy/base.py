@@ -30,6 +30,26 @@ class BaseStrategy(ABC):
     which are validated by risk management before execution.
     """
 
+    # ─── V5 (May 7 2026): regime-family declaration ────────────────
+    # Each concrete strategy subclass overrides this to declare which
+    # regime family it belongs to. Used by OrchestratorStrategy V5 to:
+    #  - Pull the matching ``regime_confidence_for_<family>`` confidence
+    #    when multi-family allocation decisions are made
+    #  - Block correlated stacking (two premium-sellers entering on the
+    #    same tick) when ``OrchestratorParams.block_correlated_families=True``
+    #
+    # Canonical values (matching ``RegimeDetector.regime_confidence_snapshot``):
+    #  - "premium_selling"   : iron_condor, iron_butterfly, short_strangle, short_straddle
+    #  - "long_vol"          : long_calendar, long_straddle
+    #  - "directional_trend" : trend_daily, trend_itm, trend_debit_spread
+    #  - "unknown" (default) : strategy not yet classified — orchestrator
+    #                          uses neutral 0.5 confidence
+    #
+    # The default "unknown" preserves backward compatibility — every
+    # existing strategy keeps its prior behavior until it explicitly
+    # declares its family.
+    regime_family: str = "unknown"
+
     def __init__(self, strategy_id: str, params: BaseStrategyParams):
         self.strategy_id = strategy_id
         self.params = params
@@ -136,6 +156,54 @@ class BaseStrategy(ABC):
         - MUST be safe to call when self._regime, self._expiry, etc. are not yet set
         """
         return 0
+
+    def evaluate_regime_confidence(self) -> float:
+        """Return current 0.0-1.0 regime-fitness confidence.
+
+        Complements ``evaluate_score`` (which scores the entry SETUP) by
+        scoring the underlying MARKET REGIME via a strategy-family lens.
+        Used by OrchestratorStrategy V5 to combine setup-quality and
+        regime-fitness into a single figure of merit:
+
+            effective_score = legacy_0_100_score × regime_confidence
+
+        Default behaviour:
+          - Lookup ``self.regime_family`` (class attr, default "unknown")
+          - Pull the matching confidence from
+            ``RegimeDetector.regime_confidence_snapshot(underlying)``
+          - Return 0.5 (neutral) when family is "unknown" or detector
+            unavailable — so a strategy with no family declaration is
+            never artificially gated to 0 by a missing decoder
+
+        Concrete strategies CAN override for finer control (e.g., a
+        strategy that wants to weight CI more than VRP), but the default
+        family-based dispatch is sufficient for the canonical roster.
+
+        Contract:
+        - MUST NOT mutate any state
+        - MUST be safe to call multiple times per tick
+        - MUST be safe to call when ctx is not yet set (returns 0.5)
+        """
+        if self.regime_family == "unknown":
+            return 0.5
+        try:
+            ctx = self._context
+            if ctx is None:
+                return 0.5
+            regime = getattr(ctx, "_regime_detector", None) or getattr(ctx, "regime_detector", None)
+            if regime is None:
+                return 0.5
+            underlying = getattr(self.params, "underlying", "NIFTY")
+            # Dispatch by family (matches RegimeDetector method names)
+            if self.regime_family == "premium_selling":
+                return float(regime.regime_confidence_for_premium_selling(underlying))
+            if self.regime_family == "long_vol":
+                return float(regime.regime_confidence_for_long_vol(underlying))
+            if self.regime_family == "directional_trend":
+                return float(regime.regime_confidence_for_directional_trend(underlying))
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug(f"[{self.strategy_id}] regime_confidence lookup failed: {exc}")
+        return 0.5
 
     async def on_candle(self, candle: OHLC) -> Signal | None:
         """Called on candle close for subscribed timeframes.

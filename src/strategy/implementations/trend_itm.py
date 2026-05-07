@@ -88,6 +88,8 @@ class TrendITMStrategy(BaseStrategy):
     deep-ITM single-leg CE (long bias) or PE (short bias)."""
 
     params: TrendITMParams
+    # V5: deep-ITM single-leg directional trend (futures proxy).
+    regime_family: str = "directional_trend"
 
     def __init__(self, strategy_id: str, params: TrendITMParams):
         super().__init__(strategy_id, params)

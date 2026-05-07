@@ -29,6 +29,8 @@ class ShortStrangleStrategy(BaseStrategy):
     """
 
     params: ShortStrangleParams
+    # V5: short OTM CE + OTM PE — premium selling family.
+    regime_family: str = "premium_selling"
 
     MAX_ADJUSTMENTS_PER_DAY = 2
 

@@ -41,6 +41,10 @@ class IronCondorStrategy(BaseStrategy):
     """
 
     params: IronCondorParams
+    # V5 (May 7 2026): regime family for OrchestratorStrategy V5
+    # confidence-weighted scoring. IC sells short-CE + short-PE wings —
+    # canonical premium-selling structure.
+    regime_family: str = "premium_selling"
 
     MAX_ADJUSTMENTS_PER_DAY = 2  # Cap adjustments to prevent churn
 

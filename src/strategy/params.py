@@ -136,6 +136,23 @@ class BaseStrategyParams(BaseModel):
     # stratified report.
     blocked_regimes: list[str] = []
 
+    # ─── V5 (May 7 2026): margin-per-lot estimate ──────────────────
+    # Used by OrchestratorStrategy V5 when ``margin_aware_selection``
+    # is enabled. Rough SPAN+ELM margin per 1 lot, expressed in lakhs
+    # of rupees (₹ × 1e5). Strategies override this per their structural
+    # margin profile:
+    #   - Iron Condor 8-strike wing  : ~2.5 (₹2.5L)
+    #   - Iron Butterfly 2-strike    : ~1.5
+    #   - Short Strangle (hedged)    : ~1.5
+    #   - Short Straddle (hedged)    : ~2.0
+    #   - Long Calendar              : ~0.6 (debit only)
+    #   - Long Straddle              : ~0.4
+    #   - TrendDaily / TrendITM      : ~1.0
+    # Default 2.0 is a conservative middle estimate so no strategy is
+    # penalised by an obviously-wrong figure if it forgets to override.
+    # The orchestrator only USES this when margin_aware_selection=True.
+    expected_margin_per_lot_lakhs: float = 2.0
+
 
 class ShortStraddleParams(BaseStrategyParams):
     """Parameters for Short Straddle strategy."""
@@ -149,6 +166,10 @@ class ShortStraddleParams(BaseStrategyParams):
     profit_target_pct: float = 10.0          # Exit when 10% premium decayed — captures early theta
     add_hedge: bool = True                   # Add far OTM protection
     hedge_offset_strikes: int = 6            # How far OTM for hedge legs (closer from 10 for real protection)
+
+    # V5: ATM short straddle (hedged) — tighter break-even than strangle,
+    # higher gamma → ~₹2L/lot SPAN+ELM with 6-strike hedge.
+    expected_margin_per_lot_lakhs: float = 2.0
 
 
 class LongStraddleParams(BaseStrategyParams):
@@ -206,6 +227,10 @@ class LongStraddleParams(BaseStrategyParams):
     # Defaults — long-vol structure, default OFF for legacy filters
     pcr_filter_enabled: bool = False         # PCR less informative for long-vega
     max_pain_filter_enabled: bool = False    # Same — straddle profit zone differs from short premium
+
+    # V5: long straddle debit ≈ 1-2% of underlying notional per lot,
+    # roughly ₹0.4L on NIFTY 24K with 1-lot=75.
+    expected_margin_per_lot_lakhs: float = 0.4
 
     # May 6 2026 — v2b regime gate (single-condition VRP < 0).
     # Long straddle uses ONLY the v2b form (no CI requirement), since:
@@ -281,6 +306,9 @@ class TrendDailyParams(BaseStrategyParams):
     pcr_filter_enabled: bool = False
     max_pain_filter_enabled: bool = False
 
+    # V5: NIFTY current-month futures ~₹1L/lot SPAN+ELM (initial margin).
+    expected_margin_per_lot_lakhs: float = 1.0
+
 
 class ShortStrangleParams(BaseStrategyParams):
     """Parameters for Short Strangle strategy."""
@@ -296,6 +324,9 @@ class ShortStrangleParams(BaseStrategyParams):
     profit_target_pct: float = 15.0          # Exit when 15% premium decayed — lock early theta
     add_hedge: bool = True
     hedge_offset_strikes: int = 5            # Closer from 8 — meaningful protection at ~250pts
+
+    # V5: hedged short strangle on NIFTY ~₹1.5L SPAN+ELM per lot.
+    expected_margin_per_lot_lakhs: float = 1.5
 
     # May 7 2026 (Phase 1) — Indian-validated regime + calendar gates.
     # Mirrors IronCondorParams. Empirical basis:
@@ -336,6 +367,11 @@ class IronCondorParams(BaseStrategyParams):
     # max_spread_pct moved to BaseStrategyParams (Apr 29 Phase 2) so
     # strangle/straddle/calendar share the filter. Override here if IC
     # ever needs a different default.
+
+    # V5 margin estimate (₹L per lot) — IC with 8-strike wings on NIFTY
+    # post-SEBI runs ~₹2.5L SPAN+ELM. Used by orchestrator V5 when
+    # margin_aware_selection=True.
+    expected_margin_per_lot_lakhs: float = 2.5
 
     # May 2 2026: Indian-market range-detection gate. When True, IC
     # entries require ADX(14)<22 AND BB-squeeze active AND RV/IV<0.80
@@ -419,6 +455,10 @@ class IronButterflyParams(IronCondorParams):
     # so losses accelerate faster. 30% per OptionX backtest guidance.
     stop_loss_pct: float = 30.0
 
+    # V5: tighter wings (~₹100 protection) cut margin to ~₹1.5L/lot
+    # per OptionX/Bajaj Broking analysis. Better margin yield than IC.
+    expected_margin_per_lot_lakhs: float = 1.5
+
 
 class OrchestratorParams(BaseStrategyParams):
     """Parameters for the OrchestratorStrategy meta-controller.
@@ -456,6 +496,64 @@ class OrchestratorParams(BaseStrategyParams):
 
     # Lifecycle
     propagate_exits_to_children: bool = True  # When orchestrator exits, force children to clear state too
+
+    # ─── V5 (May 7 2026) coordinator extensions ─────────────────────
+    # Default-OFF flags so the existing 8 unit tests + every prior
+    # backtest reproduces bit-identically until the operator opts in.
+    # Each flag adds one orthogonal coordinator responsibility — they
+    # can be enabled independently for A/B isolation.
+
+    # 1. Regime-aware scoring. When True, the orchestrator combines the
+    #    legacy 0-100 ``evaluate_score`` with each child's
+    #    ``evaluate_regime_confidence`` (0.0-1.0) into:
+    #      effective_score = legacy_score × regime_confidence
+    #    Children inherit ``regime_family`` from their class declaration;
+    #    the regime detector translates that into a confidence number
+    #    via the V5 ``regime_confidence_for_<family>`` methods.
+    #    Default False = behaves identically to V4.
+    regime_aware_scoring: bool = False
+
+    # 2. Cash floor. When ``regime_aware_scoring`` is on AND the highest
+    #    regime-confidence across ALL children's families is below this
+    #    threshold, the orchestrator returns None for the tick — no
+    #    strategy gets a signal. Captures the "no edge anywhere" case
+    #    where every family is unfavourable. 0.0 = disabled.
+    cash_floor_confidence: float = 0.0
+
+    # 3. Margin-aware ranking. When True, eligible children are ranked
+    #    by ``effective_score / expected_margin_lakhs`` instead of raw
+    #    effective_score. Requires each strategy to declare
+    #    ``expected_margin_per_lot_lakhs`` in its params (or the
+    #    orchestrator falls back to an even split). Empirically: post-SEBI
+    #    IB needs ~₹1.5L/lot, IC ~₹2.5L/lot, strangle ~₹1.5L/lot. With
+    #    this on, IB and SS are favoured over IC at equal score because
+    #    they generate more PnL per ₹ of margin tied up.
+    margin_aware_selection: bool = False
+
+    # 4. Correlation guard. When True, two children declaring the SAME
+    #    ``regime_family`` cannot both be "active" at once. After one
+    #    family member takes the slot, others in the same family are
+    #    skipped on the same tick (the legacy fallback path already
+    #    skips them; this just makes it explicit and adds correlation
+    #    accounting in the orchestrator's logs). Default False keeps
+    #    V4's strict single-slot semantics.
+    block_correlated_families: bool = False
+
+    # 5. Daily-PnL circuit breaker. When set to a non-zero NEGATIVE rupee
+    #    figure (e.g. -15000.0), the orchestrator blocks all NEW entries
+    #    for the rest of the trading day once the day's cumulative PnL
+    #    drops below this floor. EXIT routing for the active child is
+    #    unaffected (a circuit-breaker that prevents you from EXITING a
+    #    losing position would be a footgun).  Default 0.0 = disabled.
+    daily_max_drawdown_inr: float = 0.0
+
+    # 6. Per-strategy weight cap. When ``regime_aware_scoring`` AND
+    #    ``margin_aware_selection`` are on, this caps the fraction of
+    #    portfolio risk budget that any single child can absorb on a
+    #    given tick (informational only when single-slot routing is the
+    #    norm; meaningful once the orchestrator is upgraded to multi-slot
+    #    in a later phase). Default 1.0 = no cap.
+    max_strategy_weight: float = 1.0
 
 
 class LongCalendarParams(BaseStrategyParams):
@@ -498,6 +596,10 @@ class LongCalendarParams(BaseStrategyParams):
     front_close_buffer_minutes: int = 90     # Close N min before front-week expiry (avoid 0DTE gamma trap on front leg)
     pcr_filter_enabled: bool = False         # PCR less informative for long-vega — disable by default
     max_pain_filter_enabled: bool = False    # Same — calendar profit zone differs from short-premium
+
+    # V5: long calendar is a debit spread — margin = net debit only.
+    # Typical NIFTY ATM calendar runs ~₹0.6L/lot debit.
+    expected_margin_per_lot_lakhs: float = 0.6
 
     # May 6 2026 — long-vol regime gate (orthogonal to IC v2 gate).
     #
@@ -811,6 +913,11 @@ class TrendDebitSpreadParams(BaseStrategyParams):
     oi_confirm: bool = True                  # Require OI level breach to confirm breakout
     log_only: bool = False                   # Enabled for trading (validated on real data)
 
+    # V5: bull-call / bear-put debit spread on NIFTY weekly ≈ ₹0.4L/lot
+    # cost basis (debit paid ~ 50-80 pts × 75 = ₹3,750-6,000; defensive
+    # buffer pulls margin estimate up to ₹0.4L).
+    expected_margin_per_lot_lakhs: float = 0.4
+
 
 class TrendITMParams(BaseStrategyParams):
     """Parameters for Trend ITM strategy — Donchian breakout, single-leg deep-ITM CE/PE.
@@ -915,3 +1022,8 @@ class TrendITMParams(BaseStrategyParams):
     # by default; opt-in if you want to A/B them.
     pcr_filter_enabled: bool = False
     max_pain_filter_enabled: bool = False
+
+    # V5: deep-ITM single-leg long option — debit only. Cost is the
+    # premium paid (~₹500 intrinsic + small extrinsic), so margin
+    # ≈ ₹0.5L per lot.
+    expected_margin_per_lot_lakhs: float = 0.5

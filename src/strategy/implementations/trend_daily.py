@@ -54,6 +54,8 @@ class TrendDailyStrategy(BaseStrategy):
     """
 
     params: TrendDailyParams
+    # V5: multi-day Donchian directional trend on NIFTY futures.
+    regime_family: str = "directional_trend"
 
     def __init__(self, strategy_id: str, params: TrendDailyParams):
         super().__init__(strategy_id, params)

@@ -35,6 +35,8 @@ class ShortStraddleStrategy(BaseStrategy):
     """
 
     params: ShortStraddleParams
+    # V5: short ATM CE + ATM PE — most aggressive premium-selling form.
+    regime_family: str = "premium_selling"
 
     # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
     # Same structure as strangle: two ATM short legs, no wings. SELL at
