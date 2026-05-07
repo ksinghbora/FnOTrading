@@ -1,153 +1,140 @@
 # Orchestrator V4 — Why Negative Despite All-Positive Standalones
 
-May 7 2026 · branch `FnO-v5-orchestration-impl`
+May 7-8 2026 · branch `FnO-v5-orchestration-impl`
 
-User question: "Why are individual strategies positive but orchestrator
-negative? It should be more positive."
+User question: "individual strategies were positive but orchestrator
+were negative. Actually it should be more positive. Also where is trend?"
 
-This document is a structural analysis of WHY the orchestrator failed
-validation. Per-child fill counts from the diagnostic script will
-arrive in ~15 min and confirm or refute these hypotheses.
+This document is the data-driven analysis after running the diagnostic
+backtest with `strategy_id`-tagged trades.
 
-## Expected vs actual
+## Diagnostic v2 result (per-child fills)
 
-If the orchestrator picked the BEST child per opportunity:
+| Child | Fills | Round trips | Net (sell-buy) | Per-trip avg |
+|---|---|---|---|---|
+| iron_condor | 24 | ~6 | +₹694 | +₹116 |
+| iron_butterfly | 24 | ~6 | +₹716 | +₹120 |
+| **short_strangle** | 28 | ~7 | **-₹1,462** | **-₹209** |
+| trend_daily | 0 | 0 | 0 | n/a |
 
-  Standalone PnL:  IC +₹263 + IB +₹222 + SS +₹788 = **+₹1,273 across 76 standalone trips**
-  Best-case orchestrator (single-slot, picks best per day):
-    18 SS days × +₹43.8 = +₹788
-    + IC's best 2 unique days × +₹13.1 = +₹26 (rough)
-    ≈ **+₹800 expected**
+**Active days: 10 / 173** (5.8% of corpus). Standalone aggregate fires
+on ~50+ days.
 
-Actual orchestrator: **-₹150 across ~19 trips.** So the orchestrator
-isn't even matching the worst standalone child (IB +₹222), let alone
-beating the best.
+## Standalone reference benchmarks
 
-## Hypothesis 1: trend_daily steals the slot for 30 days at a time
+| Strategy | Trips | PnL | WR | Sharpe | EV/trip |
+|---|---|---|---|---|---|
+| IC v2 + cal | 20 | +₹263 | 47.5% | +0.26 | +₹13.1 |
+| IB B2 + cal | 38 | +₹222 | 48.7% | +0.06 | +₹5.8 |
+| **SS Phase 1.5 V1** | 18 | **+₹788** | 69.4% | +0.57 | **+₹43.8** |
 
-`TrendDailyStrategy` is a MULTI-DAY hold strategy:
+## What broke
 
-  - max_hold_days: 30
-  - Donchian-breakout entry → holds for up to 30 days
-  - evaluate_score returns 60-80 when in band (VIX 12-22)
+### 1. trend_daily never fires (warmup gap in backtest engine)
 
-Premium-selling children (IC, IB, SS) all close intraday. trend_daily
-holds overnight, for weeks.
+trend_daily's `evaluate_score()` returns 0 until `len(self._daily_bars)
+>= donchian_lookback + 1 = 21`. Daily bars come from
+`_warmup_daily_bars()` which calls `ctx.get_historical_data()`. The
+backtest engine's `StrategyContext` doesn't wire
+`historical_data_callback`, so the call fails silently. TD accumulates
+bars from live ticks during the run; with only one daily bar per day,
+TD reaches 21 bars at day ~21 and could fire afterwards. But the
+realised result is 0 fills — TD never actually entered.
 
-**Hypothesis:** trend_daily wins the slot on a random day, locks it
-for 30 days, blocks ALL premium-sellers during that window.
+This eliminates the multi-day-slot-lock hypothesis. TD didn't lock
+anything because TD never even tried.
 
-Orchestrator's Phase 1 routing (line 229 of orchestrator.py):
+### 2. List-order tie-break does NOT starve IB
 
-```python
-if self._active_child and self._active_child in self._children:
-    active = self._children[self._active_child]
-    signal = await active.on_tick(tick)
-    if signal is not None and signal.signal_type == SignalType.EXIT:
-        self._active_child = None
-    return signal
-```
+IB and IC fired equally (24 fills each). The fallback path successfully
+routes to IB when IC's `_try_entry` returns None (e.g., wing strike
+unavailable on IC's 8-wide configuration). Tie-break is a real
+phenomenon but doesn't manifest as an IB starvation in this corpus.
 
-While `_active_child` is set, ONLY that child sees ticks. Other children
-can't even build state, can't enter, can't do anything.
+### 3. IC and IB are MORE profitable per trip in orchestrator
 
-If TD enters once and holds 30 days: 1 multi-day trade. Premium-sellers
-lose 30 days of opportunity. Standalone, those 30 days had IC/IB/SS
-trades that totaled positive.
+Per-trip averages flipped:
+  - IC orchestrator: +₹116/trip vs standalone +₹13/trip (8.9× better)
+  - IB orchestrator: +₹120/trip vs standalone +₹6/trip (20× better)
 
-**This is the most plausible single explanation.** Confirmation: the
-diagnostic should show TD with ~1-2 fills (entry + exit) but holding
-position for many days. If TD has, say, 4 fills total but locked the
-slot for 60 cumulative days, that's 60 days of premium-selling
-opportunity lost.
+Why? The orchestrator forces IC and IB to fire on a SUBSET of their
+standalone opportunities. That subset is biased toward winning days
+because the score-ranked tournament also captures regime quality. The
+orchestrator essentially does opportunistic cherry-picking on
+high-VIX days — and the cherry-picked subset wins more per trip.
 
-## Hypothesis 2: list-order tie-break starves IB
+### 4. SS bleeds in orchestrator (-₹209/trip vs +₹44/trip standalone)
 
-Iron Butterfly inherits IronCondorStrategy's score config
-(`IRON_CONDOR_CONFIG`). On ANY day where both are eligible, they
-score IDENTICALLY. The orchestrator's stable tie-break by
-`list_position` always picks the first one — and `children` list
-order is `[iron_condor, iron_butterfly, short_strangle, trend_daily]`.
+This is the single biggest source of orchestrator's loss. Same params,
+same engine, same calibration — but the orchestrator picks SS on a
+NEGATIVELY-skewed subset of SS's standalone opportunities.
 
-So IC is tried first. If IC's `_try_entry` succeeds, IB never fires.
-Standalone IB had 38 trips — orchestrator gives IB at most the
-fallback path (when IC returns None due to wing-strike unavailability
-or other intra-strategy filter).
+Standalone SS V1: 18 trips, mostly winners (69.4% WR), avg +₹44/trip.
+Orchestrator SS: 7 trips, mostly losers, avg -₹209/trip.
 
-IB's standalone +₹5.8/trip × 38 trips = +₹222. Most of those days
-also have IC eligible. The orchestrator routes those days to IC
-(+₹13.1/trip) — slight gain on per-trip EV (+13 vs +6) but only if
-IC actually fires. If IC fires on a winning day, fine. If the day
-favors IB (e.g., IC's wing strike unavailable, IC blocks, IB tries),
-the orchestrator gets IB's PnL.
+Hypothesis: standalone SS captures all 18 of its eligible opportunities
+including the easy wins. Orchestrator cherry-picks 7 of those 18 — but
+the cherry-pick is ANTI-correlated with profitability. Days where SS
+"clearly wins" are also days where some other child clears the score
+threshold; orchestrator routes to that other child. Days where SS is
+the ONLY eligible candidate are typically borderline conditions where
+SS's WR drops.
 
-The asymmetry: IC + IB serve the SAME regime (VIX 16-22). Standalone
-they trade in parallel and BOTH profit. Orchestrator only takes one.
-That's a 50% reduction in opportunity in the [16,22] regime — but
-shouldn't go negative just from this.
+The orchestrator's V4 score-based routing has zero forward-looking EV.
+It picks "highest score" which correlates with regime FIT, not future
+P&L. SS's edge comes from its V1 risk-management (no trail, asymmetric
+exits) — not its setup score.
 
-## Hypothesis 3: Legacy 0-100 score ≠ per-trip EV
+### 5. Activity reduction (10 active days vs ~50+ standalone aggregate)
 
-SS V1 wins (+₹43.8/trip) primarily through RISK MANAGEMENT (no trail
-stop, asymmetric SL=30/PT=25). Its 0-100 entry score doesn't reflect
-this — the score measures regime FIT, not expected P&L.
+The single-slot model bounds total activity. Even with multi-trip-
+per-day exits and re-entries, the orchestrator only fires on 10 days.
+Standalone IC alone fires on ~20 days; aggregate is 50+. The
+orchestrator is leaving 80%+ of opportunities on the table.
 
-On a 14-VIX day:
+## Net effect
 
-  - SS score: 25 (VIX) + 25 (range) + 25 (move) + 15 (PCR) = ~90
-  - IC score: 10 (VIX, "thin premium") + 25 + 25 + 15 = ~75
-  - IB score: 10 + 25 + 25 + 15 = ~75 (IB inherits IC config)
-  - TD score: 60 + fit (~10) = ~70
+  Orchestrator total: 76 fills | -₹150 PnL | 55.3% WR | Sharpe -0.13
+  vs sum-of-standalones: ~76 trips | +₹1,273 PnL across 50+ days
 
-SS should win. But IC's vix_entry_max = 22.0 and vix_entry_min = 16.0,
-so IC's `_try_entry` BLOCKS at VIX=14 (wrong band). IC returns None.
-Same IB. SS's _try_entry passes (VIX=14 in [13,16]).
+The orchestrator's V4 single-slot routing is structurally inferior
+to running the strategies as separate shadows. The "coordinator
+benefit" doesn't exist in V4 because:
+  - Score doesn't reflect EV
+  - Single-slot is bounded by 1× best-trip-per-day, not ∑ standalone trips
+  - Opportunity loss > opportunity quality gain
 
-So actually SS DOES win on its band days. So this hypothesis alone
-doesn't explain the loss.
+## Tomorrow's deployment plan
 
-## Hypothesis 4: trend_daily uses `_position` not `_entered`
+Running an overnight tournament of 7 alternative configs:
+  1. ORCH_IC_SS — minimal premium-selling pair (no IB tie-break, no TD)
+  2. ORCH_IC_IB_SS — drop only TD
+  3. ORCH_ALL4_V5_REGIME — V5 regime-aware scoring on
+  4. ORCH_ALL4_V5_CASHFLOOR — adds 0.50 cash-floor confidence
+  5. ORCH_ALL4_V5_MARGIN — adds margin-aware ranking
+  6. ORCH_IC_SS_V5_REGIME — minimal + V5 regime-aware
+  7. STANDALONE_SS_V1_RECHECK — confirm SS V1 reference
 
-BaseStrategy's `has_open_position()` checks `self._entered`. But
-trend_daily uses `self._position` (an int: 0/+1/-1) and never sets
-`_entered`.
+If any config beats +₹10/trip with positive Sharpe, deploy as
+orchestrator_1 LIVE. Otherwise fall back to **SS V1 solo LIVE +
+orchestrator_shadow** for V5 development.
 
-This means the V5 calibration's `_entered`-property auto-apply hook
-(`base.py:_entered.setter`) doesn't fire on trend_daily's position
-transitions. NOT a P&L issue, but a code-smell consistency gap.
+## Long-term fix recommendations
 
-More importantly: the orchestrator tracks the slot via its OWN
-`_active_child` field, not by polling `has_open_position()`. So this
-inconsistency doesn't directly cause the negative PnL.
+The score-based routing is the binding loss source. Real fixes:
 
-## What the diagnostic will show
+1. **Forward-looking EV per child** — replace `evaluate_score()` with a
+   rolling per-trip EV estimate (last 30 days) so SS's higher EV
+   directly outranks IC.
 
-The diagnostic script (running now) groups `result['trades']` by
-`strategy_id` and reports per-child:
+2. **Multi-slot orchestration (V6)** — let ic + ss + trend run in
+   parallel when in different regimes. Single-slot bounded loss is
+   structural; V6 removes it.
 
-  - fills count
-  - days fired
-  - sell_value - buy_value (rough net before charges)
-  - first/last fire dates
+3. **Drop legacy 0-100 score entirely** — V5's regime confidence is
+   a better signal. With `regime_aware_scoring=true`, the effective
+   score = legacy × confidence. If confidence dominates legacy noise,
+   routing improves naturally.
 
-If Hypothesis 1 is correct: trend_daily will show 1-4 fills with
-multi-day holds visible from the day-fire pattern, and premium-sellers
-will have many fewer fills than their standalone counts.
-
-If Hypothesis 2 is correct: IB will have very few fills (it's always
-losing tie-break to IC).
-
-If Hypothesis 3 alone: child counts roughly match standalone counts
-on their respective regime days; the loss comes from charges
-compounding on too many trades per child.
-
-## Pending data + decision
-
-Diagnostic results expected ~15 min from now. Will update this doc
-with the per-child breakdown + final verdict on which hypotheses are
-real.
-
-Tomorrow's deployment decision: the V4 orchestrator failed validation
-regardless of the root cause. Recommend reverting to multi-shadow
-deployment + SS V1 solo LIVE while V5 orchestrator (regime-aware
-scoring) is validated.
+4. **Remove trend_daily from orchestrator** — different lifecycle
+   (multi-day vs intraday). Run TD as separate top-level deployment.
