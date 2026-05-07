@@ -37,7 +37,8 @@ from src.core.constants import LOT_SIZES
 from src.core.models import OptionChain, Signal, Subscription, Tick
 from src.core.types import OptionType, OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
-from src.strategy.params import LongStraddleParams
+from src.strategy.calibrations import long_straddle as long_straddle_calibration
+from src.strategy.calibrations.long_straddle import LongStraddleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.signals import entry_signal, exit_signal, make_leg
@@ -65,6 +66,8 @@ class LongStraddleStrategy(BaseStrategy):
     params: LongStraddleParams
     # V5: long ATM CE + ATM PE — long-vol family (long vega + gamma).
     regime_family: str = "long_vol"
+    # V5 calibration: edits live in calibrations/long_straddle.py ONLY.
+    calibration = long_straddle_calibration
 
     # ─── Realistic-fill helpers ───────────────────────────────────────
     # Long straddle is a DEBIT spread on entry (BUY both legs at ASK)

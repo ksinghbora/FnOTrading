@@ -221,32 +221,56 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 # ────────────────────────────────────────────────────────────────────
 
 def _collect_param_classes() -> dict[str, dict]:
-    """Walk ``src/strategy/params.py`` and serialize every Pydantic params class.
+    """Serialize every Pydantic params class from ``src/strategy/params.py``
+    AND from each per-strategy calibration module.
 
     Captures defaults at import time, which is the right snapshot semantic:
     these are the values a freshly-started worker would use today.
+
+    May 7 2026: walks both ``src/strategy/params.py`` (for dormant params
+    classes that still live there: DeltaNeutral, Momentum, MeanReversion,
+    CalendarSpread, ExpiryScalper) AND each ``src/strategy/calibrations/X.py``
+    module (for active V5 roster — IC, IB, SS, SST, LC, LS, TD, TITM, TDS,
+    Orchestrator, Portfolio).
     """
+    import importlib
     import inspect
+    import pkgutil
 
     from pydantic import BaseModel
 
     from src.strategy import params as p
+    from src.strategy import calibrations as cal_pkg
+
+    candidate_modules = [p]
+    # Discover every per-strategy calibration module dynamically so adding
+    # a new one (or removing one) doesn't require editing this script.
+    for mod_info in pkgutil.iter_modules(cal_pkg.__path__):
+        if mod_info.name.startswith("_"):
+            continue
+        candidate_modules.append(
+            importlib.import_module(f"src.strategy.calibrations.{mod_info.name}")
+        )
 
     out: dict[str, dict] = {}
-    for name, obj in inspect.getmembers(p):
-        if (
-            inspect.isclass(obj)
-            and issubclass(obj, BaseModel)
-            and obj is not BaseModel
-            and obj.__module__ == p.__name__
-        ):
-            try:
-                instance = obj()
-                out[name] = _serialize(instance.model_dump())
-            except Exception as e:
-                # A subclass might require fields with no defaults — skip
-                # it but keep a breadcrumb so we know the snapshot is partial.
-                out[name] = {"_snapshot_error": f"{type(e).__name__}: {e}"}
+    seen: set[type] = set()
+    for module in candidate_modules:
+        for name, obj in inspect.getmembers(module):
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, BaseModel)
+                and obj is not BaseModel
+                and obj.__module__ == module.__name__
+                and obj not in seen
+            ):
+                seen.add(obj)
+                try:
+                    instance = obj()
+                    out[name] = _serialize(instance.model_dump())
+                except Exception as e:
+                    # A subclass might require fields with no defaults — skip
+                    # it but keep a breadcrumb so we know the snapshot is partial.
+                    out[name] = {"_snapshot_error": f"{type(e).__name__}: {e}"}
     return out
 
 

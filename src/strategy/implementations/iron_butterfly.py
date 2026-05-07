@@ -7,8 +7,9 @@ All entry, adjustment, and exit logic is inherited unchanged from
 IronCondorStrategy; only the strike-selection deltas differ via params.
 """
 
+from src.strategy.calibrations import iron_butterfly as iron_butterfly_calibration
+from src.strategy.calibrations.iron_butterfly import IronButterflyParams
 from src.strategy.implementations.iron_condor import IronCondorStrategy
-from src.strategy.params import IronButterflyParams
 from src.strategy.registry import register_strategy
 
 
@@ -17,3 +18,7 @@ class IronButterflyStrategy(IronCondorStrategy):
     params: IronButterflyParams
     # V5: same family as IC — short ATM body with wings, premium selling.
     regime_family: str = "premium_selling"
+    # V5 calibration: edits live in calibrations/iron_butterfly.py ONLY.
+    # IB's calibration imports IC's params class for inheritance — that
+    # is the one allowed cross-module dependency, by design.
+    calibration = iron_butterfly_calibration

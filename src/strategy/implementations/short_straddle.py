@@ -13,10 +13,11 @@ from src.core.constants import LOT_SIZES
 from src.core.models import OHLC, Order, Signal, SignalLeg, Subscription, Tick
 from src.core.types import OptionType, OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
-from src.strategy.params import ShortStraddleParams
+from src.strategy.calibrations import short_straddle as short_straddle_calibration
+from src.strategy.calibrations.short_straddle import SHORT_STRADDLE_CONFIG, ShortStraddleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
-from src.strategy.scoring import SHORT_STRADDLE_CONFIG, score_strategy
+from src.strategy.scoring import score_strategy
 from src.strategy.signals import entry_signal, exit_signal, adjust_signal
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,8 @@ class ShortStraddleStrategy(BaseStrategy):
     params: ShortStraddleParams
     # V5: short ATM CE + ATM PE — most aggressive premium-selling form.
     regime_family: str = "premium_selling"
+    # V5 calibration: edits live in calibrations/short_straddle.py ONLY.
+    calibration = short_straddle_calibration
 
     # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
     # Same structure as strangle: two ATM short legs, no wings. SELL at

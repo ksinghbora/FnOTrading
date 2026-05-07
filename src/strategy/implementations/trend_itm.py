@@ -66,7 +66,8 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, Subscription, Tick
 from src.core.types import OrderSide
 from src.strategy.base import BaseStrategy
-from src.strategy.params import TrendITMParams
+from src.strategy.calibrations import trend_itm as trend_itm_calibration
+from src.strategy.calibrations.trend_itm import TrendITMParams
 from src.strategy.registry import register_strategy
 from src.strategy.signals import entry_signal, exit_signal
 
@@ -90,6 +91,8 @@ class TrendITMStrategy(BaseStrategy):
     params: TrendITMParams
     # V5: deep-ITM single-leg directional trend (futures proxy).
     regime_family: str = "directional_trend"
+    # V5 calibration: edits live in calibrations/trend_itm.py ONLY.
+    calibration = trend_itm_calibration
 
     def __init__(self, strategy_id: str, params: TrendITMParams):
         super().__init__(strategy_id, params)

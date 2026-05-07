@@ -1,11 +1,14 @@
-"""Unified signal scoring for all strategies.
+"""Unified signal-scoring primitives.
 
-Each strategy type has different ideal conditions, but the scoring dimensions
-are the same: VIX, morning range, move from open, PCR, DTE.
+May 7 2026 — per-strategy ``*_CONFIG`` constants have moved into their
+calibration modules under ``src/strategy/calibrations/``. This file
+keeps the shared ``ScoreConfig`` dataclass and the ``score_strategy``
+scoring function, plus a backward-compat re-export of each migrated
+config.
 
-Usage:
-    scorer = StrategyScorer.for_iron_condor()
-    score, reasons = scorer.score(vix=18, morning_range_pct=0.3, ...)
+Recalibrating IC's scoring weights now means editing
+``src/strategy/calibrations/iron_condor.py`` ONLY — strangle, straddle,
+and trend_debit_spread configs are physically separate files.
 """
 
 from dataclasses import dataclass, field
@@ -54,90 +57,6 @@ class ScoreConfig:
     dte_ok_min: int = 1
     dte_ok_pts: int = 5
     expiry_penalty: int = -10
-
-
-# ─── Pre-built configs per strategy ─────────────────────────────
-
-IRON_CONDOR_CONFIG = ScoreConfig(
-    name="iron_condor",
-    # Indian VIX bands: 16-20 ideal, 20-22 stressed (wings still protect), >25 no trade
-    vix_bands=[
-        (16, 20, 25, "ideal(IC)"),
-        (20, 22, 15, "stressed(IC-wings hold)"),
-        (13, 16, 10, "thin premium(IC)"),
-        (22, 25, 5, "high stress(IC)"),
-        (25, 50, 0, "no_trade(event)"),
-        (0, 13, 0, "complacency(IC)"),
-    ],
-)
-
-SHORT_STRANGLE_CONFIG = ScoreConfig(
-    name="short_strangle",
-    # Indian VIX bands: 13-16 ideal, 16-18 marginal, >18 naked premium too dangerous
-    vix_bands=[
-        (13, 16, 25, "ideal"),
-        (16, 18, 8, "marginal(strangle)"),
-        (18, 50, 0, "too_high(naked)"),
-        (0, 13, 0, "complacency(thin)"),
-    ],
-)
-
-SHORT_STRADDLE_CONFIG = ScoreConfig(
-    name="short_straddle",
-    # Straddle is ATM — most gamma-fragile; tight Indian band 13-15 only
-    vix_bands=[
-        (13, 15, 25, "ideal(ATM)"),
-        (15, 17, 12, "ok(ATM)"),
-        (17, 50, 0, "dangerous(ATM)"),
-        (0, 13, 0, "thin(ATM)"),
-    ],
-    # Straddle needs very tight range
-    range_tight_max=0.2,
-    range_tight_pts=30,
-    range_moderate_max=0.4,
-    range_moderate_pts=15,
-    range_wide_max=0.6,
-    range_wide_pts=5,
-    # Very sensitive to directional moves
-    move_flat_max=0.1,
-    move_flat_pts=30,
-    move_mild_max=0.2,
-    move_mild_pts=15,
-    move_drift_max=0.3,
-    move_drift_pts=5,
-)
-
-TREND_DEBIT_SPREAD_CONFIG = ScoreConfig(
-    name="trend_debit_spread",
-    # Trend needs VIX for option premium to be worth buying
-    vix_bands=[
-        (16, 25, 25, "good for trend"),
-        (12, 16, 15, "adequate"),
-        (25, 35, 10, "volatile(cheap spreads)"),
-        (0, 12, 0, "too calm"),
-        (35, 50, 5, "extreme"),
-    ],
-    # Trend wants WIDE range (breakout)
-    range_invert=True,
-    range_tight_max=0.5,    # inverted: >0.5% = good
-    range_tight_pts=25,
-    range_moderate_max=0.3,
-    range_moderate_pts=12,
-    range_wide_max=0.8,
-    range_wide_pts=5,
-    # Trend wants directional move
-    move_invert=True,
-    move_flat_max=0.3,      # inverted: >0.3% move = good
-    move_flat_pts=25,
-    move_mild_max=0.15,
-    move_mild_pts=12,
-    move_drift_max=0.5,
-    move_drift_pts=5,
-    # DTE matters less for trend
-    dte_safe_pts=5,
-    dte_ok_pts=3,
-    expiry_penalty=-20,     # Debit spreads on expiry are very bad
-)
 
 
 def score_strategy(
@@ -236,3 +155,47 @@ def score_strategy(
         reasons.append(f"expiry_day({config.expiry_penalty:+d})")
 
     return max(0, score), reasons
+
+
+# ─── Backward-compat re-exports (lazy via module-level __getattr__) ──
+# Active strategies' scoring configs live in their per-strategy
+# calibration modules. We expose them as attributes of this module
+# via a lazy __getattr__ to avoid the circular import that would
+# otherwise occur (each calibration module imports ``ScoreConfig``
+# from here at module-init time, so a top-level re-export from
+# calibration modules would deadlock).
+#
+# Existing call sites like ``from src.strategy.scoring import
+# IRON_CONDOR_CONFIG`` keep working unchanged — Python's import
+# machinery falls through to ``__getattr__`` for module-level
+# attribute lookups (PEP 562). New code should import directly
+# from the calibration module to make the per-strategy isolation
+# contract visible:
+#
+#     from src.strategy.calibrations.iron_condor import IRON_CONDOR_CONFIG
+
+_CONFIG_REEXPORTS = {
+    "IRON_CONDOR_CONFIG": ("src.strategy.calibrations.iron_condor", "IRON_CONDOR_CONFIG"),
+    "SHORT_STRANGLE_CONFIG": ("src.strategy.calibrations.short_strangle", "SHORT_STRANGLE_CONFIG"),
+    "SHORT_STRADDLE_CONFIG": ("src.strategy.calibrations.short_straddle", "SHORT_STRADDLE_CONFIG"),
+    "TREND_DEBIT_SPREAD_CONFIG": ("src.strategy.calibrations.trend_debit_spread", "TREND_DEBIT_SPREAD_CONFIG"),
+}
+
+
+def __getattr__(name: str):
+    if name in _CONFIG_REEXPORTS:
+        import importlib
+        module_path, attr = _CONFIG_REEXPORTS[name]
+        module = importlib.import_module(module_path)
+        return getattr(module, attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    "ScoreConfig",
+    "score_strategy",
+    "IRON_CONDOR_CONFIG",
+    "SHORT_STRANGLE_CONFIG",
+    "SHORT_STRADDLE_CONFIG",
+    "TREND_DEBIT_SPREAD_CONFIG",
+]

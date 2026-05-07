@@ -10,11 +10,12 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
+from src.strategy.calibrations import short_strangle as short_strangle_calibration
+from src.strategy.calibrations.short_strangle import SHORT_STRANGLE_CONFIG, ShortStrangleParams
 from src.strategy.event_calendar import EventCalendar
-from src.strategy.params import ShortStrangleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
-from src.strategy.scoring import SHORT_STRANGLE_CONFIG, score_strategy
+from src.strategy.scoring import score_strategy
 from src.strategy.signals import adjust_signal, entry_signal, exit_signal
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ class ShortStrangleStrategy(BaseStrategy):
     params: ShortStrangleParams
     # V5: short OTM CE + OTM PE — premium selling family.
     regime_family: str = "premium_selling"
+    # V5 calibration: edits live in calibrations/short_strangle.py ONLY.
+    calibration = short_strangle_calibration
 
     MAX_ADJUSTMENTS_PER_DAY = 2
 

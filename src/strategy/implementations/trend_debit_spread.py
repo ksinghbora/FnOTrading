@@ -18,11 +18,15 @@ from src.core.models import Signal, Subscription, Tick
 from src.core.types import OrderSide, OrderType, Timeframe
 from src.options.chain_analyzer import get_high_oi_strikes
 from src.strategy.base import BaseStrategy
+from src.strategy.calibrations import trend_debit_spread as trend_debit_spread_calibration
+from src.strategy.calibrations.trend_debit_spread import (
+    TREND_DEBIT_SPREAD_CONFIG,
+    TrendDebitSpreadParams,
+)
 from src.strategy.indicators import BreakoutSignal, momentum_breakout, oi_breakout_confirm
-from src.strategy.params import TrendDebitSpreadParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
-from src.strategy.scoring import TREND_DEBIT_SPREAD_CONFIG, score_strategy
+from src.strategy.scoring import score_strategy
 from src.strategy.signals import entry_signal, exit_signal, make_leg  # noqa: F401 — make_leg kept for emergency-close path
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,8 @@ class TrendDebitSpreadStrategy(BaseStrategy):
     params: TrendDebitSpreadParams
     # V5: bull-call / bear-put debit spread on breakout — directional trend family.
     regime_family: str = "directional_trend"
+    # V5 calibration: edits live in calibrations/trend_debit_spread.py ONLY.
+    calibration = trend_debit_spread_calibration
 
     def __init__(self, strategy_id: str, params: TrendDebitSpreadParams):
         super().__init__(strategy_id, params)

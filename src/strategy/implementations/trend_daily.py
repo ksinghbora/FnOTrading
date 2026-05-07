@@ -38,7 +38,8 @@ from src.core.constants import LOT_SIZES, INDIA_VIX_TOKEN
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
-from src.strategy.params import TrendDailyParams
+from src.strategy.calibrations import trend_daily as trend_daily_calibration
+from src.strategy.calibrations.trend_daily import TrendDailyParams
 from src.strategy.registry import register_strategy
 from src.strategy.signals import entry_signal, exit_signal, make_leg
 
@@ -56,6 +57,8 @@ class TrendDailyStrategy(BaseStrategy):
     params: TrendDailyParams
     # V5: multi-day Donchian directional trend on NIFTY futures.
     regime_family: str = "directional_trend"
+    # V5 calibration: edits live in calibrations/trend_daily.py ONLY.
+    calibration = trend_daily_calibration
 
     def __init__(self, strategy_id: str, params: TrendDailyParams):
         super().__init__(strategy_id, params)

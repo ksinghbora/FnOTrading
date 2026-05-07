@@ -50,6 +50,21 @@ class BaseStrategy(ABC):
     # declares its family.
     regime_family: str = "unknown"
 
+    # ─── V5 (May 7 2026): per-strategy calibration module ───────────
+    # Concrete strategy classes set this to their calibration module
+    # (e.g. ``from src.strategy.calibrations import iron_condor;
+    # calibration = iron_condor``). When set, the default
+    # ``evaluate_regime_confidence`` calls
+    # ``calibration.compute_regime_confidence`` so per-strategy
+    # confidence math (different VIX peak, different DoW factor, etc.)
+    # is owned by the strategy's calibration module — recalibrating
+    # IC's confidence weights touches only ``calibrations/iron_condor.py``.
+    #
+    # Default None falls back to family-level dispatch (V5 behavior),
+    # so strategies that haven't declared a calibration module keep
+    # working unchanged.
+    calibration = None  # type: ignore[assignment]
+
     def __init__(self, strategy_id: str, params: BaseStrategyParams):
         self.strategy_id = strategy_id
         self.params = params
@@ -190,11 +205,23 @@ class BaseStrategy(ABC):
             ctx = self._context
             if ctx is None:
                 return 0.5
-            regime = getattr(ctx, "_regime_detector", None) or getattr(ctx, "regime_detector", None)
+            regime = getattr(self, "_regime", None)
+            if regime is None:
+                regime = getattr(ctx, "_regime_detector", None) or getattr(ctx, "regime_detector", None)
             if regime is None:
                 return 0.5
             underlying = getattr(self.params, "underlying", "NIFTY")
-            # Dispatch by family (matches RegimeDetector method names)
+            # PRIORITY 1: per-strategy calibration hook (V5 isolation
+            # contract). When the strategy class declares a ``calibration``
+            # module attribute pointing to ``src.strategy.calibrations.X``,
+            # call its ``compute_regime_confidence``. This lets strategy X's
+            # confidence math be tuned by editing ``calibrations/X.py`` ONLY,
+            # without touching any other strategy or RegimeDetector itself.
+            cal = type(self).calibration
+            if cal is not None and hasattr(cal, "compute_regime_confidence"):
+                return float(cal.compute_regime_confidence(regime, underlying))
+            # PRIORITY 2: fallback to family-level dispatch (pre-V5 path,
+            # for strategies that haven't declared a calibration module).
             if self.regime_family == "premium_selling":
                 return float(regime.regime_confidence_for_premium_selling(underlying))
             if self.regime_family == "long_vol":

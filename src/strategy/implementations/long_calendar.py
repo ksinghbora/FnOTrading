@@ -42,7 +42,8 @@ from src.core.constants import LOT_SIZES
 from src.core.models import OptionChain, Signal, Subscription, Tick
 from src.core.types import OptionType, OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
-from src.strategy.params import LongCalendarParams
+from src.strategy.calibrations import long_calendar as long_calendar_calibration
+from src.strategy.calibrations.long_calendar import LongCalendarParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
 from src.strategy.signals import entry_signal, exit_signal, make_leg
@@ -66,6 +67,8 @@ class LongCalendarStrategy(BaseStrategy):
     params: LongCalendarParams
     # V5: long-vega calendar spread — long-vol family.
     regime_family: str = "long_vol"
+    # V5 calibration: edits live in calibrations/long_calendar.py ONLY.
+    calibration = long_calendar_calibration
 
     # ─── Realistic-fill helpers (Apr 29 2026 multi-model audit fix) ──
     # Calendar is a DEBIT spread: SELL front + BUY back at entry, mirror

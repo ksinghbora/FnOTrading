@@ -15,12 +15,13 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, OrderType
 from src.strategy.base import BaseStrategy
+from src.strategy.calibrations import iron_condor as iron_condor_calibration
+from src.strategy.calibrations.iron_condor import IRON_CONDOR_CONFIG, IronCondorParams
 from src.strategy.event_calendar import EventCalendar
 from src.strategy.implementations.portfolio_pricing import find_available_wing_strike
-from src.strategy.params import IronCondorParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
-from src.strategy.scoring import IRON_CONDOR_CONFIG, score_strategy
+from src.strategy.scoring import score_strategy
 from src.strategy.signals import adjust_signal, entry_signal, exit_signal
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ class IronCondorStrategy(BaseStrategy):
     # confidence-weighted scoring. IC sells short-CE + short-PE wings —
     # canonical premium-selling structure.
     regime_family: str = "premium_selling"
+    # V5 calibration: edits to regime confidence math live in
+    # ``src/strategy/calibrations/iron_condor.py`` ONLY.
+    calibration = iron_condor_calibration
 
     MAX_ADJUSTMENTS_PER_DAY = 2  # Cap adjustments to prevent churn
 
