@@ -34,9 +34,16 @@ class PnLCalculator:
         )
 
     def get_pnl(self, strategy_id: str | None = None) -> PnL:
-        """Get current P&L summary."""
+        """Get current P&L summary.
+
+        Aggregates over ``strategy_id`` AND any orchestrator-child ids
+        (i.e. those starting with ``f"{strategy_id}/"``). See
+        ``PositionTracker.get_positions`` for the rationale: V5
+        orchestrator children carry composite ids like
+        ``"orchestrator_1/iron_condor"`` and we want the parent's PnL
+        query to roll up across them.
+        """
         positions = self._positions.get_positions(strategy_id)
-        charges_key = strategy_id or "__all__"
 
         realized = Decimal("0")
         unrealized = Decimal("0")
@@ -50,7 +57,14 @@ class PnLCalculator:
                     unrealized += abs(pos.quantity) * (pos.average_price - pos.ltp)
 
         if strategy_id:
-            charges = self._total_charges.get(strategy_id, Decimal("0"))
+            # Sum charges across the parent id AND any child ids that
+            # start with ``f"{strategy_id}/"`` (orchestrator-child rollup).
+            prefix = strategy_id + "/"
+            charges = sum(
+                (chg for sid, chg in self._total_charges.items()
+                 if sid == strategy_id or sid.startswith(prefix)),
+                Decimal("0"),
+            )
         else:
             charges = sum(self._total_charges.values(), Decimal("0"))
 

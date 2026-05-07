@@ -106,9 +106,29 @@ class PositionTracker:
         return self._positions.get((strategy_id, instrument_token))
 
     def get_positions(self, strategy_id: str | None = None) -> list[Position]:
+        """Return positions for ``strategy_id``.
+
+        Matching rules (May 7 2026 — V5 orchestrator support):
+          1. Exact match: positions whose strategy_id equals ``strategy_id``
+          2. Orchestrator-child match: positions whose strategy_id starts
+             with ``f"{strategy_id}/"`` (e.g. querying ``"orchestrator_1"``
+             also returns positions tracked under ``"orchestrator_1/iron_condor"``,
+             ``"orchestrator_1/short_strangle"``, etc.)
+
+        The prefix-match path matters because OrchestratorStrategy creates
+        children with composite ids like ``f"{self.strategy_id}/{name}"``;
+        children's positions/charges are recorded under those composite
+        ids, but PnL aggregation typically asks for the parent's id.
+        Without prefix matching, ``get_pnl("orchestrator_1")`` returns
+        ₹0 even when the children have placed (and closed) trades.
+        """
         all_pos = {**self._positions, **self._closed}
         if strategy_id:
-            return [p for (sid, _), p in all_pos.items() if sid == strategy_id]
+            prefix = strategy_id + "/"
+            return [
+                p for (sid, _), p in all_pos.items()
+                if sid == strategy_id or sid.startswith(prefix)
+            ]
         return list(all_pos.values())
 
     def get_open_positions(self, strategy_id: str | None = None) -> list[Position]:
