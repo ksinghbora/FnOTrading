@@ -1138,15 +1138,31 @@ function renderStrategies() {
   panel.innerHTML = strategies.map(s => {
     const stateClass = s.state.toLowerCase();
     const isRunning = s.state === 'RUNNING';
+    // Shadow vs LIVE indicator (yellow vs green) — operator must see
+    // at a glance whether this instance reaches the OMS.
+    const shadowChip = s.shadow_only
+      ? '<span style="background:rgba(255,193,7,0.15);color:var(--yellow);font-size:9px;padding:1px 5px;border-radius:3px;letter-spacing:0.5px">SHADOW</span>'
+      : '<span style="background:rgba(0,196,140,0.15);color:var(--green);font-size:9px;padding:1px 5px;border-radius:3px;letter-spacing:0.5px">LIVE</span>';
+    // Type label — uses canonical name from the API. Falls back to id-prefix if absent.
+    const typeName = s.name || s.strategy_id.replace(/_\d+$/, '').replace(/_/g, ' ');
+    // Family color hint
+    const family = s.regime_family || 'unknown';
+    const familyColor = family === 'premium_selling' ? 'var(--purple)'
+                      : family === 'long_vol'        ? 'var(--blue)'
+                      : family === 'directional_trend' ? 'var(--yellow)'
+                      : 'var(--text2)';
     return `<div class="strategy-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="name">${s.strategy_id}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div class="name" style="display:flex;align-items:center;gap:6px">
+          ${s.strategy_id}
+          ${shadowChip}
+        </div>
         <span class="state-badge ${stateClass}">${s.state}</span>
       </div>
-      <div class="meta">
+      <div class="meta" style="margin-top:4px">
+        <span style="color:${familyColor};font-weight:500">${typeName}</span>
         <span>${s.params.underlying || '--'}</span>
         <span>${s.params.quantity_lots || 0} lots</span>
-        <span>Max Loss: ${s.params.max_loss || '--'}</span>
       </div>
       <div class="actions">
         ${isRunning
@@ -1348,16 +1364,30 @@ function renderStrategyComparison() {
     return;
   }
 
-  // Group ALL positions (including closed) by strategy
+  // Group ALL positions (including closed) by strategy.
+  // Use the canonical `name` from the API (set by @register_strategy
+  // decorator) instead of regex-parsing the strategy_id — the latter
+  // breaks for ids like 'ic_2' / 'ib_1' / 'ss_1' that abbreviate the
+  // type. Falls back to a regex prefix if the API hasn't been updated.
   const byStrategy = {};
   strategies.forEach(s => {
-    const stype = s.strategy_id.replace(/_\d+$/, '');
-    byStrategy[s.strategy_id] = { type: stype, positions: [], unrealized: 0, realized: 0, charges: 0, entryPrem: 0, status: s.state };
+    const stype = s.name || s.strategy_id.replace(/_\d+$/, '');
+    byStrategy[s.strategy_id] = {
+      type: stype,
+      shadow: !!s.shadow_only,
+      family: s.regime_family || 'unknown',
+      positions: [],
+      unrealized: 0,
+      realized: 0,
+      charges: 0,
+      entryPrem: 0,
+      status: s.state,
+    };
   });
 
   (allPositions.length ? allPositions : positions).forEach(p => {
     const sid = p.strategy_id;
-    if (!byStrategy[sid]) byStrategy[sid] = { type: '?', positions: [], unrealized: 0, realized: 0, charges: 0, entryPrem: 0, status: 'UNKNOWN' };
+    if (!byStrategy[sid]) byStrategy[sid] = { type: '?', shadow: false, family: 'unknown', positions: [], unrealized: 0, realized: 0, charges: 0, entryPrem: 0, status: 'UNKNOWN' };
     byStrategy[sid].positions.push(p);
     const qty = parseInt(p.quantity) || 0;
     const avg = parseFloat(p.average_price) || 0;
@@ -1372,20 +1402,32 @@ function renderStrategyComparison() {
     }
   });
 
-  // Strategy type labels
+  // Strategy type labels (keyed by registered name from the API)
   const typeLabels = {
     'portfolio': 'Portfolio (IC+Trend)',
+    'orchestrator': 'Orchestrator (V5)',
     'iron_condor': 'Iron Condor',
+    'iron_butterfly': 'Iron Butterfly',
     'short_strangle': 'Short Strangle',
     'short_straddle': 'Short Straddle',
+    'long_calendar': 'Long Calendar',
+    'long_straddle': 'Long Straddle',
+    'trend_daily': 'Trend Daily',
+    'trend_itm': 'Trend ITM',
     'trend_debit_spread': 'Trend Debit Spread'
   };
 
   const typeColors = {
     'portfolio': 'var(--blue)',
+    'orchestrator': 'var(--blue)',
     'iron_condor': 'var(--purple)',
+    'iron_butterfly': 'var(--purple)',
     'short_strangle': 'var(--green)',
     'short_straddle': 'var(--orange)',
+    'long_calendar': 'var(--blue)',
+    'long_straddle': 'var(--blue)',
+    'trend_daily': 'var(--yellow)',
+    'trend_itm': 'var(--yellow)',
     'trend_debit_spread': 'var(--yellow)'
   };
 
@@ -1404,10 +1446,17 @@ function renderStrategyComparison() {
       ? '<span style="color:var(--green);font-size:11px">RUNNING</span>'
       : `<span style="color:var(--text2);font-size:11px">${data.status}</span>`;
 
+    // Shadow badge — operator must see at a glance which instances
+    // are paper-only vs live. Shadow strategies log decisions but
+    // never reach the OMS.
+    const shadowBadge = data.shadow
+      ? '<span style="background:rgba(255,193,7,0.15);color:var(--yellow);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px">SHADOW</span>'
+      : '<span style="background:rgba(0,196,140,0.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px">LIVE</span>';
+
     const pnlClass = data.unrealized >= 0 ? 'positive' : 'negative';
 
     return `<tr>
-      <td style="font-weight:600">${sid}</td>
+      <td style="font-weight:600">${sid}${shadowBadge}</td>
       <td><span style="color:${color}">${typeName}</span></td>
       <td>${statusBadge}</td>
       <td>${posCount}</td>
@@ -1432,13 +1481,31 @@ function renderStrategyComparison() {
 }
 
 // ── Portfolio Diagnostics ─────────────────────────────────────────
+// The legacy unified PortfolioStrategy publishes a per-tick diagnostics
+// dict (premium leg, trend leg, day summary). When no portfolio
+// strategy is in the deployment (V5 world: orchestrator + per-strategy
+// shadows replace the legacy unified strategy), this entire panel
+// hides cleanly. The Strategy Comparison panel above continues to
+// show all per-strategy P&L for the new mix.
 let portfolioStrategyId = null;
 
 async function fetchDiagnostics() {
-  // Auto-detect portfolio strategy from strategy list
+  // Auto-detect portfolio strategy from strategy list:
+  //   1. Primary: canonical name === 'portfolio' (set by API)
+  //   2. Fallback: state_data has 'premium_mode' key (older daemon
+  //      versions before name field was added)
   if (!portfolioStrategyId && strategies.length) {
-    const ps = strategies.find(s => s.state_data && 'premium_mode' in s.state_data);
+    let ps = strategies.find(s => s.name === 'portfolio');
+    if (!ps) {
+      ps = strategies.find(s => s.state_data && 'premium_mode' in s.state_data);
+    }
     if (ps) portfolioStrategyId = ps.strategy_id;
+  }
+  // Re-validate that the cached strategy is still in the deployment.
+  // Operators may retire portfolio_1 via .env STRATEGIES — once the
+  // daemon reboots without it, this check unsets the cache.
+  if (portfolioStrategyId && !strategies.some(s => s.strategy_id === portfolioStrategyId)) {
+    portfolioStrategyId = null;
   }
   if (!portfolioStrategyId) {
     document.getElementById('legsPanel').style.display = 'none';

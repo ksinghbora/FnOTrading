@@ -50,6 +50,13 @@ class BaseStrategy(ABC):
     # declares its family.
     regime_family: str = "unknown"
 
+    # Set by @register_strategy decorator at class-decoration time. The
+    # API exposes this so the dashboard can label instances by their
+    # canonical strategy type without parsing strategy_id (e.g. 'ic_2'
+    # would otherwise need a regex to be classified as 'iron_condor').
+    # Empty string for un-registered classes (test stubs, base class).
+    registered_name: str = ""
+
     # ─── V5 (May 7 2026): per-strategy calibration module ───────────
     # Concrete strategy classes set this to their calibration module
     # (e.g. ``from src.strategy.calibrations import iron_condor;

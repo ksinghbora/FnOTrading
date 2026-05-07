@@ -27,6 +27,11 @@ def register_strategy(
     def decorator(cls: Type[BaseStrategy]) -> Type[BaseStrategy]:
         _REGISTRY[name] = cls
         _PARAMS_REGISTRY[name] = params_class
+        # Store the registered name on the class so API consumers
+        # (UI dashboard, monitoring) can label instances by their
+        # canonical strategy type without regex-parsing the
+        # strategy_id (e.g. 'ic_2' → 'iron_condor').
+        cls.registered_name = name
         logger.debug(f"Registered strategy: {name} -> {cls.__name__}")
         return cls
 

@@ -14,13 +14,40 @@ router = APIRouter(prefix="/api/strategies", tags=["strategies"])
 async def list_strategies(
     runner: StrategyRunner = Depends(get_strategy_runner),
 ) -> dict:
-    """List all running strategies with their status."""
+    """List all running strategies with their status.
+
+    Returned fields per strategy:
+      - strategy_id : runtime instance id (e.g. 'ic_2')
+      - name        : canonical registered name (e.g. 'iron_condor')
+                      — set by @register_strategy decorator, used by
+                      the UI to label and color-code instances without
+                      regex-parsing the id
+      - state       : 'RUNNING' | 'STARTING' | 'STOPPING' | 'STOPPED'
+      - shadow_only : whether the strategy is in shadow mode (logs
+                      decisions but does not place real orders) — UI
+                      surfaces this as a badge so the operator sees
+                      at a glance which strategies are live vs paper
+      - regime_family : 'premium_selling' | 'long_vol' |
+                       'directional_trend' | 'unknown' — used by the
+                       V5 orchestrator and helpful for grouping
+      - calibration_module : dotted-path of the per-strategy calibration
+                             module (V5 isolation contract) — empty
+                             when the strategy hasn't declared one
+      - params      : full Pydantic params dump
+      - state_data  : strategy-specific runtime state
+    """
     strategies = runner.get_all_strategies()
     items = []
     for sid, strategy in strategies.items():
+        cal_module = getattr(type(strategy), "calibration", None)
+        cal_name = cal_module.__name__ if cal_module is not None else ""
         items.append({
             "strategy_id": sid,
+            "name": getattr(type(strategy), "registered_name", ""),
             "state": strategy.state.value,
+            "shadow_only": bool(getattr(strategy.params, "shadow_only", False)),
+            "regime_family": getattr(type(strategy), "regime_family", "unknown"),
+            "calibration_module": cal_name,
             "params": strategy.params.model_dump(mode="json"),
             "state_data": strategy.get_state_data(),
         })
