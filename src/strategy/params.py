@@ -297,6 +297,27 @@ class ShortStrangleParams(BaseStrategyParams):
     add_hedge: bool = True
     hedge_offset_strikes: int = 5            # Closer from 8 — meaningful protection at ~250pts
 
+    # May 7 2026 (Phase 1) — Indian-validated regime + calendar gates.
+    # Mirrors IronCondorParams. Empirical basis:
+    #   * v2 regime gate: our IC v2 holdout +₹584/324 trades/Sharpe 0.35
+    #   * calendar filter: today's IC v2 + cal ablation +₹13.1/trade
+    #     (vs IC v2 unfiltered +₹1.8/trade)
+    # When require_premium_selling_regime_v2=True, the strategy bypasses
+    # every legacy heuristic filter (score, VIX-band, trend, PCR,
+    # max-pain) and gates entries SOLELY on:
+    #   CI ≥ 61.8 (Choppiness Index range-bound, Bill Dreiss / Fibonacci)
+    #   VRP > 0   (Bollerslev-Tauchen-Zhou variance risk premium)
+    # Calendar filter adds Tue/Wed/Thu DoW + T-1 pre-event block (RBI
+    # MPC, FOMC, Budget, CPI from data/event_days.csv).
+    # Defaults False so existing reports remain reproducible.
+    require_premium_selling_regime_v2: bool = False
+    require_calendar_filter: bool = False
+    # 0=Mon 1=Tue 2=Wed 3=Thu 4=Fri. Default Tue/Wed/Thu matches Anurag
+    # Goel's NIFTY short-strangle Sharpe-1.96 research.
+    allowed_days_of_week: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    block_pre_event_days: int = 1
+    block_friday: bool = False
+
 
 class IronCondorParams(BaseStrategyParams):
     """Parameters for Iron Condor strategy."""

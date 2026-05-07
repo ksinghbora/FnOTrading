@@ -10,6 +10,7 @@ from src.core.constants import LOT_SIZES
 from src.core.models import Signal, SignalLeg, Subscription, Tick
 from src.core.types import OrderSide, OrderType, SignalType
 from src.strategy.base import BaseStrategy
+from src.strategy.event_calendar import EventCalendar
 from src.strategy.params import ShortStrangleParams
 from src.strategy.regime import RegimeDetector
 from src.strategy.registry import register_strategy
@@ -54,6 +55,9 @@ class ShortStrangleStrategy(BaseStrategy):
         self._entered = False
         self._stopped_for_day = False
         self._regime: RegimeDetector | None = None
+        # May 7 2026 Phase 1: calendar-aware filter (parallel to IC v2).
+        # Loaded only when params.require_calendar_filter is True.
+        self._event_calendar: EventCalendar | None = None
         self._paper_mode: bool = os.environ.get("PAPER_TRADING", "false").lower() == "true"
         self._ce_token: int = 0
         self._pe_token: int = 0
@@ -82,7 +86,54 @@ class ShortStrangleStrategy(BaseStrategy):
 
     async def on_start(self) -> None:
         self._expiry = self.ctx.next_expiry(self.params.underlying)
-        self._regime = RegimeDetector(self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder)
+        # May 7 2026: pass simulated clock so backtest day-rollover detection
+        # works (matches IC v2 / IB pattern).
+        self._regime = RegimeDetector(
+            self.ctx._feed, self.ctx._aggregator, self.ctx._chain_builder,
+            clock=self.ctx.clock,
+        )
+
+        # May 7 2026 Phase 1: warm up daily-close deque for v2 regime
+        # gate. Without this, the gate returns "insufficient_data"
+        # perpetually because the launchd daily restart resets the
+        # in-memory deque every morning. Failure non-fatal — falls back
+        # to gradual in-memory accumulation.
+        if getattr(self.params, "require_premium_selling_regime_v2", False):
+            spot_token = self.ctx.get_spot_token(self.params.underlying)
+            if spot_token is None:
+                logger.warning(
+                    f"[{self.strategy_id}] No spot token for {self.params.underlying} — "
+                    f"v2 regime warmup skipped"
+                )
+            else:
+                seeded = await self._regime.warmup_daily_closes(
+                    self.ctx.get_historical_data,
+                    self.params.underlying,
+                    spot_token,
+                )
+                logger.info(
+                    f"[{self.strategy_id}] v2 regime warmup: "
+                    f"seeded {seeded} daily closes for {self.params.underlying}"
+                )
+
+        # May 7 2026 Phase 1: load EventCalendar for calendar-aware
+        # filter (parallel to IC v2). Cheap CSV load (~143 rows).
+        if getattr(self.params, "require_calendar_filter", False):
+            try:
+                self._event_calendar = EventCalendar()
+                logger.info(
+                    f"[{self.strategy_id}] calendar filter active: "
+                    f"allowed_dow={self.params.allowed_days_of_week} "
+                    f"block_pre_event_days={self.params.block_pre_event_days} "
+                    f"block_friday={self.params.block_friday}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[{self.strategy_id}] EventCalendar load failed: {e} — "
+                    f"calendar filter disabled for this run"
+                )
+                self._event_calendar = None
+
         logger.info(
             f"[{self.strategy_id}] Started: {self.params.underlying} "
             f"expiry={self._expiry} call_delta={self.params.call_delta} "
@@ -170,41 +221,117 @@ class ShortStrangleStrategy(BaseStrategy):
             )
             return None
 
-        # VIX filter — skip entry in high-volatility environments
-        vix_block = self._check_vix_filter()
-        if vix_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_VIX",
-                f"[{self.strategy_id}] Entry skipped: {vix_block}",
-            )
-            return None
+        # ─── May 7 2026 Phase 1: calendar-aware filter (parallel to IC v2) ──
+        # Three sub-checks, all opt-in via require_calendar_filter:
+        #   1. Day-of-week filter (default Tue/Wed/Thu — Anurag Goel
+        #      Sharpe-1.96 NIFTY backtest)
+        #   2. Pre-event block (T-1 before HARD_BLOCK events from
+        #      data/event_days.csv: RBI MPC, FOMC, Budget, CPI)
+        #   3. Friday block opt-in (extra weekend-gap insurance)
+        if getattr(self.params, "require_calendar_filter", False) and self._event_calendar is not None:
+            now = self.ctx.clock.now()
+            today = now.date()
+            dow = today.weekday()  # 0=Mon, 4=Fri
 
-        # Trend filter — skip if market is trending >0.7% from open
-        trend_block = self._check_trend_filter(self.params.underlying)
-        if trend_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_TREND",
-                f"[{self.strategy_id}] Entry skipped: {trend_block}",
-            )
-            return None
+            # 1. Day-of-week
+            allowed = self.params.allowed_days_of_week
+            if allowed and dow not in allowed:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_DOW",
+                    f"[{self.strategy_id}] Entry skipped: day-of-week {dow} not in {allowed}",
+                )
+                return None
 
-        # PCR filter
-        pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
-        if pcr_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_PCR",
-                f"[{self.strategy_id}] Entry skipped: {pcr_block}",
-            )
-            return None
+            # 2. Pre-event window (weekday-only count; matches IC v2)
+            pre_days = int(self.params.block_pre_event_days)
+            if pre_days > 0:
+                from datetime import timedelta
+                for offset in range(1, pre_days * 2 + 3):
+                    check_date = today + timedelta(days=offset)
+                    is_blocked, ev_type = self._event_calendar.is_hard_blocked(check_date)
+                    if is_blocked:
+                        d = today + timedelta(days=1)
+                        td = 0
+                        while d <= check_date:
+                            if d.weekday() < 5:
+                                td += 1
+                            d += timedelta(days=1)
+                        if td <= pre_days:
+                            self._log_skip_throttled(
+                                "ENTRY_SKIP_PRE_EVENT",
+                                f"[{self.strategy_id}] Entry skipped: "
+                                f"{ev_type} in {td} trading day(s)",
+                            )
+                            return None
+                        break
 
-        # Max pain filter
-        mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
-        if mp_block:
-            self._log_skip_throttled(
-                "ENTRY_SKIP_MP",
-                f"[{self.strategy_id}] Entry skipped: {mp_block}",
-            )
-            return None
+            # 3. Friday block (opt-in)
+            if self.params.block_friday and dow == 4:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_FRIDAY",
+                    f"[{self.strategy_id}] Entry skipped: Friday weekend-gap block",
+                )
+                return None
+
+        # ─── May 7 2026 Phase 1: v2 regime gate (bypasses legacy filters) ──
+        # When require_premium_selling_regime_v2 is True, the strategy
+        # gates entries SOLELY on CI ≥ 61.8 AND VRP > 0 — same gate
+        # validated on IC v2 (+₹584/324 trades on holdout).
+        if getattr(self.params, "require_premium_selling_regime_v2", False):
+            if not self._regime:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_V2_NO_DETECTOR",
+                    f"[{self.strategy_id}] Entry skipped: regime detector unavailable",
+                )
+                return None
+            ok, metrics = self._regime.is_premium_selling_favorable_v2(self.params.underlying)
+            if not ok:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_REGIME_V2_GATE",
+                    f"[{self.strategy_id}] Entry skipped: regime gate v2 "
+                    f"{metrics.get('reason', '?')}",
+                )
+                return None
+            # v2 mode: skip every legacy filter and proceed directly
+            # to chain selection.
+        else:
+            # ─── Legacy heuristic-filter pipeline (default behaviour) ─
+
+            # VIX filter — skip entry in high-volatility environments
+            vix_block = self._check_vix_filter()
+            if vix_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_VIX",
+                    f"[{self.strategy_id}] Entry skipped: {vix_block}",
+                )
+                return None
+
+            # Trend filter — skip if market is trending >0.7% from open
+            trend_block = self._check_trend_filter(self.params.underlying)
+            if trend_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_TREND",
+                    f"[{self.strategy_id}] Entry skipped: {trend_block}",
+                )
+                return None
+
+            # PCR filter
+            pcr_block = self._check_pcr_filter(self.params.underlying, self._expiry)
+            if pcr_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_PCR",
+                    f"[{self.strategy_id}] Entry skipped: {pcr_block}",
+                )
+                return None
+
+            # Max pain filter
+            mp_block = self._check_max_pain_filter(self.params.underlying, self._expiry)
+            if mp_block:
+                self._log_skip_throttled(
+                    "ENTRY_SKIP_MP",
+                    f"[{self.strategy_id}] Entry skipped: {mp_block}",
+                )
+                return None
 
         # Log IV skew and OI levels for research
         self._log_iv_skew(self.params.underlying, self._expiry)
