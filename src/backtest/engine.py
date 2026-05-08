@@ -476,8 +476,17 @@ class BacktestEngine:
                 aggregator.process_tick_direct(spot_tick)
 
                 try:
-                    signal = await strategy.on_tick(spot_tick)
-                    if signal:
+                    result = await strategy.on_tick(spot_tick)
+                    # V6 (May 8 2026): on_tick may return Signal | list[Signal] | None.
+                    # Multi-slot orchestrator emits a list when multiple children
+                    # signal on the same tick (e.g. IC EXIT + SS ENTRY simultaneously).
+                    if result is None:
+                        signals = []
+                    elif isinstance(result, list):
+                        signals = [s for s in result if s is not None]
+                    else:
+                        signals = [result]
+                    for signal in signals:
                         await order_callback(signal)
                 except Exception as e:
                     logger.debug(f"[BACKTEST] Strategy tick error: {e}")

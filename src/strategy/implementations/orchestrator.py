@@ -144,10 +144,46 @@ class OrchestratorStrategy(BaseStrategy):
         super().__init__(strategy_id, params)
         # Map of registry-name → child instance. Empty until on_start runs.
         self._children: dict[str, BaseStrategy] = {}
-        # Name of the child currently holding a position (None = no slot active).
-        self._active_child: str | None = None
+        # V6 (May 8 2026): set of child names currently holding positions.
+        # Single-slot mode (max_concurrent_slots=1) keeps this set ≤ 1
+        # element, preserving V4/V5 semantics. Multi-slot mode allows up
+        # to ``max_concurrent_slots`` children to hold positions
+        # concurrently. The legacy ``_active_child`` property below
+        # returns the FIRST active child for backward-compat reads.
+        self._active_children: set[str] = set()
         # V5 coordinator state — day PnL tracker, drawdown breaker, etc.
         self._coord = CoordinatorState()
+
+    @property
+    def _active_child(self) -> str | None:
+        """Backward-compat single-slot accessor.
+
+        Returns the first child in ``_active_children`` (deterministic
+        via insertion order in CPython 3.7+ dict-backed sets — actually
+        sets aren't ordered, so we sort by registered position).
+        """
+        if not self._active_children:
+            return None
+        # Stable order: pick by ``params.children`` list position
+        order = self.params.children
+        for name in order:
+            if name in self._active_children:
+                return name
+        # Fallback: arbitrary one
+        return next(iter(self._active_children))
+
+    @_active_child.setter
+    def _active_child(self, value: str | None) -> None:
+        """Backward-compat setter.
+
+        Setting to None clears all active children (V4/V5 single-slot
+        contract). Setting to a string clears all and sets that one
+        active. Multi-slot code should use ``_active_children`` directly.
+        """
+        if value is None:
+            self._active_children.clear()
+        else:
+            self._active_children = {value}
 
     def get_subscriptions(self) -> Subscription:
         # Aggregate child subscriptions. Done after children exist; for
@@ -205,13 +241,29 @@ class OrchestratorStrategy(BaseStrategy):
 
     # ─── Tick routing ────────────────────────────────────────────
 
-    async def on_tick(self, tick: Tick) -> Signal | None:
+    async def on_tick(self, tick: Tick) -> "Signal | list[Signal] | None":
+        """V6 multi-slot tick routing.
+
+        Returns Signal | list[Signal] | None. The runner / backtest
+        engine normalize all three shapes. Multiple signals are
+        emitted on the same tick when multiple children act
+        simultaneously (e.g. IC EXIT + SS ENTRY on the same minute).
+
+        Phases:
+          0. Day-rollover detect (reset coordinator state)
+          1. Route tick to ALL active children → collect their signals,
+             release slots that emitted EXIT
+          2. Daily-drawdown check (skip new entries if tripped)
+          3. Cash-floor check (skip if no regime family clears)
+          4. Build + rank candidates (excluding already-active children
+             and excluded families)
+          5. Try to fill remaining slots up to max_concurrent_slots
+             (and capital cap if set), collecting ENTRY signals
+        """
         if not self._children:
             return None
 
-        # ── Day-rollover ─────────────────────────────────────
-        # Reset coordinator day state on the first tick of a new
-        # trading day. Idempotent within a day.
+        # ── Phase 0: Day-rollover ─────────────────────────────────
         try:
             today = self.ctx.clock.now().date()
             if reset_day(self._coord, today):
@@ -222,36 +274,53 @@ class OrchestratorStrategy(BaseStrategy):
         except Exception:
             pass  # No clock yet — first tick before runner wired it
 
-        # ── Phase 1: managed-position routing ──
-        # If a child currently holds the slot, route ONLY to it. The child
-        # manages its own exits (profit target, stop loss, time stop). When
-        # it emits an EXIT, the orchestrator releases the slot.
-        if self._active_child and self._active_child in self._children:
-            active = self._children[self._active_child]
-            try:
-                signal = await active.on_tick(tick)
-            except Exception as e:
-                logger.error(f"[{self.strategy_id}] active child '{self._active_child}' errored: {e}")
-                return None
-            if signal is not None and signal.signal_type == SignalType.EXIT:
-                logger.info(f"[{self.strategy_id}] '{self._active_child}' exited — releasing slot")
-                self._active_child = None
-            return signal
+        emitted: list = []  # signals to return at end of tick
 
-        # ── V5 circuit breaker: daily drawdown ──
-        # Cheaper than scoring children — check breaker first.
+        # ── Phase 1: poll active children (for exits + intra-trade signals) ──
+        # Each active child gets the tick; if it emits a signal, capture
+        # it. EXIT signals release the slot.
+        for child_name in list(self._active_children):
+            child = self._children.get(child_name)
+            if child is None:
+                # Stale entry — child was removed somehow; clean up
+                self._active_children.discard(child_name)
+                continue
+            try:
+                result = await child.on_tick(tick)
+            except Exception as e:
+                logger.error(
+                    f"[{self.strategy_id}] active child '{child_name}' errored: {e}"
+                )
+                continue
+            # result may itself be Signal | list[Signal] | None (defensive)
+            child_signals = self._normalize_child_signals(result)
+            for signal in child_signals:
+                if signal.signal_type == SignalType.EXIT:
+                    self._active_children.discard(child_name)
+                    logger.info(
+                        f"[{self.strategy_id}] '{child_name}' exited — slot released "
+                        f"(active now: {sorted(self._active_children)})"
+                    )
+                emitted.append(signal)
+
+        # ── Phase 2: daily-drawdown circuit breaker ──
         blocked, why = should_block_entries(self._coord, self.params.daily_max_drawdown_inr)
         if blocked:
             self._log_skip_throttled(
                 "ORCH_DRAWDOWN_BREAKER",
                 f"[{self.strategy_id}] new entries blocked: {why}",
             )
-            return None
+            return _flatten_emitted(emitted)
 
-        # ── Phase 2: build candidate snapshots ──
+        # Capacity check: if all slots full, no point ranking new entries
+        free_slots = max(0, self.params.max_concurrent_slots - len(self._active_children))
+        if free_slots == 0:
+            return _flatten_emitted(emitted)
+
+        # ── Phase 3: build candidate snapshots ──
         candidates = self._build_candidates()
 
-        # ── V5 cash floor: refuse when no family clears ──
+        # Cash-floor check
         if cash_floor_breached(candidates, self.params.cash_floor_confidence):
             best_fam, best_conf = best_family_confidence(candidates)
             self._log_skip_throttled(
@@ -259,19 +328,16 @@ class OrchestratorStrategy(BaseStrategy):
                 f"[{self.strategy_id}] cash floor breached: best family={best_fam} "
                 f"@ confidence={best_conf:.2f} < floor={self.params.cash_floor_confidence:.2f}",
             )
-            return None
+            return _flatten_emitted(emitted)
 
-        # ── V5 correlation guard: exclude families already active ──
-        # Single-slot orchestrator: at this point _active_child is None,
-        # so excluded_families is empty. The hook is here for the day a
-        # multi-slot variant lands.
+        # ── Phase 4: rank candidates excluding already-active and correlated ──
         excluded_families: set[str] = set()
-        if self.params.block_correlated_families and self._active_child:
-            ac = self._children.get(self._active_child)
-            if ac is not None:
-                excluded_families.add(getattr(ac, "regime_family", "unknown"))
+        if self.params.block_correlated_families:
+            for active_name in self._active_children:
+                ac = self._children.get(active_name)
+                if ac is not None:
+                    excluded_families.add(getattr(ac, "regime_family", "unknown"))
 
-        # ── Phase 3: rank ──
         eligible = rank_candidates(
             candidates,
             min_score_to_trade=self.params.min_score_to_trade,
@@ -280,28 +346,70 @@ class OrchestratorStrategy(BaseStrategy):
             block_correlated=self.params.block_correlated_families,
             excluded_families=excluded_families,
         )
+        # Filter out already-active children — they were polled in Phase 1
+        eligible = [
+            (cand, rv) for cand, rv in eligible
+            if cand.name not in self._active_children
+        ]
 
         if not eligible:
             best = candidates[0] if candidates else None
             best_eff = best.effective_score(self.params.regime_aware_scoring) if best else 0.0
             self._log_skip_throttled(
                 "ORCH_NO_CANDIDATE",
-                f"[{self.strategy_id}] no child scored >= {self.params.min_score_to_trade} "
-                f"(top eff={best_eff:.1f} for {best.name if best else 'none'})",
+                f"[{self.strategy_id}] no inactive child scored >= {self.params.min_score_to_trade} "
+                f"(top eff={best_eff:.1f} for {best.name if best else 'none'}, "
+                f"active: {sorted(self._active_children)})",
             )
-            return None
+            return _flatten_emitted(emitted)
 
-        # ── Phase 4: route to best, fall back on None (V4 fallback) ──
+        # ── Phase 5: try to fill remaining slots ──
+        # Track current margin commitment (sum across active children)
+        active_margin = sum(
+            float(getattr(self._children[name].params, "expected_margin_per_lot_lakhs", 2.0))
+            for name in self._active_children
+            if name in self._children
+        )
+        slots_filled = 0
         for cand, rank_value in eligible:
+            if slots_filled >= free_slots:
+                break
+            # In-tick correlation re-check: if an earlier slot fill in
+            # this same tick already added a candidate of this family,
+            # block now. ``excluded_families`` was pre-computed at the
+            # start of the tick (already-active families), but we mutate
+            # it inside this loop on each ENTRY so subsequent same-family
+            # candidates get filtered.
+            if (self.params.block_correlated_families
+                    and cand.regime_family in excluded_families):
+                self._log_skip_throttled(
+                    f"ORCH_CORR_GUARD_{cand.name}",
+                    f"[{self.strategy_id}] '{cand.name}' skipped: "
+                    f"family {cand.regime_family!r} already filled this tick",
+                )
+                continue
+            # Capital cap: skip if adding this child would exceed budget
+            if self.params.max_total_margin_lakhs > 0.0:
+                if active_margin + cand.expected_margin_lakhs > self.params.max_total_margin_lakhs:
+                    self._log_skip_throttled(
+                        f"ORCH_MARGIN_CAP_{cand.name}",
+                        f"[{self.strategy_id}] '{cand.name}' skipped: "
+                        f"active_margin=₹{active_margin:.1f}L + "
+                        f"₹{cand.expected_margin_lakhs:.1f}L > "
+                        f"₹{self.params.max_total_margin_lakhs:.1f}L cap",
+                    )
+                    continue
+
             child = self._children.get(cand.name)
             if child is None:
                 continue
             try:
-                signal = await child.on_tick(tick)
+                result = await child.on_tick(tick)
             except Exception as e:
                 logger.error(f"[{self.strategy_id}] child '{cand.name}' on_tick errored: {e}")
                 continue
-            if signal is None:
+            child_signals = self._normalize_child_signals(result)
+            if not child_signals:
                 self._log_skip_throttled(
                     f"ORCH_FALLBACK_{cand.name}",
                     f"[{self.strategy_id}] '{cand.name}' (rank={rank_value:.2f}, "
@@ -309,26 +417,53 @@ class OrchestratorStrategy(BaseStrategy):
                     f"returned None — trying next eligible",
                 )
                 continue
-            # Got a real signal — claim the slot if it's an entry
-            if signal.signal_type == SignalType.ENTRY:
-                self._active_child = cand.name
-                fam_name, fam_conf = best_family_confidence(candidates)
-                logger.info(
-                    f"[{self.strategy_id}] selected '{cand.name}' "
-                    f"(legacy={cand.legacy_score} regime_conf={cand.regime_confidence:.2f} "
-                    f"eff={cand.effective_score(self.params.regime_aware_scoring):.1f} "
-                    f"margin=₹{cand.expected_margin_lakhs:.1f}L family={cand.regime_family}) | "
-                    f"best_family={fam_name}@{fam_conf:.2f}"
-                )
-            return signal
+            for signal in child_signals:
+                if signal.signal_type == SignalType.ENTRY:
+                    self._active_children.add(cand.name)
+                    active_margin += cand.expected_margin_lakhs
+                    slots_filled += 1
+                    fam_name, fam_conf = best_family_confidence(candidates)
+                    logger.info(
+                        f"[{self.strategy_id}] activated '{cand.name}' "
+                        f"(legacy={cand.legacy_score} regime_conf={cand.regime_confidence:.2f} "
+                        f"eff={cand.effective_score(self.params.regime_aware_scoring):.1f} "
+                        f"margin=₹{cand.expected_margin_lakhs:.1f}L family={cand.regime_family}) | "
+                        f"slots {len(self._active_children)}/{self.params.max_concurrent_slots} | "
+                        f"active_margin=₹{active_margin:.1f}L"
+                    )
+                    # In multi-slot mode, also exclude this candidate's
+                    # family from the rest of this tick's slot fills.
+                    if self.params.block_correlated_families:
+                        excluded_families.add(cand.regime_family)
+                emitted.append(signal)
+            # Stop scanning if we've filled all free slots
+            if slots_filled >= free_slots:
+                break
 
-        # All eligible children returned None this tick
-        self._log_skip_throttled(
-            "ORCH_ALL_REJECTED",
-            f"[{self.strategy_id}] all {len(eligible)} eligible children returned None "
-            f"(top was {eligible[0][0].name})",
-        )
-        return None
+        # All eligible children scanned this tick
+        if not emitted and slots_filled == 0 and eligible:
+            self._log_skip_throttled(
+                "ORCH_ALL_REJECTED",
+                f"[{self.strategy_id}] all {len(eligible)} eligible children returned None "
+                f"(top was {eligible[0][0].name})",
+            )
+        return _flatten_emitted(emitted)
+
+    # ─── Multi-slot helpers ────────────────────────────────────────
+
+    @staticmethod
+    def _normalize_child_signals(result) -> list:
+        """Children's on_tick may return Signal | list[Signal] | None.
+
+        Defensive normalization for the multi-slot routing — most
+        existing children still return a single Signal, but the API is
+        now permissive. Returns a list of non-None Signal objects.
+        """
+        if result is None:
+            return []
+        if isinstance(result, list):
+            return [s for s in result if s is not None]
+        return [result]
 
     # ─── Coordinator helpers ──────────────────────────────────────
 
@@ -452,14 +587,18 @@ class OrchestratorStrategy(BaseStrategy):
                 await child.on_stop()
             except Exception as e:
                 logger.warning(f"[{self.strategy_id}] '{name}'.on_stop errored: {e}")
-        if self._active_child:
-            logger.info(f"[{self.strategy_id}] stopped while '{self._active_child}' held an open position")
+        if self._active_children:
+            logger.info(
+                f"[{self.strategy_id}] stopped while {sorted(self._active_children)} "
+                f"held open positions"
+            )
 
     def reset_day_state(self) -> None:
         """Cascade day-state reset to children that support it."""
-        # Orchestrator's own per-day state: drop the active slot at day start.
-        if self._active_child:
-            self._active_child = None
+        # Orchestrator's own per-day state: drop ALL active slots at day start.
+        # Multi-slot V6: clear the whole set, not just the first child.
+        if self._active_children:
+            self._active_children.clear()
         for child in self._children.values():
             if hasattr(child, "reset_day_state"):
                 try:
@@ -472,3 +611,26 @@ class OrchestratorStrategy(BaseStrategy):
         self._coord = CoordinatorState()
         # Clear our own skip-log dedup
         self._last_skip_log_minute.clear()
+
+
+# ─── Module-level helpers ──────────────────────────────────────────
+
+
+def _flatten_emitted(emitted: list):
+    """Convert the per-tick emitted-signals list to the runner's expected return shape.
+
+    - 0 signals → None
+    - 1 signal  → that single Signal (preserves V4/V5 single-signal API)
+    - 2+ signals → list[Signal] (V6 multi-slot)
+
+    The runner / backtest engine handle all three shapes via
+    ``_normalize_signals`` (runner.py) and the inline normalization in
+    backtest engine. Returning the simplest-possible shape avoids
+    perturbing existing tests that compare ``await orchestrator.on_tick(...)
+    is sample_signal``.
+    """
+    if not emitted:
+        return None
+    if len(emitted) == 1:
+        return emitted[0]
+    return list(emitted)

@@ -18,6 +18,26 @@ from src.strategy.state_store import StrategyStateStore
 logger = logging.getLogger(__name__)
 
 
+def _normalize_signals(result) -> list[Signal]:
+    """Normalize an on_tick / on_candle return value to a list of Signals.
+
+    V6 (May 8 2026): on_tick may return ``Signal | list[Signal] | None``.
+    Multi-slot OrchestratorStrategy returns a list when multiple children
+    emit signals on the same tick (e.g. IC EXIT + SS ENTRY simultaneously).
+    Single-Signal returns from V4/V5 strategies still work unchanged —
+    they wrap as a 1-element list.
+    """
+    if result is None:
+        return []
+    if isinstance(result, Signal):
+        return [result]
+    if isinstance(result, list):
+        return [s for s in result if s is not None]
+    # Defensive fallback — log and skip unexpected types
+    logger.warning(f"on_tick returned unexpected type {type(result).__name__}; ignoring")
+    return []
+
+
 class StrategyRunner:
     """Manages strategy lifecycle and dispatches market events to strategies.
 
@@ -167,7 +187,14 @@ class StrategyRunner:
         return dict(self._strategies)
 
     async def _on_tick(self, event: Event) -> None:
-        """Dispatch tick to subscribed strategies."""
+        """Dispatch tick to subscribed strategies.
+
+        V6 (May 8 2026): on_tick may return ``Signal | list[Signal] | None``.
+        The list form lets the multi-slot OrchestratorStrategy emit one
+        signal per concurrently-active child on the same tick (e.g. one
+        EXIT for IC + one ENTRY for SS, both fired on the same minute).
+        Single-Signal returns continue to work unchanged.
+        """
         tick_data = event.payload.get("tick")
         if not tick_data:
             return
@@ -184,10 +211,10 @@ class StrategyRunner:
                 continue
 
             try:
-                signal = await asyncio.wait_for(
+                result = await asyncio.wait_for(
                     strategy.on_tick(tick), timeout=0.5
                 )
-                if signal:
+                for signal in _normalize_signals(result):
                     await self._process_signal(signal)
             except asyncio.TimeoutError:
                 logger.warning(f"Strategy {sid} on_tick timed out (>500ms)")
@@ -207,8 +234,8 @@ class StrategyRunner:
             if strategy.state != StrategyState.RUNNING:
                 continue
             try:
-                signal = await strategy.on_candle(candle)
-                if signal:
+                result = await strategy.on_candle(candle)
+                for signal in _normalize_signals(result):
                     await self._process_signal(signal)
             except Exception as e:
                 logger.exception(f"Strategy {strategy.strategy_id} on_candle error: {e}")

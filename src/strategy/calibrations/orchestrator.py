@@ -69,3 +69,19 @@ class OrchestratorParams(BaseStrategyParams):
 
     # 6. Per-strategy weight cap (multi-slot future)
     max_strategy_weight: float = 1.0
+
+    # ─── V6 (May 8 2026) multi-slot orchestration ─────────────────
+    # Default 1 = V4/V5 single-slot behaviour (backward compatible).
+    # Set to 2+ to allow multiple children to hold positions
+    # concurrently. With max_concurrent_slots=4 (the canonical roster
+    # size), the orchestrator can run IC + IB + SS + TD in parallel
+    # when their gates pass on the same day. Each child manages its
+    # own exits independently; the orchestrator routes ticks to ALL
+    # active children plus tries to enter new ones up to the slot cap.
+    max_concurrent_slots: int = 1
+
+    # Total margin budget across active children, in lakhs of rupees.
+    # When > 0 and ``margin_aware_selection=True``, new entries are
+    # blocked once sum(active.expected_margin_per_lot_lakhs) ≥ this
+    # cap. 0 disables the budget gate (no cap).
+    max_total_margin_lakhs: float = 0.0
