@@ -223,8 +223,16 @@ class OrchestratorStrategy(BaseStrategy):
             child = child_cls(strategy_id=child_id, params=child_params)
             child.set_context(self.ctx)
             try:
+                # Mirror StrategyRunner.add_strategy state transitions so
+                # the API's /api/strategies endpoint reports the child's
+                # actual state (RUNNING) instead of the IDLE default.
+                from src.core.types import StrategyState
+                child.state = StrategyState.STARTING
                 await child.on_start()
+                child.state = StrategyState.RUNNING
             except Exception as e:
+                from src.core.types import StrategyState
+                child.state = StrategyState.ERROR
                 logger.error(f"[{self.strategy_id}] child '{name}' on_start failed: {e} — skipping")
                 continue
             self._children[name] = child
@@ -273,6 +281,16 @@ class OrchestratorStrategy(BaseStrategy):
                 )
         except Exception:
             pass  # No clock yet — first tick before runner wired it
+
+        # ── Per-minute heartbeat: log what's actually happening ──
+        # Throttled summary line so the operator can `tail -f` and see
+        # which children are active each minute, without scrolling
+        # through every per-tick "best family" log.
+        self._log_skip_throttled(
+            "ORCH_HEARTBEAT",
+            f"[{self.strategy_id}] active={sorted(self._active_children) or 'none'} "
+            f"({len(self._active_children)}/{self.params.max_concurrent_slots} slots)",
+        )
 
         emitted: list = []  # signals to return at end of tick
 
@@ -582,10 +600,14 @@ class OrchestratorStrategy(BaseStrategy):
 
     async def on_stop(self) -> None:
         """Stop all children cleanly."""
+        from src.core.types import StrategyState
         for name, child in self._children.items():
             try:
+                child.state = StrategyState.STOPPING
                 await child.on_stop()
+                child.state = StrategyState.STOPPED
             except Exception as e:
+                child.state = StrategyState.ERROR
                 logger.warning(f"[{self.strategy_id}] '{name}'.on_stop errored: {e}")
         if self._active_children:
             logger.info(

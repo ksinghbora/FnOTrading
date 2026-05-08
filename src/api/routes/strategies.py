@@ -44,6 +44,8 @@ async def list_strategies(
         items.append({
             "strategy_id": sid,
             "name": getattr(type(strategy), "registered_name", ""),
+            "parent_id": None,
+            "is_active": True,
             "state": strategy.state.value,
             "shadow_only": bool(getattr(strategy.params, "shadow_only", False)),
             "regime_family": getattr(type(strategy), "regime_family", "unknown"),
@@ -51,6 +53,30 @@ async def list_strategies(
             "params": strategy.params.model_dump(mode="json"),
             "state_data": strategy.get_state_data(),
         })
+
+        # V6 (May 8 2026): if this is an orchestrator with children,
+        # expose each child as its own row so the UI can show what's
+        # actually trading. Children carry composite ids like
+        # ``orchestrator_1/iron_condor`` that PnL queries already roll
+        # up under the parent id (commit e18451e).
+        children = getattr(strategy, "_children", None)
+        active_set = getattr(strategy, "_active_children", set())
+        if children:
+            for child_name, child in children.items():
+                child_cal = getattr(type(child), "calibration", None)
+                child_cal_name = child_cal.__name__ if child_cal is not None else ""
+                items.append({
+                    "strategy_id": child.strategy_id,
+                    "name": getattr(type(child), "registered_name", ""),
+                    "parent_id": sid,
+                    "is_active": child_name in active_set,
+                    "state": child.state.value,
+                    "shadow_only": bool(getattr(strategy.params, "shadow_only", False)),
+                    "regime_family": getattr(type(child), "regime_family", "unknown"),
+                    "calibration_module": child_cal_name,
+                    "params": child.params.model_dump(mode="json"),
+                    "state_data": child.get_state_data(),
+                })
     return {
         "strategies": items,
         "registered_types": list_registered(),

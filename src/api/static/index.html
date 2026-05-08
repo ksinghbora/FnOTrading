@@ -1233,6 +1233,11 @@ function renderStrategyComparison() {
       type: stype,
       shadow: !!s.shadow_only,
       family: s.regime_family || 'unknown',
+      // V6: orchestrator children carry a parent_id; the UI indents
+      // them and shows an ACTIVE badge when they currently hold a
+      // position. Top-level strategies have parent_id=null.
+      parent_id: s.parent_id || null,
+      is_active: s.is_active !== false,  // default true for non-orchestrator strategies
       positions: [],
       unrealized: 0,
       realized: 0,
@@ -1288,30 +1293,58 @@ function renderStrategyComparison() {
 
   let totalUnreal = 0, totalReal = 0, totalCharges = 0;
 
-  const rows = Object.entries(byStrategy).map(([sid, data]) => {
+  // Sort: parents first, then their children grouped beneath. Top-level
+  // strategies (parent_id=null) are sorted by id; children sorted by
+  // parent then by their own id.
+  const sortedEntries = Object.entries(byStrategy).sort(([sidA, a], [sidB, b]) => {
+    const pa = a.parent_id || sidA;
+    const pb = b.parent_id || sidB;
+    if (pa !== pb) return pa.localeCompare(pb);
+    // Parent first, child second within the same group
+    if (!a.parent_id && b.parent_id) return -1;
+    if (a.parent_id && !b.parent_id) return 1;
+    return sidA.localeCompare(sidB);
+  });
+
+  const rows = sortedEntries.map(([sid, data]) => {
     const typeName = typeLabels[data.type] || data.type;
     const color = typeColors[data.type] || 'var(--text)';
     const posCount = data.positions.length;
     const netPnl = data.unrealized + data.realized - data.charges;
-    totalUnreal += data.unrealized;
-    totalReal += data.realized;
-    totalCharges += data.charges;
+    // Only count parent rows in the totals (children's PnL rolls up
+    // into the parent via PortfolioManager.get_pnl prefix-match).
+    if (!data.parent_id) {
+      totalUnreal += data.unrealized;
+      totalReal += data.realized;
+      totalCharges += data.charges;
+    }
 
     const statusBadge = data.status === 'RUNNING'
       ? '<span style="color:var(--green);font-size:11px">RUNNING</span>'
       : `<span style="color:var(--text2);font-size:11px">${data.status}</span>`;
 
-    // Shadow badge — operator must see at a glance which instances
-    // are paper-only vs live. Shadow strategies log decisions but
-    // never reach the OMS.
-    const shadowBadge = data.shadow
+    // Indent children under their parent
+    const indent = data.parent_id ? '<span style="color:var(--text2);margin-right:6px">└─</span>' : '';
+    // Strip parent prefix from displayed id for children (keeps tree readable)
+    const displayId = data.parent_id ? sid.split('/').slice(-1)[0] : sid;
+
+    // V6 ACTIVE badge — children currently in _active_children set
+    const activeBadge = (data.parent_id && data.is_active)
+      ? '<span style="background:rgba(0,196,140,0.20);color:var(--green);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px;font-weight:600">●ACTIVE</span>'
+      : '';
+
+    // Shadow / LIVE badge — only on parent rows (children inherit the
+    // parent's mode; showing LIVE on every child clutters the view).
+    const modeBadge = !data.parent_id ? (data.shadow
       ? '<span style="background:rgba(255,193,7,0.15);color:var(--yellow);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px">SHADOW</span>'
-      : '<span style="background:rgba(0,196,140,0.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px">LIVE</span>';
+      : '<span style="background:rgba(0,196,140,0.15);color:var(--green);font-size:10px;padding:1px 6px;border-radius:3px;margin-left:6px;letter-spacing:0.5px">LIVE</span>'
+    ) : '';
 
     const pnlClass = data.unrealized >= 0 ? 'positive' : 'negative';
+    const rowBg = data.parent_id ? 'background:rgba(255,255,255,0.02);' : '';
 
-    return `<tr>
-      <td style="font-weight:600">${sid}${shadowBadge}</td>
+    return `<tr style="${rowBg}">
+      <td style="font-weight:${data.parent_id ? '400' : '600'};padding-left:${data.parent_id ? '20px' : '8px'}">${indent}${displayId}${modeBadge}${activeBadge}</td>
       <td><span style="color:${color}">${typeName}</span></td>
       <td>${statusBadge}</td>
       <td>${posCount}</td>
@@ -1319,7 +1352,7 @@ function renderStrategyComparison() {
       <td class="${pnlClass}">${formatCurrency(data.unrealized)}</td>
       <td>${formatCurrency(data.realized)}</td>
       <td>${formatCurrency(data.charges)}</td>
-      <td class="${netPnl >= 0 ? 'positive' : 'negative'}" style="font-weight:600">${formatCurrency(netPnl)}</td>
+      <td class="${netPnl >= 0 ? 'positive' : 'negative'}" style="font-weight:${data.parent_id ? '400' : '600'}">${formatCurrency(netPnl)}</td>
     </tr>`;
   });
 
