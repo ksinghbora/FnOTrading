@@ -435,7 +435,7 @@ async def collect_today_data(
 
     current_params = _load_current_params(settings)
 
-    return TodayData(
+    today_data = TodayData(
         date=target_date,
         total_pnl=total_pnl,
         premium_leg=premium_leg,
@@ -443,3 +443,28 @@ async def collect_today_data(
         trades_count=prem_trades + trend_trades,
         current_params=current_params,
     )
+
+    # ─── V6.1 forward-collection (May 8 2026) ────────────────────
+    # Save the morning's collected context so future backtests can
+    # re-run Claude on the EXACT inputs we sent today (no hindsight
+    # bias). This input snapshot is the analyzer's source-of-truth —
+    # if we ever want to reproduce or A/B against a different model
+    # version, we replay from these JSONs. Failure is non-fatal so
+    # collector failure doesn't block the live advisor flow.
+    try:
+        ctx_dir = Path("data/advisor_context")
+        ctx_dir.mkdir(parents=True, exist_ok=True)
+        ctx_path = ctx_dir / f"context_{target_date.isoformat()}.json"
+        ctx_path.write_text(
+            json.dumps(today_data.model_dump(mode="json"), indent=2, default=str)
+        )
+        logger.info(
+            "saved advisor context for forward replay",
+            extra={"tag": Tag.ADVISOR, "phase": "collect", "path": str(ctx_path)},
+        )
+    except Exception as e:
+        logger.warning(
+            f"failed to save advisor context — forward replay corpus loses one day: {e}"
+        )
+
+    return today_data

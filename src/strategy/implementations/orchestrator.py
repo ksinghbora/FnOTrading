@@ -513,7 +513,16 @@ class OrchestratorStrategy(BaseStrategy):
         Pure data collection — no mutation of child or orchestrator state.
         Wraps each child call in try/except so a single broken child can't
         prevent the orchestrator from picking among the others.
+
+        V6.1 (May 8 2026): when ``use_advisor_bias=True``, applies the
+        morning DayBias adjustment to each child's legacy score by
+        family. Loaded once per day, cached. The bias adj only fires
+        when the family-specific confidence clears
+        ``advisor_bias_min_confidence``.
         """
+        # ─── V6.1: per-day bias load ────────────────────────────
+        bias_adj = self._maybe_load_bias_adj()  # {family: int_adj} or {} when disabled
+
         order = self.params.children
         candidates: list[ChildCandidate] = []
         for idx, name in enumerate(order):
@@ -534,15 +543,67 @@ class OrchestratorStrategy(BaseStrategy):
             margin = float(getattr(child.params, "expected_margin_per_lot_lakhs", 2.0) or 2.0)
             if margin <= 0.0:
                 margin = 2.0  # Defensive — no division by zero in coordinator
+
+            # V6.1: apply the bias adj to legacy score (clamp to [0, 100])
+            adj = bias_adj.get(family, 0)
+            adjusted_legacy = max(0, min(100, legacy + adj))
+
             candidates.append(ChildCandidate(
                 name=name,
-                legacy_score=legacy,
+                legacy_score=adjusted_legacy,
                 regime_confidence=conf,
                 regime_family=family,
                 expected_margin_lakhs=margin,
                 list_position=idx,
             ))
         return candidates
+
+    def _maybe_load_bias_adj(self) -> dict[str, int]:
+        """Load today's DayBias and convert to a per-family score-adj dict.
+
+        Returns {} when:
+          - use_advisor_bias is False
+          - bias file not found for today
+          - per-family confidence is below threshold
+
+        Cached per day via ``_bias_cache_date`` to avoid re-reading the
+        JSON file on every tick.
+        """
+        if not getattr(self.params, "use_advisor_bias", False):
+            return {}
+        try:
+            today = self.ctx.clock.now().date()
+        except Exception:
+            return {}
+
+        # Cache hit?
+        cache_date = getattr(self, "_bias_cache_date", None)
+        if cache_date == today:
+            return getattr(self, "_bias_cache_adj", {})
+
+        # Cache miss — load and translate
+        adj_dict: dict[str, int] = {}
+        try:
+            from src.advisor.confluence import load_day_bias
+            bias = load_day_bias(as_of=today)
+            if bias is not None:
+                min_conf = float(self.params.advisor_bias_min_confidence)
+                if bias.premium_confidence >= min_conf:
+                    adj_dict["premium_selling"] = int(bias.premium_score_adj)
+                if bias.trend_confidence >= min_conf:
+                    adj_dict["directional_trend"] = int(bias.trend_score_adj)
+                logger.info(
+                    f"[{self.strategy_id}] V6.1 advisor bias for {today}: "
+                    f"premium_adj={adj_dict.get('premium_selling', 0):+d} "
+                    f"trend_adj={adj_dict.get('directional_trend', 0):+d} "
+                    f"(mode={bias.mode_bias} risk={bias.risk_level} conf={bias.confidence:.2f})"
+                )
+        except Exception as e:
+            logger.debug(f"[{self.strategy_id}] bias load failed: {e}")
+
+        self._bias_cache_date = today
+        self._bias_cache_adj = adj_dict
+        return adj_dict
 
     # ─── Order-update bridge: PnL tracking for drawdown breaker ──
 

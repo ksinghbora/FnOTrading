@@ -85,3 +85,19 @@ class OrchestratorParams(BaseStrategyParams):
     # blocked once sum(active.expected_margin_per_lot_lakhs) ≥ this
     # cap. 0 disables the budget gate (no cap).
     max_total_margin_lakhs: float = 0.0
+
+    # ─── V6.1 (May 8 2026) AI advisor bias integration ────────────
+    # When True, orchestrator reads the morning DayBias file at first
+    # tick of each day and adjusts each child's legacy_score by the
+    # family-appropriate adj before ranking:
+    #   premium_selling family → bias.premium_score_adj  (±15)
+    #   directional_trend family → bias.trend_score_adj   (±15)
+    # Adjustment only applies when bias.<family>_confidence ≥
+    # ``advisor_bias_min_confidence``. Default 0.5 mirrors the
+    # confluence engine's gate.
+    # Default False preserves V6_RAW behaviour exactly. When enabled
+    # in backtest, set BACKFILL_DAY_BIAS_DIR env var to point at the
+    # synthetic-backfill directory; in live, the advisor cron writes
+    # to data/day_bias.json which load_day_bias() reads automatically.
+    use_advisor_bias: bool = False
+    advisor_bias_min_confidence: float = 0.5
