@@ -244,8 +244,30 @@ class OrchestratorStrategy(BaseStrategy):
             f"cash_floor={self.params.cash_floor_confidence} "
             f"margin_aware={self.params.margin_aware_selection} "
             f"block_corr={self.params.block_correlated_families} "
-            f"max_dd={self.params.daily_max_drawdown_inr}"
+            f"max_dd={self.params.daily_max_drawdown_inr} "
+            f"max_slots={self.params.max_concurrent_slots}"
         )
+
+        # Log today's AI advisor bias so the operator can see what the
+        # advisor said — even though V6 doesn't yet feed this into
+        # routing decisions. Visibility-only; integration into score is
+        # planned (see ORCHESTRATOR_FAILURE_ANALYSIS.md follow-ups).
+        try:
+            from src.advisor.confluence import load_day_bias
+            bias = load_day_bias()
+            if bias is not None:
+                logger.info(
+                    f"[{self.strategy_id}] AI advisor bias for {bias.date}: "
+                    f"risk={bias.risk_level} mode_bias={bias.mode_bias} "
+                    f"sizing={bias.sizing_multiplier:.2f}× "
+                    f"premium_adj={bias.premium_score_adj:+d}@conf={bias.premium_confidence:.2f} "
+                    f"trend_adj={bias.trend_score_adj:+d}@conf={bias.trend_confidence:.2f} | "
+                    f"NOTE: V6 does not currently use these adjustments — visibility only"
+                )
+            else:
+                logger.info(f"[{self.strategy_id}] AI advisor bias: not available (data/day_bias.json missing)")
+        except Exception as e:
+            logger.debug(f"[{self.strategy_id}] day-bias log skipped: {e}")
 
     # ─── Tick routing ────────────────────────────────────────────
 
