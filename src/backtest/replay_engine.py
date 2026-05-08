@@ -466,7 +466,6 @@ class ReplayBacktestEngine:
                         underlying, expiry, spot, vix, now,
                         spot_token, step, _NUM_STRIKES, T, iv_base,
                         option_tokens, alloc_token,
-                        day_open=day_open,
                     )
                     bs_fallbacks += 1
 
@@ -586,13 +585,14 @@ def _apply_snapshot(
 
     First runs _update_market for full BS baseline, then overwrites with real data.
     """
-    # Start with BS pricing as baseline (covers all strikes)
+    # Start with BS pricing as baseline (covers all strikes).
+    # day_open is consumed by the caller (replay_engine main loop) for
+    # the daily_results record but not used by _update_market itself.
     _update_market(
         feed, broker, chain_builder, portfolio,
         underlying, expiry, spot, vix, now,
         spot_token, step, num_strikes, T, iv_base,
         option_tokens, alloc_token,
-        day_open=day_open,
     )
 
     # Overwrite with real recorded data where available
