@@ -55,6 +55,15 @@ sys.exit(0 if trading else 1)
     exit 0
 fi
 
+# ─── 1.5. Autonomous calibration executor ────────────────────────────
+# V7.3 (May 18 2026) — apply daily calibration plan BEFORE daemon
+# restart so the fresh daemon picks up the new config in one cycle.
+# The executor is idempotent (no-op if today's stage already applied)
+# and respects `data/AUTO_HALT` for operator manual halt.
+log "Running auto-calibration executor..."
+"$UV" run python scripts/auto_calibration_executor.py 2>&1 | sed 's/^/    /' || \
+    log "auto_calibration_executor returned non-zero — proceeding with daemon restart anyway"
+
 # ─── 2. Graceful stop of existing daemon ─────────────────────────────
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE")
@@ -79,42 +88,98 @@ if [ -f "$PIDFILE" ]; then
 fi
 
 # ─── 3. Launch fresh daemon ──────────────────────────────────────────
-# Subshell-orphan pattern is REQUIRED on macOS:
-#   - Plain `nohup ... &` from this script left python orphaned to bash's
-#     process group. When bash exited at the end of step 4, python received
-#     SIGTERM (the Apr 22 08:50 incident: uvicorn logged "Shutting down" 1s
-#     after the script said "Restart complete", and the daemon was dead by
-#     09:00 with no trades all morning).
-#   - `setsid` would be cleaner but isn't installed on macOS by default.
-#   - `(cmd &)` runs in a subshell that exits immediately, leaving the
-#     daemon as an orphan owned by launchd/init — which is what we want.
-#   - Stdin redirected from /dev/null so the daemon doesn't inherit a tty
-#     fd that could deliver SIGHUP later.
+# Detach via double-fork + setsid-equivalent so the daemon survives this
+# script's exit. The May 11 2026 incident: the prior subshell pattern
+# `( nohup uv run python ... & )` LEFT THE DAEMON in the parent bash's
+# process group on macOS Tahoe. When this script exited at the end of
+# step 4, the daemon got SIGTERM and shut down within milliseconds
+# (uvicorn logged "Shutting down" at exactly the same second the script
+# logged "Daemon healthy. Restart complete.").
+#
+# Fix: use the python double-fork idiom. The intermediate fork() becomes
+# a session leader via os.setsid(), severing the controlling-terminal
+# linkage; the grandchild is fully detached and inherits PPID=1 (init)
+# the moment the intermediate exits. This is the canonical Unix daemon
+# pattern that nohup alone doesn't deliver on macOS launchd-spawned bash.
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/main_$(date +%Y%m%d_%H%M%S).log"
-( nohup "$UV" run python -m src.main > "$LOG" 2>&1 < /dev/null & echo $! > "$PIDFILE.tmp" )
-# Subshell wrote PID asynchronously; brief poll for the file.
-for _ in 1 2 3 4 5; do
-    [ -s "$PIDFILE.tmp" ] && break
-    sleep 0.2
-done
-NEW_PID=$(cat "$PIDFILE.tmp" 2>/dev/null || echo "")
+
+# Write a tiny launcher python that double-forks then execs uv. Avoids
+# shelling out twice (which would still leave the parent shell in the
+# session and could pull the daemon back into its pgrp on TCC reset).
+NEW_PID=$("$UV" run python - <<EOF
+import os, sys, time
+# First fork
+pid = os.fork()
+if pid > 0:
+    # Parent: wait for intermediate's child PID, print it, exit
+    time.sleep(0.5)  # let grandchild write its PID
+    try:
+        with open("$PIDFILE.tmp") as f:
+            print(f.read().strip())
+    except FileNotFoundError:
+        sys.exit(2)
+    sys.exit(0)
+# Intermediate
+os.setsid()  # become session leader, lose controlling tty
+pid = os.fork()
+if pid > 0:
+    # Intermediate: write grandchild PID, exit. Grandchild is now orphaned
+    # to init (PPID=1) and survives our bash exiting.
+    with open("$PIDFILE.tmp", "w") as f:
+        f.write(f"{pid}\n")
+    sys.exit(0)
+# Grandchild: redirect stdio + raise FD limit + exec uv run python -m src.main
+# V7.1 May 12 2026 fix: launchd-spawned bash inherits maxfiles=256 by default
+# ('launchctl limit maxfiles' shows 256 soft). The May 12 incident: daemon
+# accumulated >256 FDs from chain recorder + heartbeat + per-position
+# tracking, then asyncio.socket.accept() and even reading the .env file for
+# token refresh failed with OSError [Errno 24] Too many open files. The
+# daemon was alive but useless. Raise the soft limit to the system hard
+# cap (kern.maxfilesperproc=61440 on this Mac) before exec so the new
+# daemon can actually run a full trading day without FD starvation.
+import resource
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # Try the system hard limit first; fall back to 16384 if too high
+    target = min(hard, 65536)
+    if target <= soft:
+        target = max(soft, 16384)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+except Exception:
+    pass  # If we can't raise, daemon will still start (with lower limit)
+log = open("$LOG", "ab", buffering=0)
+os.dup2(log.fileno(), 1)
+os.dup2(log.fileno(), 2)
+os.dup2(os.open("/dev/null", os.O_RDONLY), 0)
+os.execv("$UV", ["$UV", "run", "python", "-m", "src.main"])
+EOF
+)
 rm -f "$PIDFILE.tmp"
 if [ -z "$NEW_PID" ]; then
-    log "ERROR: failed to capture new daemon PID."
+    log "ERROR: failed to capture new daemon PID via double-fork."
     exit 1
 fi
 echo "$NEW_PID" > "$PIDFILE"
 log "Started daemon PID=$NEW_PID, log=$(basename "$LOG")"
 
 # ─── 4. Liveness check ───────────────────────────────────────────────
-# 10s is enough for the early imports + DB connect to either succeed or
-# crash. The Telegram startup ping (verify_system shows it sends one)
-# gives us a second-channel confirmation when this passes.
-sleep 10
+# 15s for imports + DB connect + strategy on_start (7+4 children).
+# The Telegram startup ping gives second-channel confirmation when this
+# passes. Sleep is longer than before because BOTH orchestrators need
+# to complete warmup before we trust the boot.
+sleep 15
 if ! kill -0 "$NEW_PID" 2>/dev/null; then
-    log "ERROR: daemon died within 10s. Tail of log:"
-    tail -40 "$LOG" || true
+    log "ERROR: daemon died within 15s. Tail of log:"
+    tail -60 "$LOG" || true
     exit 1
 fi
-log "Daemon healthy. Restart complete."
+# Verify PPID is 1 (init/launchd) — if not, the daemon is still in our
+# pgrp and will die when we exit. This is the early-detection version
+# of the May 11 2026 bug.
+DAEMON_PPID=$(ps -o ppid= -p "$NEW_PID" 2>/dev/null | tr -d ' ')
+if [ "$DAEMON_PPID" != "1" ]; then
+    log "WARNING: daemon PID $NEW_PID has PPID=$DAEMON_PPID (expected 1)."
+    log "         Daemon may be killed when this script exits."
+fi
+log "Daemon healthy (PID=$NEW_PID PPID=$DAEMON_PPID). Restart complete."

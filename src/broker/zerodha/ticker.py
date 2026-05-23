@@ -51,9 +51,53 @@ class TickerManager:
         self._last_reconnect_time: datetime | None = None
         self._heartbeat_task: asyncio.Task | None = None
         self._tick_log_count: int = 0
+        # V7.2 (May 18 2026): flag set by update_token() to signal the
+        # heartbeat loop that an aggressive (longer-cooldown) reconnect
+        # is required. Cleared after the aggressive reconnect completes.
+        self._token_refreshed_pending_reconnect: bool = False
+        # V7.4 (May 22 2026): consecutive failed reconnect counter.
+        #
+        # Root cause: KiteTicker library v5.0.1 cannot reconnect within
+        # the same Python process — Twisted's reactor is a singleton
+        # that can't be restarted after disconnect. Empirically the
+        # _on_connect callback fires exactly ONCE per process lifetime.
+        # All in-process reconnect attempts after a disconnect call
+        # connectWS() on a broken reactor and return silently without
+        # actually establishing the WebSocket.
+        #
+        # The ONLY working "reconnect" is to restart the process. This
+        # counter tracks how many force_reconnect attempts have been
+        # made since the last successful _on_connect callback. When it
+        # exceeds DEAD_REACTOR_THRESHOLD AND tick gap exceeds the
+        # dead-reactor exit gap, the heartbeat loop calls os._exit(42)
+        # to trigger launchd respawn (KeepAlive=true with
+        # SuccessfulExit=false on the plist).
+        self._reconnect_attempts_since_connect: int = 0
+
+    # V7.4 thresholds for dead-reactor exec-replace logic.
+    # After N failed reconnects without an _on_connect callback firing,
+    # AND no real tick for X seconds, we declare the reactor dead and
+    # call os.execv() to replace the process image with a fresh Python
+    # interpreter. The new process has a fresh Twisted reactor and
+    # picks up the latest .env (incl. fresh access token).
+    #
+    # Why os.execv() instead of os._exit() + launchd KeepAlive:
+    # The daemon is a GRANDCHILD of launchd (started via
+    # restart_daemon.sh double-fork pattern). launchd's KeepAlive only
+    # tracks direct children, so it cannot respawn the grandchild
+    # daemon on exit. os.execv() replaces the process image in-place,
+    # keeping the same PID (so the .pid file stays valid) and PPID
+    # (still PID 1), but loading fresh Python code with a fresh
+    # Twisted reactor. No external respawn mechanism needed.
+    DEAD_REACTOR_THRESHOLD: int = 3            # consecutive failed reconnects
+    DEAD_REACTOR_TICK_GAP_SECONDS: int = 90    # no tick for this long
 
     async def start(self) -> None:
         """Start the WebSocket ticker in a background thread."""
+        # V7.4: on startup, surface any recent execv events so an
+        # operator sees the daemon has been auto-recovering. This is
+        # how a silent dead-reactor loop becomes visible.
+        self._log_recent_execv_history()
         self._loop = asyncio.get_event_loop()
         self._ticker = KiteTicker(self._api_key, self._access_token)
 
@@ -145,11 +189,21 @@ class TickerManager:
                 logger.exception("Error parsing tick data")
 
     def _on_connect(self, ws: Any, response: Any) -> None:
-        """Callback: WebSocket connected."""
+        """Callback: WebSocket connected.
+
+        V7.4 (May 22 2026): resets the dead-reactor reconnect counter.
+        This callback ONLY fires on a TRULY successful WebSocket
+        handshake — so seeing it means the connection actually opened
+        (not just the connect() call returned). Resetting the counter
+        here is what distinguishes a real reconnect from the silent
+        failures observed in May 11-22 2026.
+        """
         # Mark the connect time so the heartbeat grants the new subscription
         # a HEARTBEAT_TIMEOUT-wide grace window before declaring tick gap.
         # Apr 30 2026 fix — see _last_reconnect_time docstring.
         self._last_reconnect_time = now_ist()
+        # V7.4: real connect succeeded, reset the dead-reactor counter
+        self._reconnect_attempts_since_connect = 0
         logger.info(
             "ticker connected",
             extra={"tag": Tag.TICKER, "subscribed_tokens": len(self._subscribed_tokens)},
@@ -210,6 +264,22 @@ class TickerManager:
 
         while self._running:
             try:
+                # V7.2: aggressive reconnect on token-refresh signal.
+                # Check FIRST every iteration so this fires regardless of
+                # market hours or other timing checks.
+                if self._token_refreshed_pending_reconnect:
+                    logger.warning(
+                        "Token-refresh flag set — running aggressive reconnect "
+                        "(close + 5s cooldown + fresh KiteTicker)"
+                    )
+                    self._token_refreshed_pending_reconnect = False
+                    await self._force_reconnect(cooldown_sec=5)
+                    # After aggressive reconnect, give 15s grace to receive
+                    # ticks. If still no ticks, the heartbeat will catch it
+                    # naturally in the next iteration.
+                    await asyncio.sleep(15)
+                    continue
+
                 now = now_ist()
                 hour, minute = now.hour, now.minute
                 is_weekday = now.weekday() < 5
@@ -258,6 +328,19 @@ class TickerManager:
                     elapsed = 999
 
                 if elapsed > self.HEARTBEAT_TIMEOUT:
+                    # V7.4 dead-reactor check: if we've reconnected N
+                    # times without the on_connect callback firing AND
+                    # ticks have been silent for the dead-reactor
+                    # threshold, the Twisted reactor is irrecoverable.
+                    # Replace the process image with a fresh Python
+                    # interpreter via os.execv() — this guarantees a
+                    # fresh Twisted reactor.
+                    if (
+                        self._reconnect_attempts_since_connect >= self.DEAD_REACTOR_THRESHOLD
+                        and elapsed > self.DEAD_REACTOR_TICK_GAP_SECONDS
+                    ):
+                        self._trigger_dead_reactor_recovery(elapsed)
+
                     logger.warning(
                         "tick gap exceeded heartbeat — forcing reconnect",
                         extra={
@@ -265,6 +348,7 @@ class TickerManager:
                             "elapsed_seconds": round(elapsed, 1),
                             "timeout_seconds": self.HEARTBEAT_TIMEOUT,
                             "trigger": "heartbeat",
+                            "reconnect_attempts_since_connect": self._reconnect_attempts_since_connect,
                         },
                     )
                     event = Event.create(
@@ -280,12 +364,200 @@ class TickerManager:
                 logger.exception("Error in heartbeat loop")
 
     def update_token(self, access_token: str) -> None:
-        """Update access token for next reconnect."""
-        self._access_token = access_token
-        logger.info("Ticker access token updated")
+        """Update access token AND schedule an immediate ticker reconnect.
 
-    async def _force_reconnect(self) -> None:
-        """Close and reopen the WebSocket connection."""
+        V7.2 fix (May 18 2026): the prior behaviour ("update field, reconnect
+        at market open") was unreliable. Observed bug pattern:
+          - Auto-auth refreshes token at 08:55 IST
+          - `update_token` sets `self._access_token` but the running
+            KiteTicker keeps its OWN internal access_token from construction
+          - At 09:10 the heartbeat does a "pre-market reconnect"
+          - At 09:15 market opens, ticks should flow
+          - Instead, ticker enters a reconnect loop receiving zero ticks
+            (heartbeat timeout every 30s, force_reconnect, repeat)
+          - Loop continued for 1h22m on May 18; same issue May 13
+
+        Root cause: even after `_force_reconnect` recreates the KiteTicker
+        with fresh token, the new connection inherits some broken state.
+        Empirically, a MANUAL daemon restart (which spawns a fresh process)
+        resolves the issue immediately.
+
+        Fix:
+        1. Update the token field (as before).
+        2. Set a flag that signals the heartbeat loop to do a TWO-STEP
+           reconnect with a longer cool-down between close and reopen.
+        3. The heartbeat loop reads this flag on next iteration and runs
+           the full reconnect path (rather than deferring to market open).
+
+        This still doesn't guarantee fix in all cases — the KiteTicker
+        library's internal state may still be sticky — but it shortens
+        the recovery window from ~1.5h to ~30s and gives operators a
+        clearer signal that reconnect IS being attempted.
+        """
+        self._access_token = access_token
+        # V7.2: flag for heartbeat loop to do an aggressive reconnect
+        self._token_refreshed_pending_reconnect = True
+        logger.info("Ticker access token updated — flagged for aggressive reconnect on next heartbeat tick")
+
+    # V7.4 dead-reactor recovery — file-based execv-loop safeguard.
+    #
+    # Sentinel file records timestamps of every execv we trigger. On
+    # startup, the next process reads the file and counts execs in the
+    # last RAPID_RESPAWN_WINDOW_SEC seconds. If the count exceeds
+    # MAX_EXECV_IN_WINDOW, _trigger_dead_reactor_recovery refuses to
+    # execv again — it logs loudly and lets the daemon keep running in
+    # a degraded state so an operator notices. Without this, a true
+    # infrastructure-level outage (broker side, network) could put us
+    # into a tight execv loop burning CPU and log volume.
+    EXECV_SENTINEL_PATH: str = "data/.ticker_execv_log"
+    RAPID_RESPAWN_WINDOW_SEC: int = 1800          # 30 minutes
+    MAX_EXECV_IN_WINDOW: int = 3                  # 3 execs / 30 min cap
+
+    def _log_recent_execv_history(self) -> None:
+        """Read sentinel and log any execv events in the recent window.
+
+        Called once at TickerManager.start(). Lets monitoring catch the
+        case where the daemon is silently auto-recovering several times
+        per hour due to dead-reactor — a sign the bug has worsened or
+        an upstream broker issue is in play.
+        """
+        import time
+        from pathlib import Path
+
+        sentinel = Path(self.EXECV_SENTINEL_PATH)
+        if not sentinel.exists():
+            return
+
+        now = time.time()
+        recent: list[tuple[float, str]] = []
+        try:
+            for line in sentinel.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(maxsplit=1)
+                try:
+                    ts = float(parts[0])
+                except (ValueError, IndexError):
+                    continue
+                if now - ts < self.RAPID_RESPAWN_WINDOW_SEC:
+                    recent.append((ts, parts[1] if len(parts) > 1 else ""))
+        except Exception:
+            logger.exception("Could not read execv sentinel at startup")
+            return
+
+        if not recent:
+            return
+
+        level = logger.error if len(recent) >= self.MAX_EXECV_IN_WINDOW else logger.warning
+        level(
+            "V7.4 dead-reactor history: %d execv event(s) in last %dmin",
+            len(recent),
+            self.RAPID_RESPAWN_WINDOW_SEC // 60,
+            extra={"tag": Tag.TICKER, "execv_count_recent": len(recent)},
+        )
+
+    def _trigger_dead_reactor_recovery(self, elapsed: float) -> None:
+        """Replace process image after sanity-checking against execv loops.
+
+        Logs the decision, persists the timestamp, then either calls
+        os.execv() or — if the recent-execv count exceeds the cap —
+        refuses and reverts to the normal force-reconnect path so an
+        operator can investigate.
+        """
+        import os
+        import sys
+        import time
+        from pathlib import Path
+
+        sentinel = Path(self.EXECV_SENTINEL_PATH)
+        now = time.time()
+        recent_execs: list[float] = []
+        if sentinel.exists():
+            try:
+                for line in sentinel.read_text().splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        ts = float(line.split()[0])
+                    except (ValueError, IndexError):
+                        continue
+                    if now - ts < self.RAPID_RESPAWN_WINDOW_SEC:
+                        recent_execs.append(ts)
+            except Exception:
+                logger.exception("Could not read execv sentinel — proceeding anyway")
+
+        if len(recent_execs) >= self.MAX_EXECV_IN_WINDOW:
+            logger.error(
+                "DEAD REACTOR detected but execv-loop cap hit — refusing to "
+                "replace process. Operator intervention required.",
+                extra={
+                    "tag": Tag.TICKER,
+                    "recent_execv_count": len(recent_execs),
+                    "window_seconds": self.RAPID_RESPAWN_WINDOW_SEC,
+                    "reconnect_attempts": self._reconnect_attempts_since_connect,
+                    "elapsed_seconds": round(elapsed, 1),
+                },
+            )
+            sys.stdout.flush()
+            sys.stderr.flush()
+            # Fall through — let the regular force_reconnect path run.
+            # It won't actually recover (reactor is dead), but at least
+            # the daemon stays alive so the operator can debug.
+            return
+
+        logger.error(
+            "REACTOR DEAD — replacing process via os.execv()",
+            extra={
+                "tag": Tag.TICKER,
+                "reconnect_attempts": self._reconnect_attempts_since_connect,
+                "elapsed_seconds": round(elapsed, 1),
+                "recent_execv_count": len(recent_execs),
+            },
+        )
+
+        try:
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            with sentinel.open("a") as fh:
+                fh.write(f"{now:.0f} pid={os.getpid()} reason=dead_reactor\n")
+        except Exception:
+            logger.exception("Could not persist execv sentinel — proceeding with execv anyway")
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        try:
+            os.execv(sys.executable, [sys.executable, "-m", "src.main"])
+        except Exception as e:
+            # execv failure is rare (e.g., disk full, EPERM). If it
+            # happens we cannot recover in-process. Best we can do is
+            # log + os._exit() so the .pid file is freed; an operator
+            # or the daily launchd respawn at 09:02 IST picks it up.
+            logger.exception("os.execv FAILED — process is unrecoverable, exiting")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(99)  # noqa: SLF001 — intentional, see above
+        # NOTREACHED on successful execv
+
+    async def _force_reconnect(self, cooldown_sec: int = 2) -> None:
+        """Close and reopen the WebSocket connection.
+
+        Args:
+          cooldown_sec: seconds to wait between close() and new ticker
+                       creation. Default 2 (historical behaviour). V7.2
+                       aggressive reconnect uses 5 to give the OS a wider
+                       window to release the old socket / DNS / TLS state.
+
+        V7.4 (May 22 2026): increments
+        ``_reconnect_attempts_since_connect`` BEFORE the reconnect.
+        On a real success, ``_on_connect`` callback fires and resets
+        this counter to 0. If the counter grows past
+        DEAD_REACTOR_THRESHOLD without resetting, the heartbeat loop
+        will declare the reactor dead and trigger process exit.
+        """
+        # V7.4: count this attempt up-front. _on_connect will reset on success.
+        self._reconnect_attempts_since_connect += 1
         try:
             # Read latest token from file (auto-auth may have refreshed it)
             from pathlib import Path
@@ -297,9 +569,14 @@ class TickerManager:
                     logger.info("Ticker picked up fresh token from .kite_access_token")
 
             if self._ticker:
-                logger.info("Force-closing ticker for reconnect...")
-                self._ticker.close()
-                await asyncio.sleep(2)
+                logger.info(f"Force-closing ticker for reconnect (cooldown={cooldown_sec}s)...")
+                try:
+                    self._ticker.close()
+                except Exception:
+                    logger.exception("Error during ticker.close() — proceeding with new ticker anyway")
+                # Drop the old reference explicitly so GC can reclaim sockets
+                self._ticker = None
+                await asyncio.sleep(cooldown_sec)
 
             self._ticker = KiteTicker(self._api_key, self._access_token)
             self._ticker.on_ticks = self._on_ticks
